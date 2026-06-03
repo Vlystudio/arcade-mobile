@@ -85,7 +85,7 @@ export default function SignupScreen() {
       return;
     }
 
-    const { data, error: signUpError } = await supabase.auth.signUp({
+    const { error: signUpError } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
@@ -100,19 +100,7 @@ export default function SignupScreen() {
       return;
     }
 
-    if (data.user) {
-      const { error: profileError } = await supabase.from("profiles").upsert({
-        id: data.user.id,
-        username: uname,
-      });
-      if (profileError?.code === "23505") {
-        // Username was taken between check and insert (race condition)
-        setLoading(false);
-        setSuggestions(generateSuggestions(uname));
-        setShowSuggestions(true);
-        return;
-      }
-    }
+    // Profile is created automatically by the handle_new_user DB trigger
 
     setLoading(false);
     router.replace("/auth" as any);
