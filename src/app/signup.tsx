@@ -89,7 +89,7 @@ export default function SignupScreen() {
       email: email.trim(),
       password,
       options: {
-        data: { username: uname },
+        data: { username: uname, full_name: uname },
         emailRedirectTo: getEmailRedirectTo(),
       },
     });
