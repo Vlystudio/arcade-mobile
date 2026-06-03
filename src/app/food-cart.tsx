@@ -3,18 +3,19 @@ import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useCart } from "../context/cart-context";
 import { useLocation } from "../context/location-context";
 import { useRequireAuth } from "../hooks/use-require-auth";
-import { supabase } from "../../lib/supabase";
+import { createSquareCheckoutLink } from "../../lib/square-food";
 
 const TAX_RATE = 0.08;
 
@@ -23,11 +24,7 @@ export default function FoodCartScreen() {
   const { items, updateQuantity, removeItem, clearCart, total, itemCount } = useCart();
   const { location } = useLocation();
 
-  const [tableNumber, setTableNumber] = useState("");
-  const [instructions, setInstructions] = useState("");
   const [placing, setPlacing] = useState(false);
-  const [placed, setPlaced] = useState(false);
-  const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const tax = total * TAX_RATE;
@@ -38,57 +35,41 @@ export default function FoodCartScreen() {
     setError(null);
     setPlacing(true);
 
-    const { data, error: orderError } = await supabase
-      .from("orders")
-      .insert({
-        user_id: user.id,
-        items: items.map((i) => ({ id: i.id, name: i.name, price: i.price, quantity: i.quantity, customizations: i.customizations })),
-        subtotal: total,
-        tax,
-        total: grandTotal,
-        table_number: tableNumber.trim() || null,
-        special_instructions: instructions.trim() || null,
-        status: "pending",
-      })
-      .select("id")
-      .single();
-
-    setPlacing(false);
-
-    if (orderError) {
-      setError(orderError.message);
+    if (!location) {
+      setPlacing(false);
+      setError("Choose a location before placing your order.");
       return;
     }
 
-    setOrderId(data.id);
-    setPlaced(true);
-    clearCart();
-  }
+    const localOrderId = createUuid();
 
-  if (placed) {
-    return (
-      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-        <View style={styles.successWrap}>
-          <View style={styles.successIcon}>
-            <Ionicons name="checkmark-circle" size={64} color="#22c55e" />
-          </View>
-          <Text style={styles.successTitle}>Order Placed!</Text>
-          <Text style={styles.successSub}>Your food is being prepared.</Text>
-          {tableNumber ? (
-            <View style={styles.tableChip}>
-              <Ionicons name="location-outline" size={14} color="#06b6d4" />
-              <Text style={styles.tableChipText}>Delivering to: {tableNumber}</Text>
-            </View>
-          ) : null}
-          {orderId && (
-            <Text style={styles.orderId}>Order #{orderId.slice(-6).toUpperCase()}</Text>
-          )}
-          <Pressable style={styles.backBtn} onPress={() => router.replace("/food" as any)}>
-            <Text style={styles.backBtnText}>Back to Menu</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-    );
+    try {
+      const checkout = await createSquareCheckoutLink({
+        locationSlug: location.slug,
+        localOrderId,
+        items: items.map((item) => ({
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          squareVariationId: item.squareVariationId,
+        })),
+      });
+
+      if (!checkout.checkoutUrl) {
+        throw new Error("Square did not return a checkout URL.");
+      }
+
+      clearCart();
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        window.location.assign(checkout.checkoutUrl);
+      } else {
+        await Linking.openURL(checkout.checkoutUrl);
+      }
+    } catch (squareError: any) {
+      setError(squareError?.message ?? "Square could not create a checkout page.");
+      setPlacing(false);
+      return;
+    }
   }
 
   return (
@@ -144,36 +125,6 @@ export default function FoodCartScreen() {
             </View>
           ))}
 
-          {/* Delivery info */}
-          <Text style={styles.sectionLabel}>Delivery Info</Text>
-          <View style={styles.inputCard}>
-            <View style={styles.inputRow}>
-              <Ionicons name="location-outline" size={16} color="#444" />
-              <TextInput
-                style={styles.input}
-                placeholder="Table or lane number (e.g. Lane 4, Table 12)"
-                placeholderTextColor="#333"
-                value={tableNumber}
-                onChangeText={setTableNumber}
-                returnKeyType="next"
-              />
-            </View>
-            <View style={styles.inputDivider} />
-            <View style={styles.inputRow}>
-              <Ionicons name="create-outline" size={16} color="#444" />
-              <TextInput
-                style={[styles.input, styles.notesInput]}
-                placeholder="Special instructions (allergies, no onions, etc.)"
-                placeholderTextColor="#333"
-                value={instructions}
-                onChangeText={setInstructions}
-                multiline
-                numberOfLines={3}
-                maxLength={300}
-              />
-            </View>
-          </View>
-
           {/* Order summary */}
           <Text style={styles.sectionLabel}>Summary</Text>
           <View style={styles.summaryCard}>
@@ -220,6 +171,18 @@ export default function FoodCartScreen() {
       )}
     </SafeAreaView>
   );
+}
+
+function createUuid() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16);
+    const nibble = char === "x" ? value : (value & 0x3) | 0x8;
+    return nibble.toString(16);
+  });
 }
 
 const styles = StyleSheet.create({
@@ -319,27 +282,4 @@ const styles = StyleSheet.create({
   },
   browseBtnText: { color: "#000", fontWeight: "900", fontSize: 15 },
 
-  // Order success
-  successWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
-  successIcon: {
-    width: 100, height: 100, borderRadius: 50,
-    backgroundColor: "rgba(34,197,94,0.1)", borderWidth: 1,
-    borderColor: "rgba(34,197,94,0.25)", alignItems: "center", justifyContent: "center",
-    marginBottom: 24,
-  },
-  successTitle: { color: "#fff", fontSize: 28, fontWeight: "900", marginBottom: 8 },
-  successSub: { color: "#555", fontSize: 15, marginBottom: 20 },
-  tableChip: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "rgba(6,182,212,0.1)", borderRadius: 12,
-    paddingHorizontal: 14, paddingVertical: 8, marginBottom: 10,
-    borderWidth: 1, borderColor: "rgba(6,182,212,0.2)",
-  },
-  tableChipText: { color: "#06b6d4", fontWeight: "700", fontSize: 14 },
-  orderId: { color: "#333", fontSize: 13, marginBottom: 32, fontFamily: "monospace" },
-  backBtn: {
-    backgroundColor: "#06b6d4", borderRadius: 18,
-    paddingHorizontal: 32, paddingVertical: 16,
-  },
-  backBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
 });
