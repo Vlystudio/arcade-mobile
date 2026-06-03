@@ -187,6 +187,9 @@ export default function AdminScreen() {
     { place: 1, username: "" }, { place: 2, username: "" }, { place: 3, username: "" },
   ]);
   const [savingResults, setSavingResults] = useState(false);
+  const [resultsWarnings, setResultsWarnings] = useState<string[]>([]);
+  const [teamsError, setTeamsError] = useState<string | null>(null);
+  const [tournError, setTournError] = useState<string | null>(null);
 
   useEffect(() => { if (user) checkAdminAndLoad(); }, [user]);
   useEffect(() => { if (isAdmin) loadReviews(reviewTab); }, [reviewTab, isAdmin]);
@@ -243,8 +246,11 @@ export default function AdminScreen() {
   async function handleDirectApprove(score: ReviewScore) {
     setReviewError(null);
     setActioning(score.id);
-    const { error } = await supabase.from("scores").update({ status: "approved" }).eq("id", score.id);
+    const { data, error } = await supabase.rpc("rpc_admin_review_score", {
+      p_score_id: score.id, p_status: "approved",
+    });
     if (error) { setReviewError(error.message); }
+    else if ((data as any)?.error) { setReviewError((data as any).message ?? (data as any).error); }
     else { setScores((prev) => prev.filter((s) => s.id !== score.id)); }
     setActioning(null);
   }
@@ -262,8 +268,11 @@ export default function AdminScreen() {
     if (!confirmAction) return;
     setReviewError(null);
     setActioning(confirmAction.score.id);
-    const { error } = await supabase.from("scores").update({ status: confirmAction.toStatus }).eq("id", confirmAction.score.id);
+    const { data, error } = await supabase.rpc("rpc_admin_review_score", {
+      p_score_id: confirmAction.score.id, p_status: confirmAction.toStatus,
+    });
     if (error) { setReviewError(error.message); }
+    else if ((data as any)?.error) { setReviewError((data as any).message ?? (data as any).error); }
     else { setScores((prev) => prev.filter((s) => s.id !== confirmAction.score.id)); }
     setActioning(null);
     setConfirmAction(null);
@@ -378,14 +387,14 @@ export default function AdminScreen() {
 
   async function handleDeleteTeam() {
     if (!deleteTeamTarget) return;
+    setTeamsError(null);
     setDeletingTeam(true);
-    const id = deleteTeamTarget.id;
-    await supabase.from("team_members").delete().eq("team_id", id);
-    await supabase.from("team_requests").delete().eq("team_id", id);
-    await supabase.from("teams").delete().eq("id", id);
+    const { data, error } = await supabase.rpc("rpc_admin_delete_team", { p_team_id: deleteTeamTarget.id });
+    if (error) { setTeamsError(error.message); }
+    else if ((data as any)?.error) { setTeamsError((data as any).message ?? (data as any).error); }
+    else { setAdminTeams((prev) => prev.filter((t) => t.id !== deleteTeamTarget.id)); }
     setDeletingTeam(false);
     setDeleteTeamTarget(null);
-    setAdminTeams((prev) => prev.filter((t) => t.id !== id));
   }
 
   // ── Tournaments ────────────────────────────────────────────────────────────
@@ -416,25 +425,26 @@ export default function AdminScreen() {
   }
 
   async function handleApproveTournament(req: TournamentRequest) {
+    setTournError(null);
     setActioningTourn(req.id);
-    await supabase.from("tournament_requests").update({ status: "approved" }).eq("id", req.id);
-    await supabase.from("tournaments").insert({
-      title: req.title, description: req.description,
-      game_type: req.game_type, proposed_date: req.proposed_date,
-      max_teams: req.max_teams, is_official: false,
-      status: "upcoming", created_by: req.user_id,
-    });
-    setTournRequests((prev) => prev.filter((r) => r.id !== req.id));
+    const { data, error } = await supabase.rpc("rpc_admin_approve_tournament", { p_request_id: req.id });
+    if (error) { setTournError(error.message); }
+    else if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); }
+    else { setTournRequests((prev) => prev.filter((r) => r.id !== req.id)); }
     setActioningTourn(null);
   }
 
   async function handleDenyTournament() {
     if (!denyNoteTarget) return;
+    setTournError(null);
     setActioningTourn(denyNoteTarget.id);
-    await supabase.from("tournament_requests")
-      .update({ status: "denied", admin_note: denyNote.trim() || null })
-      .eq("id", denyNoteTarget.id);
-    setTournRequests((prev) => prev.filter((r) => r.id !== denyNoteTarget.id));
+    const { data, error } = await supabase.rpc("rpc_admin_deny_tournament", {
+      p_request_id: denyNoteTarget.id,
+      p_note: denyNote.trim() || null,
+    });
+    if (error) { setTournError(error.message); }
+    else if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); }
+    else { setTournRequests((prev) => prev.filter((r) => r.id !== denyNoteTarget.id)); }
     setActioningTourn(null);
     setDenyNoteTarget(null);
     setDenyNote("");
@@ -453,9 +463,14 @@ export default function AdminScreen() {
   }
 
   async function handleMarkStatus(id: string, newStatus: string) {
+    setTournError(null);
     setStatusActioning(id);
-    await supabase.from("tournaments").update({ status: newStatus }).eq("id", id);
-    setManageTournaments((prev) => prev.map((t) => t.id === id ? { ...t, status: newStatus } : t));
+    const { data, error } = await supabase.rpc("rpc_admin_set_tournament_status", {
+      p_tournament_id: id, p_status: newStatus,
+    });
+    if (error) { setTournError(error.message); }
+    else if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); }
+    else { setManageTournaments((prev) => prev.map((t) => t.id === id ? { ...t, status: newStatus } : t)); }
     setStatusActioning(null);
   }
 
@@ -470,43 +485,41 @@ export default function AdminScreen() {
   }
 
   async function handleCreateFirstFriday() {
-    if (!user) return;
+    setTournError(null);
     setFirstFridayCreating(true);
     const date = getNextFirstFriday();
     const label = date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-    await supabase.from("tournaments").insert({
-      title: `First Friday Skee-Ball — ${label}`,
-      game_type: "Skee-Ball",
-      proposed_date: date.toISOString(),
-      is_official: true,
-      is_individual: true,
-      signup_type: "in_person",
-      status: "upcoming",
-      created_by: user.id,
+    const { data, error } = await supabase.rpc("rpc_admin_create_first_friday", {
+      p_date: date.toISOString(), p_label: label,
     });
     setFirstFridayCreating(false);
+    if (error) { setTournError(error.message); return; }
+    if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); return; }
     await loadManageTournaments();
   }
 
   async function handleSaveResults() {
-    if (!resultsTarget || !user) return;
+    if (!resultsTarget) return;
+    setResultsWarnings([]);
     setSavingResults(true);
-    const valid = resultEntries.filter((e) => e.username.trim() && e.place > 0);
-    for (const entry of valid) {
-      const { data: profile } = await supabase.from("profiles")
-        .select("id").ilike("username", entry.username.trim()).maybeSingle();
-      if (!(profile as any)?.id) continue;
-      await supabase.from("tournament_placements").upsert({
-        tournament_id: resultsTarget.id,
-        user_id: (profile as any).id,
-        placement: entry.place,
-      }, { onConflict: "tournament_id,user_id" });
-    }
-    await supabase.from("tournaments").update({ status: "completed" }).eq("id", resultsTarget.id);
-    setManageTournaments((prev) => prev.map((t) => t.id === resultsTarget.id ? { ...t, status: "completed" } : t));
+    const placements = resultEntries
+      .filter((e) => e.username.trim())
+      .map((e) => ({ place: e.place, username: e.username.trim() }));
+    const { data, error } = await supabase.rpc("rpc_admin_save_placements", {
+      p_tournament_id: resultsTarget.id,
+      p_placements: placements,
+    });
     setSavingResults(false);
-    setResultsTarget(null);
-    setResultEntries([{ place: 1, username: "" }, { place: 2, username: "" }, { place: 3, username: "" }]);
+    if (error) { setResultsWarnings([error.message]); return; }
+    const result = data as { ok?: boolean; error?: string; message?: string; warnings?: string[] };
+    if (result.error) { setResultsWarnings([result.message ?? result.error ?? "Unknown error"]); return; }
+    setManageTournaments((prev) => prev.map((t) => t.id === resultsTarget.id ? { ...t, status: "completed" } : t));
+    if (result.warnings?.length) {
+      setResultsWarnings(result.warnings);
+    } else {
+      setResultsTarget(null);
+      setResultEntries([{ place: 1, username: "" }, { place: 2, username: "" }, { place: 3, username: "" }]);
+    }
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -642,6 +655,8 @@ export default function AdminScreen() {
         >
           {teamsLoading ? (
             <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
+          ) : teamsError ? (
+            <ErrorBanner message={teamsError} />
           ) : adminTeams.length === 0 ? (
             <EmptyState title="No teams yet" sub="Teams created by users will appear here." icon="people-outline" color="#06b6d4" />
           ) : (
@@ -687,6 +702,12 @@ export default function AdminScreen() {
               </Pressable>
             ))}
           </View>
+
+          {tournError && (
+            <View style={[styles.inlineError, { margin: 12, marginBottom: 0 }]}>
+              <Text style={styles.inlineErrorText}>{tournError}</Text>
+            </View>
+          )}
 
           {/* Manage tab */}
           {tournTab === "manage" && (
@@ -744,6 +765,7 @@ export default function AdminScreen() {
                             <Pressable
                               style={[styles.manageTournResultsBtn, acting && { opacity: 0.5 }]}
                               onPress={() => {
+                                setResultsWarnings([]);
                                 setResultsTarget(t);
                                 setResultEntries([{ place: 1, username: "" }, { place: 2, username: "" }, { place: 3, username: "" }]);
                               }}
@@ -880,8 +902,15 @@ export default function AdminScreen() {
                 <Ionicons name="add" size={14} color="#06b6d4" />
                 <Text style={styles.addPlaceBtnText}>Add another place</Text>
               </Pressable>
+              {resultsWarnings.length > 0 && (
+                <View style={[styles.inlineError, { marginBottom: 12 }]}>
+                  {resultsWarnings.map((w, i) => (
+                    <Text key={i} style={styles.inlineErrorText}>{w}</Text>
+                  ))}
+                </View>
+              )}
               <View style={styles.resultsBtns}>
-                <Pressable style={styles.confirmCancel} onPress={() => setResultsTarget(null)}>
+                <Pressable style={styles.confirmCancel} onPress={() => { setResultsTarget(null); setResultsWarnings([]); }}>
                   <Text style={styles.confirmCancelText}>Cancel</Text>
                 </Pressable>
                 <Pressable
