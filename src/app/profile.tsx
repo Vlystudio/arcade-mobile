@@ -424,6 +424,7 @@ export default function ProfileScreen() {
           <View style={styles.actionsCard}>
             <ActionRow icon="qr-code-outline" label="Scan Lane QR" onPress={() => router.push("/scan-lane")} />
             <ActionRow icon="people-circle-outline" label="Friends" onPress={() => router.push("/friends" as any)} divider />
+            <ActionRow icon="chatbubbles-outline" label="Messages" onPress={() => router.push("/chat" as any)} divider />
             <ActionRow icon="people-outline" label="Manage Teams" onPress={() => router.push("/teams")} divider />
             <ActionRow icon="podium-outline" label="Leaderboard" onPress={() => router.push("/leaderboard")} divider />
             <ActionRow icon="trophy-outline" label="Leagues" onPress={() => router.push("/leagues")} divider />
