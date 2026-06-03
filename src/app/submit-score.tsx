@@ -1,5 +1,6 @@
 import { Image } from "expo-image";
 import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
+import { compressImage, MAX_UPLOAD_BYTES } from "../../lib/compress-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
@@ -29,8 +30,8 @@ const RING_COLORS: Record<number, string> = {
 };
 
 export default function SubmitScoreScreen() {
-  const { lane_id, lane_number, game_id, game_name, game_type, check_in_id } =
-    useLocalSearchParams<{ lane_id: string; lane_number: string; game_id: string; game_name: string; game_type: string; check_in_id: string }>();
+  const { lane_id, lane_number, game_id, game_name, game_type, check_in_id, venue_id } =
+    useLocalSearchParams<{ lane_id: string; lane_number: string; game_id: string; game_name: string; game_type: string; check_in_id: string; venue_id: string }>();
 
   const isSkeeball = game_type === "skeeball";
 
@@ -58,24 +59,24 @@ export default function SubmitScoreScreen() {
     if (asset) setProofUri(asset.uri);
   }
 
-  async function uploadProofPhoto(userId: string, scoreId: string): Promise<string | null> {
+  // Returns { url, path } so the caller can delete the file if the score insert fails.
+  async function uploadProofPhoto(userId: string, scoreId: string): Promise<{ url: string; path: string } | null> {
     if (!proofUri) return null;
     try {
-      const response = await fetch(proofUri);
-      const blob = await response.blob();
-      const arrayBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as ArrayBuffer);
-        reader.onerror = () => reject(new Error("Failed to read image"));
-        reader.readAsArrayBuffer(blob);
-      });
+      const compressed = await compressImage(proofUri);
+      const response = await fetch(compressed);
+      const arrayBuffer = await response.arrayBuffer();
+      if (arrayBuffer.byteLength > MAX_UPLOAD_BYTES) {
+        Alert.alert("Photo too large", "Please choose a photo under 5 MB.");
+        return null;
+      }
       const path = `${userId}/${scoreId}.jpg`;
       const { error } = await supabase.storage
         .from("score-proofs")
         .upload(path, arrayBuffer, { upsert: true, contentType: "image/jpeg" });
       if (error) throw error;
       const { data } = supabase.storage.from("score-proofs").getPublicUrl(path);
-      return data.publicUrl;
+      return { url: data.publicUrl, path };
     } catch {
       return null;
     }
@@ -104,13 +105,14 @@ export default function SubmitScoreScreen() {
       const { data: scoreData, error } = await supabase
         .from("scores")
         .insert({
-          user_id: user.id,
-          game_id: game_id || null,
-          lane_id: lane_id || null,
+          user_id:     user.id,
+          game_id:     game_id || null,
+          lane_id:     lane_id || null,
           check_in_id: check_in_id || null,
-          score: finalScore,
-          frame_data: isSkeeball ? balls.map((pts, i) => ({ ball: i + 1, pts })) : null,
-          status: "pending",
+          venue_id:    venue_id || null,
+          score:       finalScore,
+          frame_data:  isSkeeball ? balls.map((pts, i) => ({ ball: i + 1, pts })) : null,
+          status:      "pending",
         })
         .select("id")
         .single();
@@ -122,9 +124,16 @@ export default function SubmitScoreScreen() {
       }
 
       if (proofUri) {
-        const photoUrl = await uploadProofPhoto(user.id, scoreData.id);
-        if (photoUrl) {
-          await supabase.from("scores").update({ photo_url: photoUrl }).eq("id", scoreData.id);
+        const uploaded = await uploadProofPhoto(user.id, scoreData.id);
+        if (uploaded) {
+          const { error: updateErr } = await supabase
+            .from("scores")
+            .update({ photo_url: uploaded.url })
+            .eq("id", scoreData.id);
+          // If the update fails, remove the now-orphaned file
+          if (updateErr) {
+            await supabase.storage.from("score-proofs").remove([uploaded.path]);
+          }
         }
       }
     } catch {

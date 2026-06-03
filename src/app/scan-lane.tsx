@@ -13,11 +13,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 
-type Lane = {
-  id: string; lane_number: number; lane_qr_token: string;
-  status: string; game_id: string | null;
-  games: { name: string; type: string } | null;
-};
 
 export default function ScanLaneScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -38,83 +33,57 @@ export default function ScanLaneScreen() {
     setLoading(true);
     try {
       const token = extractToken(qrData);
+
+      // Verify session before calling RPC
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) { Alert.alert("Not logged in", "Please log in before checking in."); return; }
-
-      const { data: lane, error: laneError } = await supabase
-        .from("lanes")
-        .select("id, lane_number, lane_qr_token, status, game_id, games(name, type)")
-        .eq("lane_qr_token", token)
-        .single();
-
-      if (laneError || !lane) { Alert.alert("Lane not found", "This QR code doesn't match any lane."); return; }
-
-      const typedLane = lane as any as Lane;
-
-      // Prevent duplicate active check-ins — one per user at a time
-      const { data: existingActive } = await supabase
-        .from("check_ins")
-        .select("id, lanes(lane_number)")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-
-      if (existingActive) {
-        const laneNum = (existingActive as any).lanes?.lane_number;
-        Alert.alert(
-          "Already Checked In",
-          `You already have an active session${laneNum ? ` on Lane ${laneNum}` : ""}. End that session first.`,
-          [{ text: "OK" }]
-        );
+      if (userError || !user) {
+        Alert.alert("Not logged in", "Please log in before checking in.");
         return;
       }
 
-      // Rate-limit: prevent check-in to same lane more than once per 30 minutes
-      const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
-      const { data: recentSame } = await supabase
-        .from("check_ins")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("lane_id", typedLane.id)
-        .gte("created_at", cutoff)
-        .limit(1)
-        .maybeSingle();
+      // Single atomic server call — validates token, deduplicates, rate-limits, inserts
+      const { data, error } = await supabase.rpc("rpc_check_in", { p_token: token });
 
-      if (recentSame) {
-        Alert.alert("Too Soon", "You checked into this lane recently. Wait 30 minutes before checking in again.");
+      if (error) {
+        Alert.alert("Check-in failed", error.message);
         return;
       }
 
-      const { data: checkIn, error: checkInError } = await supabase
-        .from("check_ins")
-        .insert({ user_id: user.id, lane_id: typedLane.id, status: "active" })
-        .select("id")
-        .single();
+      const result = data as {
+        error?: string; message?: string;
+        check_in_id?: string; lane_id?: string; lane_number?: number;
+        game_id?: string; game_name?: string; game_type?: string; venue_id?: string;
+      };
 
-      if (checkInError || !checkIn) throw checkInError ?? new Error("Check-in failed");
-
-      const gameName = typedLane.games?.name ?? "Game";
-      const gameType = typedLane.games?.type ?? "arcade";
+      if (result.error) {
+        Alert.alert("Can't check in", result.message ?? "Something went wrong.");
+        return;
+      }
 
       Alert.alert(
-        `Lane ${typedLane.lane_number}`,
-        `Checked in to ${gameName}. Ready to play?`,
+        `Lane ${result.lane_number}`,
+        `Checked in to ${result.game_name}. Ready to play?`,
         [
-          { text: "Submit Score", onPress: () => router.push({ pathname: "/submit-score", params: {
-            lane_id: typedLane.id,
-            lane_number: typedLane.lane_number.toString(),
-            game_id: typedLane.game_id ?? "",
-            game_name: gameName,
-            game_type: gameType,
-            check_in_id: checkIn.id,
-          }}),
+          {
+            text: "Submit Score",
+            onPress: () => router.push({
+              pathname: "/submit-score",
+              params: {
+                lane_id:      result.lane_id ?? "",
+                lane_number:  String(result.lane_number ?? ""),
+                game_id:      result.game_id ?? "",
+                game_name:    result.game_name ?? "Game",
+                game_type:    result.game_type ?? "arcade",
+                check_in_id:  result.check_in_id ?? "",
+                venue_id:     result.venue_id ?? "",
+              },
+            }),
           },
           { text: "Not now", style: "cancel" },
         ]
       );
-    } catch (error) {
-      Alert.alert("Check-in failed", error instanceof Error ? error.message : "Something went wrong.");
+    } catch (err) {
+      Alert.alert("Check-in failed", err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setLoading(false);
     }
