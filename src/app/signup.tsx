@@ -104,7 +104,6 @@ export default function SignupScreen() {
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
         username: uname,
-        email: email.trim(),
       });
       if (profileError?.code === "23505") {
         // Username was taken between check and insert (race condition)
