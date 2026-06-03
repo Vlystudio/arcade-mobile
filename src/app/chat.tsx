@@ -78,8 +78,8 @@ export default function ChatScreen() {
 
     const { data: fs } = await supabase
       .from("friendships")
-      .select("user_id, friend_id")
-      .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
+      .select("requester_id, addressee_id")
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
       .eq("status", "accepted");
 
     if (!fs || fs.length === 0) {
@@ -88,7 +88,7 @@ export default function ChatScreen() {
       return;
     }
 
-    const ids = fs.map((f: any) => f.user_id === user.id ? f.friend_id : f.user_id);
+    const ids = fs.map((f: any) => f.requester_id === user.id ? f.addressee_id : f.requester_id);
 
     const { data: profiles } = await supabase
       .from("profiles")

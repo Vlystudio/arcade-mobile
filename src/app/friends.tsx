@@ -186,6 +186,30 @@ export default function FriendsScreen() {
 
   useEffect(() => { if (user) loadData(); }, [user]);
 
+  // Subscribe to incoming friend requests and accepted friendships in real-time
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase
+      .channel("friendships_live")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "friendships", filter: `addressee_id=eq.${user.id}` },
+        () => { loadData(); }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "friendships", filter: `requester_id=eq.${user.id}` },
+        () => { loadData(); }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "friendships", filter: `addressee_id=eq.${user.id}` },
+        () => { loadData(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [user]);
+
   // Subscribe to friends' online status in real-time
   useEffect(() => {
     if (!user || friends.length === 0) return;
