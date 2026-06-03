@@ -6,7 +6,6 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -38,6 +37,7 @@ export default function SubmitScoreScreen() {
   const [balls, setBalls] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [arcadeScore, setArcadeScore] = useState("");
   const [proofUri, setProofUri] = useState<string | null>(null);
 
@@ -90,13 +90,14 @@ export default function SubmitScoreScreen() {
   }
 
   async function handleSubmit() {
+    setSubmitError(null);
     const finalScore = isSkeeball ? total : parseInt(arcadeScore, 10);
     if (isNaN(finalScore) || finalScore < 0) {
-      Alert.alert("Invalid score", "Enter a valid score.");
+      setSubmitError("Enter a valid score.");
       return;
     }
     if (!proofUri) {
-      Alert.alert("Photo required", "Please add a photo proof of your score.");
+      setSubmitError("Please add a photo proof of your score.");
       return;
     }
 
@@ -104,7 +105,7 @@ export default function SubmitScoreScreen() {
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
-        Alert.alert("Not logged in", "Please log in first.");
+        setSubmitError("You must be logged in to submit a score.");
         setSubmitting(false);
         return;
       }
@@ -125,26 +126,25 @@ export default function SubmitScoreScreen() {
         .single();
 
       if (error || !scoreData) {
-        Alert.alert("Submit failed", error?.message ?? "Unknown error");
+        setSubmitError(error?.message ?? "Score submission failed. Check Supabase RLS policies on the scores table.");
         setSubmitting(false);
         return;
       }
 
-      if (proofUri) {
-        const uploaded = await uploadProofPhoto(user.id, scoreData.id);
-        if (uploaded) {
-          const { error: updateErr } = await supabase
-            .from("scores")
-            .update({ photo_url: uploaded.url })
-            .eq("id", scoreData.id);
-          // If the update fails, remove the now-orphaned file
-          if (updateErr) {
-            await supabase.storage.from("score-proofs").remove([uploaded.path]);
-          }
+      const uploaded = await uploadProofPhoto(user.id, scoreData.id);
+      if (uploaded) {
+        const { error: updateErr } = await supabase
+          .from("scores")
+          .update({ photo_url: uploaded.url })
+          .eq("id", scoreData.id);
+        if (updateErr) {
+          await supabase.storage.from("score-proofs").remove([uploaded.path]);
         }
       }
-    } catch {
-      // score insert or photo upload failed — still navigate home so user isn't stuck
+    } catch (e: any) {
+      setSubmitError(e?.message ?? "Unexpected error — please try again.");
+      setSubmitting(false);
+      return;
     }
 
     setSubmitting(false);
@@ -329,6 +329,12 @@ export default function SubmitScoreScreen() {
                 </View>
 
                 <RequirementsChecklist isSkeeball={true} gameComplete={gameComplete} proofUri={proofUri} arcadeScore={arcadeScore} />
+                {submitError && (
+                  <View style={styles.submitErrorBox}>
+                    <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
+                    <Text style={styles.submitErrorText}>{submitError}</Text>
+                  </View>
+                )}
                 <SubmitButton
                   label={submitting ? "Submitting…" : "Submit for Review"}
                   onPress={handleSubmit}
@@ -418,6 +424,12 @@ export default function SubmitScoreScreen() {
             </View>
 
             <RequirementsChecklist isSkeeball={false} gameComplete={true} proofUri={proofUri} arcadeScore={arcadeScore} />
+            {submitError && (
+              <View style={styles.submitErrorBox}>
+                <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
+                <Text style={styles.submitErrorText}>{submitError}</Text>
+              </View>
+            )}
             <SubmitButton
               label={submitting ? "Submitting…" : "Submit for Review"}
               onPress={handleSubmit}
@@ -639,6 +651,13 @@ const styles = StyleSheet.create({
   proofEmptyHint: { color: "#444", fontSize: 12 },
 
   reviewNote: { color: "#444", fontSize: 12, textAlign: "center", marginTop: 6, lineHeight: 18 },
+  submitErrorBox: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 12,
+    padding: 12, marginBottom: 10,
+    borderWidth: 1, borderColor: "rgba(239,68,68,0.25)",
+  },
+  submitErrorText: { color: "#ef4444", fontSize: 13, flex: 1 },
 
   reqList: { gap: 6, marginBottom: 14, paddingHorizontal: 4 },
   reqItem: { flexDirection: "row", alignItems: "center", gap: 8 },
