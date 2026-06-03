@@ -13,11 +13,21 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 
+type CheckInResult = {
+  check_in_id: string;
+  lane_id: string;
+  lane_number: number;
+  game_id: string;
+  game_name: string;
+  game_type: string;
+  venue_id: string;
+};
 
 export default function ScanLaneScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null);
 
   const extractToken = (data: string) => {
     try {
@@ -34,18 +44,18 @@ export default function ScanLaneScreen() {
     try {
       const token = extractToken(qrData);
 
-      // Verify session before calling RPC
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
         Alert.alert("Not logged in", "Please log in before checking in.");
+        setScanned(false);
         return;
       }
 
-      // Single atomic server call — validates token, deduplicates, rate-limits, inserts
       const { data, error } = await supabase.rpc("rpc_check_in", { p_token: token });
 
       if (error) {
         Alert.alert("Check-in failed", error.message);
+        setScanned(false);
         return;
       }
 
@@ -57,33 +67,23 @@ export default function ScanLaneScreen() {
 
       if (result.error) {
         Alert.alert("Can't check in", result.message ?? "Something went wrong.");
+        setScanned(false);
         return;
       }
 
-      Alert.alert(
-        `Lane ${result.lane_number}`,
-        `Checked in to ${result.game_name}. Ready to play?`,
-        [
-          {
-            text: "Submit Score",
-            onPress: () => router.push({
-              pathname: "/submit-score",
-              params: {
-                lane_id:      result.lane_id ?? "",
-                lane_number:  String(result.lane_number ?? ""),
-                game_id:      result.game_id ?? "",
-                game_name:    result.game_name ?? "Game",
-                game_type:    result.game_type ?? "arcade",
-                check_in_id:  result.check_in_id ?? "",
-                venue_id:     result.venue_id ?? "",
-              },
-            }),
-          },
-          { text: "Not now", style: "cancel" },
-        ]
-      );
+      // Show the success UI in-screen — no Alert navigation
+      setCheckInResult({
+        check_in_id: result.check_in_id ?? "",
+        lane_id:     result.lane_id     ?? "",
+        lane_number: result.lane_number ?? 0,
+        game_id:     result.game_id     ?? "",
+        game_name:   result.game_name   ?? "Game",
+        game_type:   result.game_type   ?? "arcade",
+        venue_id:    result.venue_id    ?? "",
+      });
     } catch (err) {
       Alert.alert("Check-in failed", err instanceof Error ? err.message : "Something went wrong.");
+      setScanned(false);
     } finally {
       setLoading(false);
     }
@@ -94,6 +94,57 @@ export default function ScanLaneScreen() {
     setScanned(true);
     handleCheckIn(data);
   };
+
+  const handleScanAgain = () => {
+    setCheckInResult(null);
+    setScanned(false);
+  };
+
+  // ── Check-in success screen ───────────────────────────────────────────────
+
+  if (checkInResult) {
+    return (
+      <SafeAreaView style={styles.successRoot} edges={["top", "bottom"]}>
+        <View style={styles.successCard}>
+          <View style={styles.successIconWrap}>
+            <Ionicons name="checkmark-circle" size={56} color="#22c55e" />
+          </View>
+          <Text style={styles.successCheckedIn}>Checked in!</Text>
+          <Text style={styles.successLane}>Lane {checkInResult.lane_number}</Text>
+          <Text style={styles.successGame}>{checkInResult.game_name}</Text>
+        </View>
+
+        <View style={styles.successActions}>
+          <Pressable
+            style={styles.submitScoreBtn}
+            onPress={() =>
+              router.push({
+                pathname: "/submit-score",
+                params: {
+                  lane_id:     checkInResult.lane_id,
+                  lane_number: String(checkInResult.lane_number),
+                  game_id:     checkInResult.game_id,
+                  game_name:   checkInResult.game_name,
+                  game_type:   checkInResult.game_type,
+                  check_in_id: checkInResult.check_in_id,
+                  venue_id:    checkInResult.venue_id,
+                },
+              })
+            }
+          >
+            <Ionicons name="trophy" size={20} color="#000" />
+            <Text style={styles.submitScoreBtnText}>Submit Score</Text>
+          </Pressable>
+
+          <Pressable style={styles.notNowBtn} onPress={handleScanAgain}>
+            <Text style={styles.notNowText}>Not now</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // ── Permission gates ──────────────────────────────────────────────────────
 
   if (!permission) {
     return (
@@ -120,6 +171,8 @@ export default function ScanLaneScreen() {
     );
   }
 
+  // ── Scanner ───────────────────────────────────────────────────────────────
+
   return (
     <SafeAreaView style={styles.root} edges={["bottom"]}>
       <View style={styles.cameraSection}>
@@ -129,7 +182,6 @@ export default function ScanLaneScreen() {
           barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
           onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
         />
-        {/* Overlay */}
         <View style={styles.overlay}>
           <View style={styles.overlayTop} />
           <View style={styles.overlayMiddle}>
@@ -158,7 +210,7 @@ export default function ScanLaneScreen() {
         )}
 
         {scanned && !loading && (
-          <Pressable style={styles.rescanBtn} onPress={() => setScanned(false)}>
+          <Pressable style={styles.rescanBtn} onPress={handleScanAgain}>
             <Ionicons name="refresh-outline" size={16} color="#fff" />
             <Text style={styles.rescanText}>Scan Again</Text>
           </Pressable>
@@ -237,4 +289,33 @@ const styles = StyleSheet.create({
   permSub: { color: "#555", fontSize: 14, textAlign: "center", marginBottom: 24, lineHeight: 20 },
   permBtn: { backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 32, paddingVertical: 14 },
   permBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
+
+  // Success screen
+  successRoot: { flex: 1, backgroundColor: "#000", justifyContent: "center", padding: 28 },
+  successCard: {
+    backgroundColor: "#111", borderRadius: 28, padding: 32,
+    alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24,
+  },
+  successIconWrap: {
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: "rgba(34,197,94,0.1)", borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.25)", alignItems: "center",
+    justifyContent: "center", marginBottom: 20,
+  },
+  successCheckedIn: { color: "#22c55e", fontSize: 15, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 },
+  successLane: { color: "#fff", fontSize: 40, fontWeight: "900", marginBottom: 4 },
+  successGame: { color: "#555", fontSize: 16 },
+
+  successActions: { gap: 12 },
+  submitScoreBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 10, backgroundColor: "#06b6d4", borderRadius: 18,
+    paddingVertical: 18,
+  },
+  submitScoreBtnText: { color: "#000", fontWeight: "900", fontSize: 17 },
+  notNowBtn: {
+    backgroundColor: "#111", borderRadius: 18, paddingVertical: 16,
+    alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  notNowText: { color: "#555", fontWeight: "700", fontSize: 15 },
 });

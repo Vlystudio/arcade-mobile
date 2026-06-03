@@ -3,7 +3,7 @@ import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
 import { compressImage, MAX_UPLOAD_BYTES } from "../../lib/compress-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -37,8 +37,15 @@ export default function SubmitScoreScreen() {
 
   const [balls, setBalls] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [arcadeScore, setArcadeScore] = useState("");
   const [proofUri, setProofUri] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!submitted) return;
+    const t = setTimeout(() => router.replace("/"), 1400);
+    return () => clearTimeout(t);
+  }, [submitted]);
 
   const total = balls.reduce((sum, b) => sum + b, 0);
   const gameComplete = isSkeeball ? balls.length === BALLS_PER_GAME : true;
@@ -137,11 +144,25 @@ export default function SubmitScoreScreen() {
         }
       }
     } catch {
-      // score insert or photo upload failed — still redirect so user isn't stuck
+      // score insert or photo upload failed — still navigate home so user isn't stuck
     }
 
     setSubmitting(false);
-    router.replace("/" as any);
+    setSubmitted(true);
+  }
+
+  if (submitted) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["bottom"]}>
+        <View style={styles.successOverlay}>
+          <View style={styles.successIconWrap}>
+            <Ionicons name="checkmark-circle" size={72} color="#22c55e" />
+          </View>
+          <Text style={styles.successTitle}>Score Submitted!</Text>
+          <Text style={styles.successSub}>Pending admin review — heading home…</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -623,4 +644,14 @@ const styles = StyleSheet.create({
   reqItem: { flexDirection: "row", alignItems: "center", gap: 8 },
   reqText: { color: "#444", fontSize: 13 },
   reqTextDone: { color: "#22c55e" },
+
+  successOverlay: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
+  successIconWrap: {
+    width: 104, height: 104, borderRadius: 52,
+    backgroundColor: "rgba(34,197,94,0.1)", borderWidth: 1,
+    borderColor: "rgba(34,197,94,0.25)", alignItems: "center",
+    justifyContent: "center", marginBottom: 24,
+  },
+  successTitle: { color: "#fff", fontSize: 26, fontWeight: "900", marginBottom: 10 },
+  successSub: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
 });
