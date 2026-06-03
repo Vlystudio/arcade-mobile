@@ -1,4 +1,5 @@
 import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
+import { compressImage, MAX_UPLOAD_BYTES } from "../../lib/compress-image";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
@@ -212,8 +213,14 @@ export default function FeedScreen() {
 
     if (editPhotoUri) {
       try {
-        const response = await fetch(editPhotoUri);
+        const compressed = await compressImage(editPhotoUri);
+        const response = await fetch(compressed);
         const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength > MAX_UPLOAD_BYTES) {
+          setEditError("Photo is too large (max 5 MB). Please choose a smaller image.");
+          setEditSaving(false);
+          return;
+        }
         const path = `${user.id}/${Date.now()}.jpg`;
         const { error: upErr } = await supabase.storage
           .from("post-photos")
@@ -260,8 +267,14 @@ export default function FeedScreen() {
     let photoUrl: string | null = null;
     if (postPhotoUri) {
       try {
-        const response = await fetch(postPhotoUri);
+        const compressed = await compressImage(postPhotoUri);
+        const response = await fetch(compressed);
         const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength > MAX_UPLOAD_BYTES) {
+          setPostError("Photo is too large (max 5 MB). Please choose a smaller image.");
+          setPosting(false);
+          return;
+        }
         const path = `${user.id}/${Date.now()}.jpg`;
         const { error: uploadErr } = await supabase.storage
           .from("post-photos")

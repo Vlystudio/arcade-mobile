@@ -385,6 +385,14 @@ export default function ProfileScreen() {
             )}
           </View>
 
+          {/* Legal */}
+          <Text style={[styles.sectionLabel, { marginTop: 8 }]}>Legal</Text>
+          <View style={styles.actionsCard}>
+            <ActionRow icon="document-text-outline" label="Privacy Policy" onPress={() => router.push("/privacy" as any)} />
+            <ActionRow icon="reader-outline" label="Terms of Service" onPress={() => router.push("/terms" as any)} divider />
+            <ActionRow icon="trash-outline" label="Delete Account" onPress={() => router.push("/delete-account" as any)} divider />
+          </View>
+
           <Pressable style={styles.logoutBtn} onPress={handleLogout}>
             <Ionicons name="log-out-outline" size={18} color="#ef4444" />
             <Text style={styles.logoutText}>Log Out</Text>

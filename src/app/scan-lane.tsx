@@ -50,6 +50,42 @@ export default function ScanLaneScreen() {
       if (laneError || !lane) { Alert.alert("Lane not found", "This QR code doesn't match any lane."); return; }
 
       const typedLane = lane as any as Lane;
+
+      // Prevent duplicate active check-ins — one per user at a time
+      const { data: existingActive } = await supabase
+        .from("check_ins")
+        .select("id, lanes(lane_number)")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+
+      if (existingActive) {
+        const laneNum = (existingActive as any).lanes?.lane_number;
+        Alert.alert(
+          "Already Checked In",
+          `You already have an active session${laneNum ? ` on Lane ${laneNum}` : ""}. End that session first.`,
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
+      // Rate-limit: prevent check-in to same lane more than once per 30 minutes
+      const cutoff = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+      const { data: recentSame } = await supabase
+        .from("check_ins")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("lane_id", typedLane.id)
+        .gte("created_at", cutoff)
+        .limit(1)
+        .maybeSingle();
+
+      if (recentSame) {
+        Alert.alert("Too Soon", "You checked into this lane recently. Wait 30 minutes before checking in again.");
+        return;
+      }
+
       const { data: checkIn, error: checkInError } = await supabase
         .from("check_ins")
         .insert({ user_id: user.id, lane_id: typedLane.id, status: "active" })
@@ -159,20 +195,22 @@ export default function ScanLaneScreen() {
           </Pressable>
         )}
 
-        <View style={styles.testSection}>
-          <Text style={styles.testLabel}>Test Lanes</Text>
-          <View style={styles.testGrid}>
-            {[1, 2, 3, 4, 5, 6].map((n) => (
-              <Pressable
-                key={n}
-                style={styles.testBtn}
-                onPress={() => { setScanned(true); handleCheckIn(`lane-${n}-demo-token`); }}
-              >
-                <Text style={styles.testBtnText}>Lane {n}</Text>
-              </Pressable>
-            ))}
+        {__DEV__ && (
+          <View style={styles.testSection}>
+            <Text style={styles.testLabel}>Dev: Test Lanes</Text>
+            <View style={styles.testGrid}>
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <Pressable
+                  key={n}
+                  style={styles.testBtn}
+                  onPress={() => { setScanned(true); handleCheckIn(`lane-${n}-demo-token`); }}
+                >
+                  <Text style={styles.testBtnText}>Lane {n}</Text>
+                </Pressable>
+              ))}
+            </View>
           </View>
-        </View>
+        )}
       </View>
     </SafeAreaView>
   );

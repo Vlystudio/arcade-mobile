@@ -48,6 +48,9 @@ export default function RootLayout() {
           <Stack.Screen name="trivia" options={{ headerShown: false }} />
           <Stack.Screen name="pool" options={{ headerShown: false }} />
           <Stack.Screen name="lane-scores" options={{ headerShown: false }} />
+          <Stack.Screen name="privacy" options={{ headerShown: false }} />
+          <Stack.Screen name="terms" options={{ headerShown: false }} />
+          <Stack.Screen name="delete-account" options={{ headerShown: false }} />
         </Stack>
       </ThemeProvider>
       </CartProvider>
