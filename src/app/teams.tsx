@@ -90,11 +90,11 @@ export default function TeamsScreen() {
   async function loadTeams() {
     if (!user) return;
 
-    const [teamsRes, membersRes, myRes, requestsRes] = await Promise.all([
+    const [teamsRes, membersRes, myRes, myRequestsRes] = await Promise.all([
       supabase.from("teams").select("id, name, captain_user_id, photo_url").order("name"),
       supabase.from("team_members").select("team_id, user_id"),
       supabase.from("team_members").select("team_id").eq("user_id", user.id),
-      supabase.from("team_requests").select("team_id, user_id, direction, status").or(`user_id.eq.${user.id},team_id.in.(select id from teams where captain_user_id='${user.id}')`),
+      supabase.from("team_requests").select("team_id, direction, status").eq("user_id", user.id),
     ]);
 
     const myIds = new Set((myRes.data ?? []).map((m) => m.team_id));
@@ -104,15 +104,29 @@ export default function TeamsScreen() {
       byTeam[m.team_id].push(m.user_id);
     }
 
+    // Load pending request counts for teams I captain separately (subquery syntax not supported in PostgREST)
+    const captainTeamIds = (teamsRes.data ?? [])
+      .filter((t) => t.captain_user_id === user.id)
+      .map((t) => t.id);
+    let captainPending: { team_id: string }[] = [];
+    if (captainTeamIds.length > 0) {
+      const { data } = await supabase
+        .from("team_requests")
+        .select("team_id")
+        .in("team_id", captainTeamIds)
+        .eq("status", "pending");
+      captainPending = data ?? [];
+    }
+
     const myRequests: Record<string, "pending" | "invited"> = {};
-    const pendingByTeam: Record<string, number> = {};
-    for (const r of requestsRes.data ?? []) {
-      if (r.user_id === user.id && r.status === "pending") {
+    for (const r of myRequestsRes.data ?? []) {
+      if (r.status === "pending") {
         myRequests[r.team_id] = r.direction === "invite" ? "invited" : "pending";
       }
-      if (r.status === "pending") {
-        pendingByTeam[r.team_id] = (pendingByTeam[r.team_id] ?? 0) + 1;
-      }
+    }
+    const pendingByTeam: Record<string, number> = {};
+    for (const r of captainPending) {
+      pendingByTeam[r.team_id] = (pendingByTeam[r.team_id] ?? 0) + 1;
     }
 
     const enriched: Team[] = (teamsRes.data ?? []).map((t) => ({
