@@ -86,6 +86,7 @@ export default function TeamsScreen() {
   const [requestsTeam, setRequestsTeam] = useState<Team | null>(null);
   const [requests, setRequests] = useState<JoinRequest[]>([]);
   const [requestsLoading, setRequestsLoading] = useState(false);
+  const [requestActionError, setRequestActionError] = useState<string | null>(null);
 
   async function loadTeams() {
     if (!user) return;
@@ -355,13 +356,17 @@ export default function TeamsScreen() {
 
   async function approveRequest(requestId: string, userId: string) {
     if (!requestsTeam) return;
-    await supabase.from("team_requests").update({ status: "approved" }).eq("id", requestId);
-    await supabase.from("team_members").insert({ team_id: requestsTeam.id, user_id: userId, role: "member" });
+    setRequestActionError(null);
+    const { error: updateErr } = await supabase.from("team_requests").update({ status: "approved" }).eq("id", requestId);
+    if (updateErr) { setRequestActionError(updateErr.message); return; }
+    const { error: insertErr } = await supabase.from("team_members").insert({ team_id: requestsTeam.id, user_id: userId, role: "member" });
+    if (insertErr) { setRequestActionError(insertErr.message); return; }
     setRequests((prev) => prev.filter((r) => r.id !== requestId));
     await loadTeams();
   }
 
   async function denyRequest(requestId: string) {
+    setRequestActionError(null);
     await supabase.from("team_requests").update({ status: "denied" }).eq("id", requestId);
     setRequests((prev) => prev.filter((r) => r.id !== requestId));
   }
@@ -847,17 +852,23 @@ export default function TeamsScreen() {
       </Modal>
 
       {/* ── Join requests modal (captain) ───────────────────────── */}
-      <Modal visible={!!requestsTeam} transparent animationType="slide" onRequestClose={() => setRequestsTeam(null)}>
+      <Modal visible={!!requestsTeam} transparent animationType="slide" onRequestClose={() => { setRequestsTeam(null); setRequestActionError(null); }}>
         <View style={styles.modalBg}>
-          <Pressable style={styles.modalDismiss} onPress={() => setRequestsTeam(null)} />
+          <Pressable style={styles.modalDismiss} onPress={() => { setRequestsTeam(null); setRequestActionError(null); }} />
           <View style={styles.modalSheet}>
             <View style={styles.modalHandle} />
             <View style={styles.inviteModalTop}>
               <Text style={styles.modalTitle}>Join Requests</Text>
-              <Pressable onPress={() => setRequestsTeam(null)}>
+              <Pressable onPress={() => { setRequestsTeam(null); setRequestActionError(null); }}>
                 <Ionicons name="close" size={22} color="#555" />
               </Pressable>
             </View>
+            {requestActionError && (
+              <View style={styles.inlineError}>
+                <Ionicons name="alert-circle-outline" size={14} color="#ef4444" />
+                <Text style={styles.inlineErrorText}>{requestActionError}</Text>
+              </View>
+            )}
             {requestsLoading ? (
               <ActivityIndicator color="#06b6d4" style={{ marginTop: 20 }} />
             ) : requests.length === 0 ? (
