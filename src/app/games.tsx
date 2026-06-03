@@ -255,6 +255,20 @@ export default function GamesScreen() {
             </>
           )}
 
+          {/* Trivia Night entry */}
+          <Pressable style={styles.triviaCard} onPress={() => router.push("/trivia" as any)}>
+            <View style={styles.triviaCardLeft}>
+              <View style={styles.triviaIconWrap}>
+                <Ionicons name="help-circle-outline" size={26} color="#f59e0b" />
+              </View>
+              <View>
+                <Text style={styles.triviaCardTitle}>Trivia Night</Text>
+                <Text style={styles.triviaCardSub}>Sign up your team · Min. 3 players</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#f59e0b" />
+          </Pressable>
+
           <Pressable style={styles.leaderLink} onPress={() => router.push("/leaderboard")}>
             <Ionicons name="podium-outline" size={16} color="#06b6d4" />
             <Text style={styles.leaderLinkText}>View Leaderboard</Text>
@@ -566,4 +580,18 @@ const styles = StyleSheet.create({
     width: 38, height: 38, borderRadius: 19,
     alignItems: "center", justifyContent: "center",
   },
+
+  triviaCard: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: "rgba(245,158,11,0.07)", borderRadius: 20,
+    padding: 18, marginBottom: 12,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.22)",
+  },
+  triviaCardLeft: { flexDirection: "row", alignItems: "center", gap: 14 },
+  triviaIconWrap: {
+    width: 48, height: 48, borderRadius: 14,
+    backgroundColor: "rgba(245,158,11,0.14)", alignItems: "center", justifyContent: "center",
+  },
+  triviaCardTitle: { color: "#fff", fontSize: 16, fontWeight: "900", marginBottom: 2 },
+  triviaCardSub:   { color: "#f59e0b", fontSize: 12, fontWeight: "600" },
 });

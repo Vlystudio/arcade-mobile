@@ -93,38 +93,42 @@ export default function SubmitScoreScreen() {
     }
 
     setSubmitting(true);
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      Alert.alert("Not logged in", "Please log in first.");
-      setSubmitting(false);
-      return;
-    }
-
-    const { data: scoreData, error } = await supabase
-      .from("scores")
-      .insert({
-        user_id: user.id,
-        game_id: game_id || null,
-        lane_id: lane_id || null,
-        check_in_id: check_in_id || null,
-        score: finalScore,
-        frame_data: isSkeeball ? balls.map((pts, i) => ({ ball: i + 1, pts })) : null,
-        status: "pending",
-      })
-      .select("id")
-      .single();
-
-    if (error || !scoreData) {
-      Alert.alert("Submit failed", error?.message ?? "Unknown error");
-      setSubmitting(false);
-      return;
-    }
-
-    if (proofUri) {
-      const photoUrl = await uploadProofPhoto(user.id, scoreData.id);
-      if (photoUrl) {
-        await supabase.from("scores").update({ photo_url: photoUrl }).eq("id", scoreData.id);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        Alert.alert("Not logged in", "Please log in first.");
+        setSubmitting(false);
+        return;
       }
+
+      const { data: scoreData, error } = await supabase
+        .from("scores")
+        .insert({
+          user_id: user.id,
+          game_id: game_id || null,
+          lane_id: lane_id || null,
+          check_in_id: check_in_id || null,
+          score: finalScore,
+          frame_data: isSkeeball ? balls.map((pts, i) => ({ ball: i + 1, pts })) : null,
+          status: "pending",
+        })
+        .select("id")
+        .single();
+
+      if (error || !scoreData) {
+        Alert.alert("Submit failed", error?.message ?? "Unknown error");
+        setSubmitting(false);
+        return;
+      }
+
+      if (proofUri) {
+        const photoUrl = await uploadProofPhoto(user.id, scoreData.id);
+        if (photoUrl) {
+          await supabase.from("scores").update({ photo_url: photoUrl }).eq("id", scoreData.id);
+        }
+      }
+    } catch {
+      // score insert or photo upload failed — still redirect so user isn't stuck
     }
 
     setSubmitting(false);

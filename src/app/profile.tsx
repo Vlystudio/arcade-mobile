@@ -21,6 +21,9 @@ import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 
 type GameOption = { id: string; name: string; type: string; count: number };
+type TournPlacement = { tournament_id: string; title: string; placement: number; proposed_date: string | null };
+
+const PLACE_MEDALS = ["🥇", "🥈", "🥉"];
 
 export default function ProfileScreen() {
   const { user, loading: authLoading } = useRequireAuth();
@@ -52,18 +55,27 @@ export default function ProfileScreen() {
   const [draftUsername, setDraftUsername] = useState("");
   const [savingUsername, setSavingUsername] = useState(false);
 
+  // Tournament placements
+  const [tournPlacements, setTournPlacements] = useState<TournPlacement[]>([]);
+
   // Avatar upload
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarPickerVisible, setAvatarPickerVisible] = useState(false);
 
   async function loadProfile() {
     if (!user) return;
-    const [profileRes, scoresRes, pendingRes, teamRes] = await Promise.all([
+    const [profileRes, scoresRes, pendingRes, teamRes, placementsRes] = await Promise.all([
       supabase.from("profiles").select("username, avatar_url, is_admin, featured_game_id").eq("id", user.id).single(),
       supabase.from("scores").select("score, game_id, games(id, name, type)").eq("user_id", user.id).eq("status", "approved"),
       supabase.from("scores").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       supabase.from("team_members").select("role, teams(name)").eq("user_id", user.id).maybeSingle(),
+      supabase.from("tournament_placements").select("placement, tournament_id, tournaments(title, proposed_date)").eq("user_id", user.id).order("created_at", { ascending: false }).limit(10),
     ]);
+
+    setTournPlacements((placementsRes.data ?? []).map((p: any) => {
+      const t = Array.isArray(p.tournaments) ? p.tournaments[0] : p.tournaments;
+      return { tournament_id: p.tournament_id, title: t?.title ?? "Tournament", placement: p.placement, proposed_date: t?.proposed_date ?? null };
+    }));
 
     if (profileRes.data) {
       setUsername(profileRes.data.username);
@@ -328,6 +340,33 @@ export default function ProfileScreen() {
             </View>
           )}
 
+          {/* Tournament History */}
+          {tournPlacements.length > 0 && (
+            <>
+              <Text style={styles.sectionLabel}>Tournament History</Text>
+              <View style={styles.placementsCard}>
+                {tournPlacements.map((p, i) => (
+                  <View key={`${p.tournament_id}-${p.placement}`} style={[styles.placementRow, i < tournPlacements.length - 1 && styles.placementDivider]}>
+                    <Text style={styles.placementMedal}>{PLACE_MEDALS[p.placement - 1] ?? `#${p.placement}`}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.placementTitle}>{p.title}</Text>
+                      {p.proposed_date && (
+                        <Text style={styles.placementDate}>
+                          {new Date(p.proposed_date).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={[styles.placementBadge, p.placement === 1 && styles.placementBadge1st, p.placement === 2 && styles.placementBadge2nd, p.placement === 3 && styles.placementBadge3rd]}>
+                      <Text style={[styles.placementBadgeText, p.placement <= 3 && styles.placementBadgeTextTop]}>
+                        {p.placement === 1 ? "1st" : p.placement === 2 ? "2nd" : p.placement === 3 ? "3rd" : `${p.placement}th`}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
           {/* Actions */}
           <Text style={styles.sectionLabel}>Quick Actions</Text>
           <View style={styles.actionsCard}>
@@ -564,6 +603,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6, marginRight: 4,
   },
   actionBadgeText: { color: "#000", fontWeight: "900", fontSize: 12 },
+
+  // Tournament history
+  placementsCard: {
+    backgroundColor: "#111", borderRadius: 18,
+    borderWidth: 1, borderColor: "#1e1e1e",
+    overflow: "hidden", marginBottom: 22,
+  },
+  placementRow:     { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
+  placementDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#1a1a1a", marginLeft: 52 },
+  placementMedal:   { fontSize: 22, minWidth: 28, textAlign: "center" },
+  placementTitle:   { color: "#fff", fontSize: 14, fontWeight: "800" },
+  placementDate:    { color: "#444", fontSize: 12, marginTop: 2 },
+  placementBadge:   { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: "#1a1a1a" },
+  placementBadge1st:{ backgroundColor: "rgba(245,158,11,0.12)", borderWidth: 1, borderColor: "rgba(245,158,11,0.3)" },
+  placementBadge2nd:{ backgroundColor: "rgba(148,163,184,0.12)", borderWidth: 1, borderColor: "rgba(148,163,184,0.3)" },
+  placementBadge3rd:{ backgroundColor: "rgba(205,124,62,0.12)", borderWidth: 1, borderColor: "rgba(205,124,62,0.3)" },
+  placementBadgeText:    { color: "#555", fontSize: 12, fontWeight: "800" },
+  placementBadgeTextTop: { color: "#fff" },
 
   logoutBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",

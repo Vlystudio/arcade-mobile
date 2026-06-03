@@ -12,11 +12,12 @@ type Tab = {
 };
 
 const BASE_TABS: Tab[] = [
-  { label: "Feed",    icon: "home-outline",           iconActive: "home",           route: "/" },
-  { label: "Games",   icon: "game-controller-outline", iconActive: "game-controller", route: "/games" },
-  { label: "Teams",   icon: "people-outline",          iconActive: "people",          route: "/teams" },
-  { label: "Food",    icon: "restaurant-outline",      iconActive: "restaurant",      route: "/food" },
-  { label: "Profile", icon: "person-outline",          iconActive: "person",          route: "/profile" },
+  { label: "Feed",     icon: "home-outline",            iconActive: "home",            route: "/" },
+  { label: "Games",    icon: "game-controller-outline", iconActive: "game-controller", route: "/games" },
+  { label: "Teams",    icon: "people-outline",          iconActive: "people",          route: "/teams" },
+  { label: "Tourneys", icon: "trophy-outline",          iconActive: "trophy",          route: "/tournaments" },
+  { label: "Food",     icon: "restaurant-outline",      iconActive: "restaurant",      route: "/food" },
+  { label: "Profile",  icon: "person-outline",          iconActive: "person",          route: "/profile" },
 ];
 
 const ADMIN_TAB: Tab = {
@@ -32,7 +33,7 @@ export default function BottomTabBar() {
   const { isAdmin } = useAdmin();
 
   const tabs: Tab[] = isAdmin
-    ? [...BASE_TABS.slice(0, 4), ADMIN_TAB, BASE_TABS[4]]
+    ? [...BASE_TABS.slice(0, BASE_TABS.length - 1), ADMIN_TAB, BASE_TABS[BASE_TABS.length - 1]]
     : BASE_TABS;
 
   return (

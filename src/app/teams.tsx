@@ -53,9 +53,24 @@ export default function TeamsScreen() {
   const [submittingRequest, setSubmittingRequest] = useState(false);
   const [requestError, setRequestError] = useState<string | null>(null);
 
-  // Leave confirm inline
+  // Leave confirm inline (non-captains only)
   const [leaveTarget, setLeaveTarget] = useState<Team | null>(null);
   const [leaving, setLeaving] = useState(false);
+
+  // Transfer captain (captain leaving with other members present)
+  const [transferTarget, setTransferTarget] = useState<Team | null>(null);
+  const [transferMembers, setTransferMembers] = useState<{ user_id: string; username: string }[]>([]);
+  const [selectedNewCaptain, setSelectedNewCaptain] = useState<string | null>(null);
+  const [transferLoading, setTransferLoading] = useState(false);
+
+  // Disband (captain is sole member)
+  const [disbandTarget, setDisbandTarget] = useState<Team | null>(null);
+  const [disbanding, setDisbanding] = useState(false);
+
+  // Rename team (captain only)
+  const [renameTarget, setRenameTarget] = useState<Team | null>(null);
+  const [renameText, setRenameText] = useState("");
+  const [renaming, setRenaming] = useState(false);
 
   // Invite modal (captain)
   const [inviteTeamId, setInviteTeamId] = useState<string | null>(null);
@@ -167,6 +182,66 @@ export default function TeamsScreen() {
     await supabase.from("team_members").delete().eq("team_id", leaveTarget.id).eq("user_id", user.id);
     setLeaving(false);
     setLeaveTarget(null);
+    await loadTeams();
+  }
+
+  async function handleLeavePress(team: Team) {
+    if (!team.isCaptain) {
+      setLeaveTarget(team);
+      return;
+    }
+    // Captain leaving — check if there are other members
+    setTransferLoading(true);
+    const { data } = await supabase
+      .from("team_members")
+      .select("user_id, profiles(username)")
+      .eq("team_id", team.id)
+      .neq("user_id", user!.id);
+    setTransferLoading(false);
+    const members = (data ?? []).map((m: any) => ({
+      user_id: m.user_id,
+      username: Array.isArray(m.profiles) ? m.profiles[0]?.username : m.profiles?.username ?? "Unknown",
+    }));
+    if (members.length === 0) {
+      setDisbandTarget(team);
+    } else {
+      setTransferMembers(members);
+      setSelectedNewCaptain(null);
+      setTransferTarget(team);
+    }
+  }
+
+  async function handleTransferAndLeave() {
+    if (!user || !transferTarget || !selectedNewCaptain) return;
+    setLeaving(true);
+    await supabase.from("teams").update({ captain_user_id: selectedNewCaptain }).eq("id", transferTarget.id);
+    await supabase.from("team_members").update({ role: "captain" }).eq("team_id", transferTarget.id).eq("user_id", selectedNewCaptain);
+    await supabase.from("team_members").delete().eq("team_id", transferTarget.id).eq("user_id", user.id);
+    setLeaving(false);
+    setTransferTarget(null);
+    setTransferMembers([]);
+    setSelectedNewCaptain(null);
+    await loadTeams();
+  }
+
+  async function handleDisband() {
+    if (!user || !disbandTarget) return;
+    setDisbanding(true);
+    await supabase.from("team_members").delete().eq("team_id", disbandTarget.id);
+    await supabase.from("team_requests").delete().eq("team_id", disbandTarget.id);
+    await supabase.from("teams").delete().eq("id", disbandTarget.id);
+    setDisbanding(false);
+    setDisbandTarget(null);
+    await loadTeams();
+  }
+
+  async function handleRename() {
+    if (!user || !renameTarget || !renameText.trim()) return;
+    setRenaming(true);
+    await supabase.from("teams").update({ name: renameText.trim() }).eq("id", renameTarget.id);
+    setRenaming(false);
+    setRenameTarget(null);
+    setRenameText("");
     await loadTeams();
   }
 
@@ -378,9 +453,12 @@ export default function TeamsScreen() {
                           <Pressable style={styles.inviteIconBtn} onPress={(e) => { e.stopPropagation(); setInviteError(null); setInviteSentTo(null); setInviteTeamId(t.id); }}>
                             <Ionicons name="person-add-outline" size={18} color="#06b6d4" />
                           </Pressable>
+                          <Pressable style={styles.inviteIconBtn} onPress={(e) => { e.stopPropagation(); setRenameText(t.name); setRenameTarget(t); }}>
+                            <Ionicons name="pencil-outline" size={17} color="#06b6d4" />
+                          </Pressable>
                         </>
                       )}
-                      <Pressable style={styles.leaveBtn} onPress={(e) => { e.stopPropagation(); setLeaveTarget(t); }}>
+                      <Pressable style={styles.leaveBtn} onPress={(e) => { e.stopPropagation(); handleLeavePress(t); }}>
                         <Text style={styles.leaveBtnText}>Leave</Text>
                       </Pressable>
                       <Ionicons name="chevron-forward" size={14} color="#333" />
@@ -535,6 +613,115 @@ export default function TeamsScreen() {
               </Pressable>
               <Pressable style={[styles.leaveConfirmBtn, leaving && { opacity: 0.5 }]} onPress={confirmLeave} disabled={leaving}>
                 <Text style={styles.leaveConfirmText}>{leaving ? "Leaving…" : "Leave Team"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Transfer captain modal ─────────────────────────────── */}
+      <Modal visible={!!transferTarget} transparent animationType="slide" onRequestClose={() => setTransferTarget(null)}>
+        <View style={styles.modalBg}>
+          <Pressable style={styles.modalDismiss} onPress={() => { setTransferTarget(null); setTransferMembers([]); setSelectedNewCaptain(null); }} />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <View style={styles.inviteModalTop}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle}>Transfer Captain</Text>
+                <Text style={styles.modalSub}>Pick who takes over {transferTarget?.name} before you leave</Text>
+              </View>
+              <Pressable onPress={() => { setTransferTarget(null); setTransferMembers([]); setSelectedNewCaptain(null); }}>
+                <Ionicons name="close" size={22} color="#555" />
+              </Pressable>
+            </View>
+            <Text style={styles.fieldLabel}>Select new captain</Text>
+            <ScrollView style={{ maxHeight: 300 }} keyboardShouldPersistTaps="handled">
+              {transferMembers.map((m) => (
+                <Pressable
+                  key={m.user_id}
+                  style={[styles.transferRow, selectedNewCaptain === m.user_id && styles.transferRowSelected]}
+                  onPress={() => setSelectedNewCaptain(m.user_id)}
+                >
+                  <View style={styles.resultAvatar}>
+                    <Text style={styles.resultAvatarText}>{m.username[0].toUpperCase()}</Text>
+                  </View>
+                  <Text style={[styles.resultUsername, selectedNewCaptain === m.user_id && { color: "#fff" }]}>{m.username}</Text>
+                  {selectedNewCaptain === m.user_id
+                    ? <Ionicons name="checkmark-circle" size={20} color="#06b6d4" />
+                    : <Ionicons name="ellipse-outline" size={20} color="#333" />}
+                </Pressable>
+              ))}
+            </ScrollView>
+            <View style={[styles.inlineError, { backgroundColor: "rgba(245,158,11,0.06)", borderColor: "rgba(245,158,11,0.18)", marginTop: 12 }]}>
+              <Ionicons name="information-circle-outline" size={14} color="#f59e0b" />
+              <Text style={[styles.inlineErrorText, { color: "#f59e0b" }]}>You will be removed from the team after transferring.</Text>
+            </View>
+            <View style={styles.modalBtns}>
+              <Pressable style={styles.modalCancel} onPress={() => { setTransferTarget(null); setTransferMembers([]); setSelectedNewCaptain(null); }}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.leaveConfirmBtn, (!selectedNewCaptain || leaving) && { opacity: 0.4 }]}
+                onPress={handleTransferAndLeave}
+                disabled={!selectedNewCaptain || leaving}
+              >
+                <Text style={styles.leaveConfirmText}>{leaving ? "Transferring…" : "Transfer & Leave"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Disband modal (captain, sole member) ────────────────── */}
+      <Modal visible={!!disbandTarget} transparent animationType="fade" onRequestClose={() => setDisbandTarget(null)}>
+        <View style={styles.modalBg}>
+          <Pressable style={styles.modalDismiss} onPress={() => setDisbandTarget(null)} />
+          <View style={[styles.modalSheet, styles.confirmSheet]}>
+            <View style={styles.modalHandle} />
+            <Ionicons name="warning-outline" size={32} color="#ef4444" style={{ alignSelf: "center", marginBottom: 12 }} />
+            <Text style={styles.modalTitle}>Disband {disbandTarget?.name}?</Text>
+            <Text style={styles.modalSub}>You're the only member. Leaving will permanently delete this team and all its data. This cannot be undone.</Text>
+            <View style={styles.modalBtns}>
+              <Pressable style={styles.modalCancel} onPress={() => setDisbandTarget(null)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.leaveConfirmBtn, disbanding && { opacity: 0.5 }]} onPress={handleDisband} disabled={disbanding}>
+                <Text style={styles.leaveConfirmText}>{disbanding ? "Deleting…" : "Disband Team"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Rename team modal ───────────────────────────────────── */}
+      <Modal visible={!!renameTarget} transparent animationType="slide" onRequestClose={() => { setRenameTarget(null); setRenameText(""); }}>
+        <View style={styles.modalBg}>
+          <Pressable style={styles.modalDismiss} onPress={() => { setRenameTarget(null); setRenameText(""); }} />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Rename Team</Text>
+            <Text style={styles.modalSub}>Current name: {renameTarget?.name}</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="New team name"
+              placeholderTextColor="#333"
+              value={renameText}
+              onChangeText={setRenameText}
+              autoFocus
+              returnKeyType="done"
+              maxLength={40}
+              onSubmitEditing={handleRename}
+            />
+            <View style={styles.modalBtns}>
+              <Pressable style={styles.modalCancel} onPress={() => { setRenameTarget(null); setRenameText(""); }}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalConfirm, (!renameText.trim() || renameText.trim() === renameTarget?.name || renaming) && styles.modalConfirmOff]}
+                onPress={handleRename}
+                disabled={renaming || !renameText.trim() || renameText.trim() === renameTarget?.name}
+              >
+                <Text style={styles.modalConfirmText}>{renaming ? "Saving…" : "Save"}</Text>
               </Pressable>
             </View>
           </View>
@@ -800,4 +987,7 @@ const styles = StyleSheet.create({
   requestBtnRow: { flexDirection: "row", gap: 8, alignSelf: "center" },
   approveBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center" },
   denyBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: "#2a2a2a", alignItems: "center", justifyContent: "center" },
+
+  transferRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
+  transferRowSelected: { backgroundColor: "rgba(6,182,212,0.06)", borderRadius: 12, paddingHorizontal: 8, marginHorizontal: -8 },
 });

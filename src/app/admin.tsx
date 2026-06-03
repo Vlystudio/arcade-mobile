@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -20,7 +21,7 @@ import { supabase } from "../../lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments";
 type ReviewTab = "pending" | "approved" | "denied";
 
 type ReviewScore = {
@@ -62,15 +63,53 @@ type HealthData = {
   approvalRate: number;
 };
 
+type AdminTeam = {
+  id: string;
+  name: string;
+  captain_username: string;
+  member_count: number;
+  created_at: string;
+};
+
+type TournamentRequest = {
+  id: string;
+  user_id: string;
+  username: string;
+  title: string;
+  description: string | null;
+  game_type: string | null;
+  proposed_date: string | null;
+  max_teams: number;
+  status: "pending" | "approved" | "denied";
+  created_at: string;
+};
+
+type ManageTournament = {
+  id: string;
+  title: string;
+  game_type: string | null;
+  status: string;
+  proposed_date: string | null;
+  is_official: boolean;
+  created_at: string;
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
-  { key: "reviews", label: "Reviews", icon: "checkmark-done-outline" },
-  { key: "stats",   label: "Stats",   icon: "bar-chart-outline" },
-  { key: "health",  label: "Health",  icon: "pulse-outline" },
+  { key: "reviews",     label: "Reviews",     icon: "checkmark-done-outline" },
+  { key: "stats",       label: "Stats",       icon: "bar-chart-outline" },
+  { key: "health",      label: "Health",      icon: "pulse-outline" },
+  { key: "teams",       label: "Teams",       icon: "people-outline" },
+  { key: "tournaments", label: "Tourneys",    icon: "trophy-outline" },
 ];
 
 const REVIEW_TABS: ReviewTab[] = ["pending", "approved", "denied"];
+
+const PLACEMENT_LABELS = ["🥇 1st", "🥈 2nd", "🥉 3rd", "4th", "5th", "6th", "7th", "8th"];
+const MANAGE_STATUS_COLORS: Record<string, string> = {
+  upcoming: "#06b6d4", active: "#22c55e", completed: "#555", cancelled: "#ef4444",
+};
 
 const REVIEW_EMPTY: Record<ReviewTab, { title: string; sub: string; icon: string; color: string }> = {
   pending:  { title: "All caught up!",      sub: "No pending scores to review.", icon: "checkmark-done-circle-outline", color: "#22c55e" },
@@ -124,13 +163,48 @@ export default function AdminScreen() {
   const [healthData, setHealthData] = useState<HealthData | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
 
+  // Teams state
+  const [adminTeams, setAdminTeams] = useState<AdminTeam[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [deleteTeamTarget, setDeleteTeamTarget] = useState<AdminTeam | null>(null);
+  const [deletingTeam, setDeletingTeam] = useState(false);
+
+  // Tournaments — requests
+  const [tournRequests, setTournRequests] = useState<TournamentRequest[]>([]);
+  const [tournTab, setTournTab] = useState<"pending" | "approved" | "denied" | "manage">("pending");
+  const [tournLoading, setTournLoading] = useState(false);
+  const [actioning_tourn, setActioningTourn] = useState<string | null>(null);
+  const [denyNoteTarget, setDenyNoteTarget] = useState<TournamentRequest | null>(null);
+  const [denyNote, setDenyNote] = useState("");
+
+  // Tournaments — manage
+  const [manageTournaments, setManageTournaments] = useState<ManageTournament[]>([]);
+  const [manageLoading, setManageLoading] = useState(false);
+  const [statusActioning, setStatusActioning] = useState<string | null>(null);
+  const [firstFridayCreating, setFirstFridayCreating] = useState(false);
+  const [resultsTarget, setResultsTarget] = useState<ManageTournament | null>(null);
+  const [resultEntries, setResultEntries] = useState<{ place: number; username: string }[]>([
+    { place: 1, username: "" }, { place: 2, username: "" }, { place: 3, username: "" },
+  ]);
+  const [savingResults, setSavingResults] = useState(false);
+
   useEffect(() => { if (user) checkAdminAndLoad(); }, [user]);
   useEffect(() => { if (isAdmin) loadReviews(reviewTab); }, [reviewTab, isAdmin]);
   useEffect(() => {
     if (!isAdmin) return;
     if (mainTab === "stats" && !statsData) loadStats();
     if (mainTab === "health" && !healthData) loadHealth();
+    if (mainTab === "teams") loadAdminTeams();
+    if (mainTab === "tournaments") {
+      if (tournTab === "manage") loadManageTournaments();
+      else loadTournRequests(tournTab as "pending" | "approved" | "denied");
+    }
   }, [mainTab, isAdmin]);
+  useEffect(() => {
+    if (!isAdmin || mainTab !== "tournaments") return;
+    if (tournTab === "manage") loadManageTournaments();
+    else loadTournRequests(tournTab as "pending" | "approved" | "denied");
+  }, [tournTab]);
 
   async function checkAdminAndLoad() {
     const { data } = await supabase.from("profiles").select("is_admin").eq("id", user!.id).single();
@@ -274,6 +348,167 @@ export default function AdminScreen() {
     setHealthLoading(false);
   }
 
+  // ── Teams ──────────────────────────────────────────────────────────────────
+
+  async function loadAdminTeams() {
+    setTeamsLoading(true);
+    const [teamsRes, membersRes] = await Promise.all([
+      supabase.from("teams").select("id, name, captain_user_id, created_at").order("created_at", { ascending: false }),
+      supabase.from("team_members").select("team_id"),
+    ]);
+
+    const captainIds = [...new Set((teamsRes.data ?? []).map((t: any) => t.captain_user_id))];
+    let captainMap: Record<string, string> = {};
+    if (captainIds.length > 0) {
+      const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", captainIds);
+      for (const p of profiles ?? []) captainMap[(p as any).id] = (p as any).username;
+    }
+
+    const memberCountMap: Record<string, number> = {};
+    for (const m of membersRes.data ?? []) memberCountMap[(m as any).team_id] = (memberCountMap[(m as any).team_id] ?? 0) + 1;
+
+    setAdminTeams((teamsRes.data ?? []).map((t: any) => ({
+      id: t.id, name: t.name,
+      captain_username: captainMap[t.captain_user_id] ?? "Unknown",
+      member_count: memberCountMap[t.id] ?? 0,
+      created_at: t.created_at,
+    })));
+    setTeamsLoading(false);
+  }
+
+  async function handleDeleteTeam() {
+    if (!deleteTeamTarget) return;
+    setDeletingTeam(true);
+    const id = deleteTeamTarget.id;
+    await supabase.from("team_members").delete().eq("team_id", id);
+    await supabase.from("team_requests").delete().eq("team_id", id);
+    await supabase.from("teams").delete().eq("id", id);
+    setDeletingTeam(false);
+    setDeleteTeamTarget(null);
+    setAdminTeams((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  // ── Tournaments ────────────────────────────────────────────────────────────
+
+  async function loadTournRequests(status: "pending" | "approved" | "denied") {
+    setTournLoading(true);
+    const { data } = await supabase
+      .from("tournament_requests")
+      .select("id, user_id, title, description, game_type, proposed_date, max_teams, status, created_at")
+      .eq("status", status)
+      .order("created_at", { ascending: status === "pending" });
+
+    const userIds = [...new Set((data ?? []).map((r: any) => r.user_id))] as string[];
+    let usernameMap: Record<string, string> = {};
+    if (userIds.length) {
+      const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", userIds);
+      for (const p of (profiles ?? [])) usernameMap[(p as any).id] = (p as any).username;
+    }
+
+    setTournRequests((data ?? []).map((r: any) => ({
+      id: r.id, user_id: r.user_id,
+      username: usernameMap[r.user_id] ?? "Unknown",
+      title: r.title, description: r.description,
+      game_type: r.game_type, proposed_date: r.proposed_date,
+      max_teams: r.max_teams ?? 8, status: r.status, created_at: r.created_at,
+    })));
+    setTournLoading(false);
+  }
+
+  async function handleApproveTournament(req: TournamentRequest) {
+    setActioningTourn(req.id);
+    await supabase.from("tournament_requests").update({ status: "approved" }).eq("id", req.id);
+    await supabase.from("tournaments").insert({
+      title: req.title, description: req.description,
+      game_type: req.game_type, proposed_date: req.proposed_date,
+      max_teams: req.max_teams, is_official: false,
+      status: "upcoming", created_by: req.user_id,
+    });
+    setTournRequests((prev) => prev.filter((r) => r.id !== req.id));
+    setActioningTourn(null);
+  }
+
+  async function handleDenyTournament() {
+    if (!denyNoteTarget) return;
+    setActioningTourn(denyNoteTarget.id);
+    await supabase.from("tournament_requests")
+      .update({ status: "denied", admin_note: denyNote.trim() || null })
+      .eq("id", denyNoteTarget.id);
+    setTournRequests((prev) => prev.filter((r) => r.id !== denyNoteTarget.id));
+    setActioningTourn(null);
+    setDenyNoteTarget(null);
+    setDenyNote("");
+  }
+
+  // ── Tournament management ──────────────────────────────────────────────────
+
+  async function loadManageTournaments() {
+    setManageLoading(true);
+    const { data } = await supabase
+      .from("tournaments")
+      .select("id, title, game_type, status, proposed_date, is_official, created_at")
+      .order("created_at", { ascending: false });
+    setManageTournaments(data ?? []);
+    setManageLoading(false);
+  }
+
+  async function handleMarkStatus(id: string, newStatus: string) {
+    setStatusActioning(id);
+    await supabase.from("tournaments").update({ status: newStatus }).eq("id", id);
+    setManageTournaments((prev) => prev.map((t) => t.id === id ? { ...t, status: newStatus } : t));
+    setStatusActioning(null);
+  }
+
+  function getNextFirstFriday(): Date {
+    const now = new Date();
+    const ff = (y: number, m: number) => {
+      const d = new Date(y, m, 1);
+      return new Date(y, m, 1 + ((5 - d.getDay() + 7) % 7));
+    };
+    const thisMonth = ff(now.getFullYear(), now.getMonth());
+    return thisMonth > now ? thisMonth : ff(now.getFullYear(), now.getMonth() + 1);
+  }
+
+  async function handleCreateFirstFriday() {
+    if (!user) return;
+    setFirstFridayCreating(true);
+    const date = getNextFirstFriday();
+    const label = date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    await supabase.from("tournaments").insert({
+      title: `First Friday Skee-Ball — ${label}`,
+      game_type: "Skee-Ball",
+      proposed_date: date.toISOString(),
+      is_official: true,
+      is_individual: true,
+      signup_type: "in_person",
+      status: "upcoming",
+      created_by: user.id,
+    });
+    setFirstFridayCreating(false);
+    await loadManageTournaments();
+  }
+
+  async function handleSaveResults() {
+    if (!resultsTarget || !user) return;
+    setSavingResults(true);
+    const valid = resultEntries.filter((e) => e.username.trim() && e.place > 0);
+    for (const entry of valid) {
+      const { data: profile } = await supabase.from("profiles")
+        .select("id").ilike("username", entry.username.trim()).maybeSingle();
+      if (!(profile as any)?.id) continue;
+      await supabase.from("tournament_placements").upsert({
+        tournament_id: resultsTarget.id,
+        user_id: (profile as any).id,
+        placement: entry.place,
+      }, { onConflict: "tournament_id,user_id" });
+    }
+    await supabase.from("tournaments").update({ status: "completed" }).eq("id", resultsTarget.id);
+    setManageTournaments((prev) => prev.map((t) => t.id === resultsTarget.id ? { ...t, status: "completed" } : t));
+    setSavingResults(false);
+    setResultsTarget(null);
+    setResultEntries([{ place: 1, username: "" }, { place: 2, username: "" }, { place: 3, username: "" }]);
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (authLoading || checking) {
@@ -292,7 +527,11 @@ export default function AdminScreen() {
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Admin Panel</Text>
           <Text style={styles.headerSub}>
-            {mainTab === "reviews" ? "Score review queue" : mainTab === "stats" ? "Submission metrics" : "Business health"}
+            {mainTab === "reviews" ? "Score review queue"
+              : mainTab === "stats" ? "Submission metrics"
+              : mainTab === "teams" ? "Manage all teams"
+              : mainTab === "tournaments" ? "Tournament requests"
+              : "Business health"}
           </Text>
         </View>
         {mainTab === "reviews" && reviewTab === "pending" && scores.length > 0 && (
@@ -393,6 +632,336 @@ export default function AdminScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* ── Teams ── */}
+      {mainTab === "teams" && (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={loadAdminTeams} tintColor="#06b6d4" />}
+        >
+          {teamsLoading ? (
+            <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
+          ) : adminTeams.length === 0 ? (
+            <EmptyState title="No teams yet" sub="Teams created by users will appear here." icon="people-outline" color="#06b6d4" />
+          ) : (
+            <>
+              <View style={styles.teamsCountRow}>
+                <Text style={styles.teamsCountText}>{adminTeams.length} {adminTeams.length === 1 ? "team" : "teams"}</Text>
+              </View>
+              {adminTeams.map((team) => (
+                <View key={team.id} style={styles.adminTeamCard}>
+                  <View style={styles.adminTeamAvatar}>
+                    <Text style={styles.adminTeamAvatarText}>{team.name.slice(0, 2).toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.adminTeamName}>{team.name}</Text>
+                    <Text style={styles.adminTeamMeta}>
+                      Captain: {team.captain_username} · {team.member_count} {team.member_count === 1 ? "member" : "members"}
+                    </Text>
+                    <Text style={styles.adminTeamDate}>Created {relTime(team.created_at)}</Text>
+                  </View>
+                  <Pressable style={styles.deleteTeamBtn} onPress={() => setDeleteTeamTarget(team)}>
+                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                  </Pressable>
+                </View>
+              ))}
+            </>
+          )}
+        </ScrollView>
+      )}
+
+      {/* ── Tournaments ── */}
+      {mainTab === "tournaments" && (
+        <>
+          <View style={styles.subTabBar}>
+            {(["pending", "approved", "denied", "manage"] as const).map((tab) => (
+              <Pressable
+                key={tab}
+                style={[styles.subTabItem, tournTab === tab && styles.subTabItemActive]}
+                onPress={() => setTournTab(tab)}
+              >
+                <Text style={[styles.subTabLabel, tournTab === tab && styles.subTabLabelActive]}>
+                  {tab === "manage" ? "Manage" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* Manage tab */}
+          {tournTab === "manage" && (
+            <>
+              <View style={styles.manageHeader}>
+                <Text style={styles.manageHeaderTitle}>All Tournaments</Text>
+                <Pressable
+                  style={[styles.firstFridayBtn, firstFridayCreating && { opacity: 0.5 }]}
+                  onPress={handleCreateFirstFriday}
+                  disabled={firstFridayCreating}
+                >
+                  {firstFridayCreating
+                    ? <ActivityIndicator size="small" color="#000" />
+                    : <><Ionicons name="add" size={14} color="#000" /><Text style={styles.firstFridayBtnText}>First Friday</Text></>}
+                </Pressable>
+              </View>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.content}
+                refreshControl={<RefreshControl refreshing={false} onRefresh={loadManageTournaments} tintColor="#f59e0b" />}
+              >
+                {manageLoading ? (
+                  <ActivityIndicator color="#f59e0b" style={{ marginTop: 60 }} />
+                ) : manageTournaments.length === 0 ? (
+                  <EmptyState title="No tournaments" sub="Approved requests appear here." icon="trophy-outline" color="#f59e0b" />
+                ) : (
+                  manageTournaments.map((t) => {
+                    const sc = MANAGE_STATUS_COLORS[t.status] ?? "#555";
+                    const acting = statusActioning === t.id;
+                    return (
+                      <View key={t.id} style={styles.manageTournCard}>
+                        <View style={{ flex: 1 }}>
+                          <View style={styles.manageTournTopRow}>
+                            <Text style={styles.manageTournTitle} numberOfLines={1}>{t.title}</Text>
+                            <View style={[styles.manageTournStatus, { backgroundColor: sc + "18", borderColor: sc + "35" }]}>
+                              <Text style={[styles.manageTournStatusText, { color: sc }]}>
+                                {t.status.charAt(0).toUpperCase() + t.status.slice(1)}
+                              </Text>
+                            </View>
+                          </View>
+                          {t.proposed_date && (
+                            <Text style={styles.manageTournDate}>
+                              {new Date(t.proposed_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                              {t.game_type ? ` · ${t.game_type}` : ""}
+                            </Text>
+                          )}
+                        </View>
+                        <View style={styles.manageTournActions}>
+                          {t.status === "upcoming" && (
+                            <Pressable style={[styles.manageTournBtn, acting && { opacity: 0.5 }]} onPress={() => handleMarkStatus(t.id, "active")} disabled={acting}>
+                              <Text style={styles.manageTournBtnText}>Activate</Text>
+                            </Pressable>
+                          )}
+                          {(t.status === "upcoming" || t.status === "active") && (
+                            <Pressable
+                              style={[styles.manageTournResultsBtn, acting && { opacity: 0.5 }]}
+                              onPress={() => {
+                                setResultsTarget(t);
+                                setResultEntries([{ place: 1, username: "" }, { place: 2, username: "" }, { place: 3, username: "" }]);
+                              }}
+                              disabled={acting}
+                            >
+                              <Ionicons name="trophy" size={13} color="#f59e0b" />
+                              <Text style={styles.manageTournResultsText}>Results</Text>
+                            </Pressable>
+                          )}
+                          {t.status === "completed" && (
+                            <View style={styles.manageTournCompletedTag}>
+                              <Text style={styles.manageTournCompletedText}>Done</Text>
+                            </View>
+                          )}
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+              </ScrollView>
+            </>
+          )}
+
+          {/* Requests tabs (pending / approved / denied) */}
+          {tournTab !== "manage" && (
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.content}
+            refreshControl={<RefreshControl refreshing={false} onRefresh={() => loadTournRequests(tournTab as "pending" | "approved" | "denied")} tintColor="#f59e0b" />}
+          >
+            {tournLoading ? (
+              <ActivityIndicator color="#f59e0b" style={{ marginTop: 60 }} />
+            ) : tournRequests.length === 0 ? (
+              <EmptyState
+                title={tournTab === "pending" ? "No pending requests" : tournTab === "approved" ? "No approved requests" : "No denied requests"}
+                sub={tournTab === "pending" ? "Community tournament requests will appear here." : "Handled requests appear here."}
+                icon="trophy-outline"
+                color="#f59e0b"
+              />
+            ) : (
+              <>
+                <View style={styles.teamsCountRow}>
+                  <Text style={styles.teamsCountText}>{tournRequests.length} {tournRequests.length === 1 ? "request" : "requests"}</Text>
+                </View>
+                {tournRequests.map((req) => (
+                  <View key={req.id} style={styles.tournCard}>
+                    <View style={styles.tournCardTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.tournTitle}>{req.title}</Text>
+                        <Text style={styles.tournMeta}>
+                          By {req.username} · {relTime(req.created_at)}
+                        </Text>
+                      </View>
+                      {req.game_type && (
+                        <View style={styles.tournGameChip}>
+                          <Text style={styles.tournGameChipText}>{req.game_type}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {req.description ? (
+                      <Text style={styles.tournDesc}>{req.description}</Text>
+                    ) : null}
+                    <View style={styles.tournMeta2Row}>
+                      {req.proposed_date && (
+                        <View style={styles.tournMetaChip}>
+                          <Ionicons name="calendar-outline" size={12} color="#888" />
+                          <Text style={styles.tournMetaChipText}>
+                            {new Date(req.proposed_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.tournMetaChip}>
+                        <Ionicons name="people-outline" size={12} color="#888" />
+                        <Text style={styles.tournMetaChipText}>Max {req.max_teams} teams</Text>
+                      </View>
+                    </View>
+                    {tournTab === "pending" && (
+                      <View style={styles.tournActions}>
+                        <Pressable
+                          style={[styles.tournDenyBtn, actioning_tourn === req.id && { opacity: 0.5 }]}
+                          onPress={() => { setDenyNoteTarget(req); setDenyNote(""); }}
+                          disabled={actioning_tourn === req.id}
+                        >
+                          <Ionicons name="close" size={16} color="#ef4444" />
+                          <Text style={styles.tournDenyBtnText}>Deny</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[styles.tournApproveBtn, actioning_tourn === req.id && { opacity: 0.5 }]}
+                          onPress={() => handleApproveTournament(req)}
+                          disabled={actioning_tourn === req.id}
+                        >
+                          {actioning_tourn === req.id
+                            ? <ActivityIndicator size="small" color="#000" />
+                            : <><Ionicons name="checkmark" size={16} color="#000" /><Text style={styles.tournApproveBtnText}>Approve</Text></>}
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </>
+            )}
+          </ScrollView>
+          )}
+        </>
+      )}
+
+      {/* Post results modal */}
+      <Modal visible={!!resultsTarget} transparent animationType="slide" onRequestClose={() => setResultsTarget(null)}>
+        <View style={styles.modalBg}>
+          <Pressable style={styles.modalDismiss} onPress={() => setResultsTarget(null)} />
+          <View style={styles.resultsSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.resultsTitle}>Post Results</Text>
+            <Text style={styles.resultsSub} numberOfLines={1}>{resultsTarget?.title}</Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {resultEntries.map((entry, i) => (
+                <View key={i} style={styles.resultRow}>
+                  <Text style={styles.resultPlaceLabel}>{PLACEMENT_LABELS[i] ?? `#${i + 1}`}</Text>
+                  <TextInput
+                    style={styles.resultInput}
+                    placeholder="username"
+                    placeholderTextColor="#333"
+                    value={entry.username}
+                    onChangeText={(v) => setResultEntries((prev) => prev.map((e, j) => j === i ? { ...e, username: v } : e))}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                </View>
+              ))}
+              <Pressable
+                style={styles.addPlaceBtn}
+                onPress={() => setResultEntries((prev) => [...prev, { place: prev.length + 1, username: "" }])}
+              >
+                <Ionicons name="add" size={14} color="#06b6d4" />
+                <Text style={styles.addPlaceBtnText}>Add another place</Text>
+              </Pressable>
+              <View style={styles.resultsBtns}>
+                <Pressable style={styles.confirmCancel} onPress={() => setResultsTarget(null)}>
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.resultsSubmitBtn, savingResults && { opacity: 0.5 }]}
+                  onPress={handleSaveResults}
+                  disabled={savingResults}
+                >
+                  {savingResults
+                    ? <ActivityIndicator size="small" color="#000" />
+                    : <Text style={styles.resultsSubmitText}>Save & Complete</Text>}
+                </Pressable>
+              </View>
+              <View style={{ height: 16 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Deny tournament modal */}
+      <Modal visible={!!denyNoteTarget} transparent animationType="fade" onRequestClose={() => setDenyNoteTarget(null)}>
+        <View style={styles.confirmBg}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setDenyNoteTarget(null)} />
+          <View style={styles.confirmSheet}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.25)" }]}>
+              <Ionicons name="close-circle-outline" size={36} color="#ef4444" />
+            </View>
+            <Text style={styles.confirmTitle}>Deny Request?</Text>
+            <Text style={styles.confirmBody}>"{denyNoteTarget?.title}"</Text>
+            <TextInput
+              style={[styles.confirmInput, { marginBottom: 20 }]}
+              placeholder="Optional note to requester..."
+              placeholderTextColor="#333"
+              value={denyNote}
+              onChangeText={setDenyNote}
+              maxLength={200}
+              multiline
+            />
+            <View style={styles.confirmBtns}>
+              <Pressable style={styles.confirmCancel} onPress={() => setDenyNoteTarget(null)}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmActionBtn, { backgroundColor: "#ef4444" }, !!actioning_tourn && { opacity: 0.5 }]}
+                onPress={handleDenyTournament}
+                disabled={!!actioning_tourn}
+              >
+                {actioning_tourn
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={[styles.confirmActionText, { color: "#fff" }]}>Deny</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete team confirm modal */}
+      <Modal visible={!!deleteTeamTarget} transparent animationType="fade" onRequestClose={() => setDeleteTeamTarget(null)}>
+        <View style={styles.confirmBg}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setDeleteTeamTarget(null)} />
+          <View style={styles.confirmSheet}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.25)" }]}>
+              <Ionicons name="people" size={36} color="#ef4444" />
+            </View>
+            <Text style={styles.confirmTitle}>Delete "{deleteTeamTarget?.name}"?</Text>
+            <Text style={styles.confirmBody}>
+              This will permanently remove the team, all {deleteTeamTarget?.member_count} {deleteTeamTarget?.member_count === 1 ? "member" : "members"}, and all join requests. This cannot be undone.
+            </Text>
+            <View style={styles.confirmBtns}>
+              <Pressable style={styles.confirmCancel} onPress={() => setDeleteTeamTarget(null)}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.confirmActionBtn, { backgroundColor: "#ef4444" }, deletingTeam && { opacity: 0.5 }]} onPress={handleDeleteTeam} disabled={deletingTeam}>
+                {deletingTeam
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={[styles.confirmActionText, { color: "#fff" }]}>Delete Team</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Confirm modal */}
       <Modal visible={!!confirmAction} transparent animationType="fade" onRequestClose={() => setConfirmAction(null)}>
@@ -793,6 +1362,92 @@ const styles = StyleSheet.create({
   confirmCancelText:  { color: "#888", fontWeight: "700" },
   confirmActionBtn:   { flex: 1, borderRadius: 14, padding: 15, alignItems: "center" },
   confirmActionText:  { fontWeight: "900" },
+
+  // Admin teams list
+  teamsCountRow:       { marginBottom: 12 },
+  teamsCountText:      { color: "#444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1 },
+  adminTeamCard:       { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "#1e1e1e" },
+  adminTeamAvatar:     { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.15)" },
+  adminTeamAvatarText: { color: "#06b6d4", fontSize: 13, fontWeight: "900" },
+  adminTeamName:       { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 3 },
+  adminTeamMeta:       { color: "#555", fontSize: 12 },
+  adminTeamDate:       { color: "#333", fontSize: 11, marginTop: 2 },
+  deleteTeamBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(239,68,68,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(239,68,68,0.2)" },
+
+  // Tournament request cards
+  tournCard: {
+    backgroundColor: "#111", borderRadius: 18,
+    borderWidth: 1, borderColor: "#1e1e1e",
+    padding: 16, marginBottom: 10,
+  },
+  tournCardTop:       { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 8 },
+  tournTitle:         { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 2 },
+  tournMeta:          { color: "#555", fontSize: 12 },
+  tournDesc:          { color: "#666", fontSize: 13, lineHeight: 18, marginBottom: 10 },
+  tournGameChip: {
+    paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
+    backgroundColor: "rgba(245,158,11,0.12)", borderWidth: 1, borderColor: "rgba(245,158,11,0.25)",
+  },
+  tournGameChipText:  { color: "#f59e0b", fontSize: 11, fontWeight: "700" },
+  tournMeta2Row:      { flexDirection: "row", gap: 8, marginBottom: 12 },
+  tournMetaChip: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12,
+    backgroundColor: "#1a1a1a",
+  },
+  tournMetaChipText:  { color: "#888", fontSize: 11 },
+  tournActions:       { flexDirection: "row", gap: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", paddingTop: 12 },
+  tournDenyBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingVertical: 11, borderRadius: 14,
+    backgroundColor: "rgba(239,68,68,0.08)", borderWidth: 1, borderColor: "rgba(239,68,68,0.2)",
+  },
+  tournDenyBtnText:    { color: "#ef4444", fontWeight: "800", fontSize: 14 },
+  tournApproveBtn: {
+    flex: 1.5, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingVertical: 11, borderRadius: 14, backgroundColor: "#22c55e",
+  },
+  tournApproveBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
+  confirmInput: {
+    backgroundColor: "#0a0a0a", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12,
+    color: "#fff", fontSize: 14, borderWidth: 1, borderColor: "#222", width: "100%",
+    minHeight: 60, textAlignVertical: "top",
+  },
+
+  // Manage tournaments
+  manageHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
+  manageHeaderTitle: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  firstFridayBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#06b6d4", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
+  firstFridayBtnText: { color: "#000", fontWeight: "800", fontSize: 12 },
+  manageTournCard: { backgroundColor: "#111", borderRadius: 16, borderWidth: 1, borderColor: "#1e1e1e", padding: 14, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10 },
+  manageTournTopRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4, flexShrink: 1 },
+  manageTournTitle: { color: "#fff", fontSize: 14, fontWeight: "800", flex: 1 },
+  manageTournStatus: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1 },
+  manageTournStatusText: { fontSize: 10, fontWeight: "800" },
+  manageTournDate: { color: "#555", fontSize: 12 },
+  manageTournActions: { flexDirection: "row", gap: 6, alignItems: "center" },
+  manageTournBtn: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10, backgroundColor: "rgba(6,182,212,0.1)", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
+  manageTournBtnText: { color: "#06b6d4", fontSize: 12, fontWeight: "700" },
+  manageTournResultsBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10, backgroundColor: "rgba(245,158,11,0.1)", borderWidth: 1, borderColor: "rgba(245,158,11,0.2)" },
+  manageTournResultsText: { color: "#f59e0b", fontSize: 12, fontWeight: "700" },
+  manageTournCompletedTag: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, backgroundColor: "#1a1a1a" },
+  manageTournCompletedText: { color: "#444", fontSize: 11, fontWeight: "700" },
+
+  // Results modal
+  modalBg:     { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
+  modalDismiss:{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  modalHandle: { width: 36, height: 4, backgroundColor: "#2a2a2a", borderRadius: 2, alignSelf: "center", marginBottom: 16 },
+  resultsSheet: { backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 0, borderTopWidth: 1, borderColor: "#1e1e1e", maxHeight: "85%" },
+  resultsTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
+  resultsSub:   { color: "#555", fontSize: 13, marginBottom: 20 },
+  resultRow:    { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  resultPlaceLabel: { color: "#888", fontSize: 15, fontWeight: "700", minWidth: 52 },
+  resultInput:  { flex: 1, backgroundColor: "#0a0a0a", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: "#fff", fontSize: 14, borderWidth: 1, borderColor: "#222" },
+  addPlaceBtn:  { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 10, marginBottom: 16 },
+  addPlaceBtnText: { color: "#06b6d4", fontSize: 13, fontWeight: "700" },
+  resultsBtns:  { flexDirection: "row", gap: 10, marginBottom: 8 },
+  resultsSubmitBtn: { flex: 1, backgroundColor: "#f59e0b", borderRadius: 14, padding: 15, alignItems: "center" },
+  resultsSubmitText: { color: "#000", fontWeight: "900" },
 
   // Photo modal
   photoModalBg:     { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", justifyContent: "center", padding: 20 },

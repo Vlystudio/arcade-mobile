@@ -44,6 +44,8 @@ export default function RootLayout() {
           <Stack.Screen name="demo" options={{ headerShown: false }} />
           <Stack.Screen name="food" options={{ headerShown: false }} />
           <Stack.Screen name="food-cart" options={{ headerShown: false }} />
+          <Stack.Screen name="tournaments" options={{ headerShown: false }} />
+          <Stack.Screen name="trivia" options={{ headerShown: false }} />
           <Stack.Screen name="pool" options={{ headerShown: false }} />
           <Stack.Screen name="lane-scores" options={{ headerShown: false }} />
         </Stack>
