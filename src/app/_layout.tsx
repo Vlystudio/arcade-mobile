@@ -3,12 +3,14 @@ import { Stack } from "expo-router";
 import React from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { AdminProvider } from "../context/admin-context";
+import { AuthProvider } from "../context/auth-context";
 import { CartProvider } from "../context/cart-context";
 import { LocationProvider } from "../context/location-context";
 
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
+      <AuthProvider>
       <AdminProvider>
       <LocationProvider>
       <CartProvider>
@@ -56,6 +58,7 @@ export default function RootLayout() {
       </CartProvider>
       </LocationProvider>
       </AdminProvider>
+      </AuthProvider>
     </SafeAreaProvider>
   );
 }

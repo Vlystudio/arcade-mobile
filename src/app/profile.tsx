@@ -201,14 +201,12 @@ export default function ProfileScreen() {
     setSavingUsername(false);
   }
 
-  async function handleLogout() {
+  function handleLogout() {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
       { text: "Cancel", style: "cancel" },
       {
-        text: "Log Out", style: "destructive", onPress: async () => {
-          const { error } = await supabase.auth.signOut();
-          if (error) Alert.alert("Error", error.message);
-          else router.replace("/login");
+        text: "Log Out", style: "destructive", onPress: () => {
+          supabase.auth.signOut();
         },
       },
     ]);
