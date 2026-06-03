@@ -318,20 +318,38 @@ export default function TeamsScreen() {
   async function loadRequests(team: Team) {
     setRequestsTeam(team);
     setRequestsLoading(true);
-    const { data } = await supabase
+
+    const { data: reqData } = await supabase
       .from("team_requests")
-      .select("id, user_id, direction, status, created_at, message, profiles(username)")
+      .select("id, user_id, direction, status, created_at, message")
       .eq("team_id", team.id)
       .eq("status", "pending");
-    const mapped: JoinRequest[] = (data ?? []).map((r: any) => ({
+
+    if (!reqData || reqData.length === 0) {
+      setRequests([]);
+      setRequestsLoading(false);
+      return;
+    }
+
+    const userIds = reqData.map((r: any) => r.user_id);
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("id, username")
+      .in("id", userIds);
+
+    const profileMap: Record<string, string> = {};
+    for (const p of profileData ?? []) {
+      profileMap[p.id] = p.username ?? "Unknown";
+    }
+
+    setRequests(reqData.map((r: any) => ({
       id: r.id,
       user_id: r.user_id,
-      username: Array.isArray(r.profiles) ? r.profiles[0]?.username : r.profiles?.username ?? "Unknown",
+      username: profileMap[r.user_id] ?? "Unknown",
       direction: r.direction,
       created_at: r.created_at,
       message: r.message ?? null,
-    }));
-    setRequests(mapped);
+    })));
     setRequestsLoading(false);
   }
 
