@@ -51,7 +51,7 @@ export default function ChatScreen() {
       .from("conversations")
       .select("id, participant_1, participant_2, last_message, last_message_at, p1:profiles!participant_1(username, avatar_url), p2:profiles!participant_2(username, avatar_url)")
       .or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`)
-      .order("last_message_at", { ascending: false });
+      .order("last_message_at", { ascending: false, nullsFirst: false });
 
     const mapped: Conversation[] = (data ?? []).map((c: any) => {
       const isP1 = c.participant_1 === user.id;
