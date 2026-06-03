@@ -68,14 +68,9 @@ export default function SignupScreen() {
 
     setLoading(true);
 
-    // Check if username is already taken
-    const { data: existing } = await supabase
-      .from("profiles")
-      .select("id")
-      .ilike("username", uname)
-      .maybeSingle();
-
-    if (existing) {
+    // Check if username is already taken (via SECURITY DEFINER RPC to bypass RLS)
+    const { data: available } = await supabase.rpc("check_username_available", { p_username: uname });
+    if (available === false) {
       setSuggestions(generateSuggestions(uname));
       setShowSuggestions(true);
       setLoading(false);
@@ -98,11 +93,18 @@ export default function SignupScreen() {
     }
 
     if (data.user) {
-      await supabase.from("profiles").upsert({
+      const { error: profileError } = await supabase.from("profiles").upsert({
         id: data.user.id,
         username: uname,
         email: email.trim(),
       });
+      if (profileError?.code === "23505") {
+        // Username was taken between check and insert (race condition)
+        setLoading(false);
+        setSuggestions(generateSuggestions(uname));
+        setShowSuggestions(true);
+        return;
+      }
     }
 
     setLoading(false);
