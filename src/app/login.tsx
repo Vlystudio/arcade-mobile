@@ -23,19 +23,32 @@ export default function LoginScreen() {
 
   async function handleLogin() {
     setError(null);
-    if (!email.trim() || !password) {
-      setError("Please enter your email and password.");
+    const identifier = email.trim();
+    if (!identifier || !password) {
+      setError("Please enter your email or username and password.");
       return;
     }
     setLoading(true);
+
+    // Resolve username → email if no @ present
+    let loginEmail = identifier;
+    if (!identifier.includes("@")) {
+      const { data: resolved } = await supabase.rpc("get_email_by_username", { p_username: identifier });
+      if (!resolved) {
+        setError("No account found with that username.");
+        setLoading(false);
+        return;
+      }
+      loginEmail = resolved;
+    }
+
     const { error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
+      email: loginEmail,
       password,
     });
     setLoading(false);
     if (authError) {
-      console.error("[login]", authError.message);
-      setError(authError.message);
+      setError("Incorrect email, username, or password.");
       return;
     }
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
@@ -65,14 +78,14 @@ export default function LoginScreen() {
             <Text style={styles.formTitle}>Welcome back</Text>
 
             <View style={styles.inputWrap}>
-              <Ionicons name="mail-outline" size={18} color="#444" style={styles.inputIcon} />
+              <Ionicons name="person-outline" size={18} color="#444" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Email address"
+                placeholder="Email or username"
                 placeholderTextColor="#333"
                 autoCapitalize="none"
-                keyboardType="email-address"
-                autoComplete="email"
+                keyboardType="default"
+                autoComplete="username"
                 returnKeyType="next"
                 value={email}
                 onChangeText={setEmail}

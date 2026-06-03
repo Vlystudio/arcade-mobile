@@ -68,11 +68,19 @@ export default function SignupScreen() {
 
     setLoading(true);
 
-    // Check if username is already taken (via SECURITY DEFINER RPC to bypass RLS)
-    const { data: available } = await supabase.rpc("check_username_available", { p_username: uname });
-    if (available === false) {
+    // Check username availability (SECURITY DEFINER bypasses RLS)
+    const { data: usernameAvailable } = await supabase.rpc("check_username_available", { p_username: uname });
+    if (usernameAvailable === false) {
       setSuggestions(generateSuggestions(uname));
       setShowSuggestions(true);
+      setLoading(false);
+      return;
+    }
+
+    // Check email availability
+    const { data: emailAvailable } = await supabase.rpc("check_email_available", { p_email: email.trim() });
+    if (emailAvailable === false) {
+      setError("An account with this email already exists. Try signing in instead.");
       setLoading(false);
       return;
     }
