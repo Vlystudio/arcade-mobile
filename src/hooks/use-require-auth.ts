@@ -7,7 +7,7 @@ export function useRequireAuth() {
 
   useEffect(() => {
     if (!loading && !user) {
-      router.replace("/login");
+      router.replace("/auth" as any);
     }
   }, [user, loading]);
 

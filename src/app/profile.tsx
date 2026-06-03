@@ -62,6 +62,11 @@ export default function ProfileScreen() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarPickerVisible, setAvatarPickerVisible] = useState(false);
 
+  // MFA
+  const [mfaEnabled, setMfaEnabled]   = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [disablingMfa, setDisablingMfa] = useState(false);
+
   async function loadProfile() {
     if (!user) return;
     const [profileRes, scoresRes, pendingRes, teamRes, placementsRes] = await Promise.all([
@@ -201,18 +206,41 @@ export default function ProfileScreen() {
     setSavingUsername(false);
   }
 
-  function handleLogout() {
-    Alert.alert("Log Out", "Are you sure you want to log out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Log Out", style: "destructive", onPress: () => {
-          supabase.auth.signOut();
-        },
-      },
-    ]);
+  async function loadMfaStatus() {
+    const { data } = await supabase.auth.mfa.listFactors();
+    const verified = data?.totp?.find((f: any) => f.status === "verified");
+    setMfaEnabled(!!verified);
+    setMfaFactorId(verified?.id ?? null);
   }
 
-  useEffect(() => { if (user) loadProfile(); }, [user]);
+  async function handleDisableMfa() {
+    if (!mfaFactorId) return;
+    Alert.alert(
+      "Disable 2FA",
+      "Are you sure you want to remove two-factor authentication from your account?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Disable", style: "destructive",
+          onPress: async () => {
+            setDisablingMfa(true);
+            const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId });
+            setDisablingMfa(false);
+            if (error) { Alert.alert("Error", error.message); return; }
+            setMfaEnabled(false);
+            setMfaFactorId(null);
+          },
+        },
+      ]
+    );
+  }
+
+  function handleLogout() {
+    supabase.auth.signOut().catch(() => {});
+    router.replace("/login");
+  }
+
+  useEffect(() => { if (user) { loadProfile(); loadMfaStatus(); } }, [user]);
 
   if (authLoading || loading) {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
@@ -381,6 +409,34 @@ export default function ProfileScreen() {
                 badge={pendingCount > 0 ? pendingCount : undefined}
               />
             )}
+          </View>
+
+          {/* Security */}
+          <Text style={[styles.sectionLabel, { marginTop: 8 }]}>Security</Text>
+          <View style={[styles.actionsCard, { marginBottom: 16 }]}>
+            <Pressable
+              style={({ pressed }) => [styles.actionRow, pressed && { opacity: 0.7 }]}
+              onPress={mfaEnabled ? handleDisableMfa : () => router.push("/mfa-setup" as any)}
+              disabled={disablingMfa}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: mfaEnabled ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)" }]}>
+                <Ionicons
+                  name={mfaEnabled ? "shield-checkmark-outline" : "shield-outline"}
+                  size={18}
+                  color={mfaEnabled ? "#22c55e" : "#ef4444"}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.actionLabel}>Two-Factor Authentication</Text>
+                <Text style={{ color: mfaEnabled ? "#22c55e" : "#555", fontSize: 11, marginTop: 1 }}>
+                  {mfaEnabled ? "Enabled" : "Not enabled"}
+                </Text>
+              </View>
+              {disablingMfa
+                ? <ActivityIndicator size="small" color="#555" />
+                : <Ionicons name="chevron-forward" size={16} color="#333" />
+              }
+            </Pressable>
           </View>
 
           {/* Legal */}

@@ -37,6 +37,7 @@ Create a `.env` file in the project root (never commit this):
 ```env
 EXPO_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+EXPO_PUBLIC_SITE_URL=https://your-live-site.example.com
 ```
 The anon key is safe to ship in a mobile app — it can only do what your RLS policies allow.
 
@@ -170,6 +171,7 @@ eas submit --platform android
 |----------|-------------|
 | `EXPO_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (public, safe to expose) |
+| `EXPO_PUBLIC_SITE_URL` | Public web origin used as an auth email redirect fallback |
 
 ---
 

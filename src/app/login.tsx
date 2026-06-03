@@ -38,7 +38,12 @@ export default function LoginScreen() {
       setError(authError.message);
       return;
     }
-    router.replace("/");
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal?.nextLevel === "aal2" && aal.nextLevel !== aal.currentLevel) {
+      router.replace("/mfa-verify" as any);
+    } else {
+      router.replace("/");
+    }
   }
 
   return (
@@ -122,6 +127,11 @@ export default function LoginScreen() {
             <Ionicons name="eye-outline" size={15} color="#555" />
             <Text style={styles.demoBtnText}>Preview app without an account</Text>
           </Pressable>
+
+          <Pressable style={styles.backBtn} onPress={() => router.replace("/auth" as any)}>
+            <Ionicons name="arrow-back-outline" size={14} color="#333" />
+            <Text style={styles.backBtnText}>Back</Text>
+          </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -180,4 +190,10 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(239,68,68,0.2)",
   },
   errorText: { color: "#ef4444", fontSize: 13, flex: 1 },
+
+  backBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 5, marginTop: 12, paddingVertical: 8,
+  },
+  backBtnText: { color: "#333", fontSize: 13 },
 });

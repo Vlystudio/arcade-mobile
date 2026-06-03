@@ -23,6 +23,7 @@ export default function RootLayout() {
             headerShadowVisible: false,
           }}
         >
+          <Stack.Screen name="auth" options={{ headerShown: false }} />
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="signup" options={{ headerShown: false }} />
@@ -53,6 +54,8 @@ export default function RootLayout() {
           <Stack.Screen name="privacy" options={{ headerShown: false }} />
           <Stack.Screen name="terms" options={{ headerShown: false }} />
           <Stack.Screen name="delete-account" options={{ headerShown: false }} />
+          <Stack.Screen name="mfa-setup" options={{ headerShown: false }} />
+          <Stack.Screen name="mfa-verify" options={{ headerShown: false }} />
         </Stack>
       </ThemeProvider>
       </CartProvider>
