@@ -96,7 +96,12 @@ export default function SignupScreen() {
 
     if (signUpError) {
       setLoading(false);
-      setError(signUpError.message);
+      if (signUpError.message.toLowerCase().includes("database error")) {
+        setSuggestions(generateSuggestions(uname));
+        setShowSuggestions(true);
+      } else {
+        setError(signUpError.message);
+      }
       return;
     }
 
