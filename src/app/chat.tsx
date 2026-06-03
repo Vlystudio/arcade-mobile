@@ -27,16 +27,21 @@ type Conversation = {
   last_message_at: string | null;
 };
 
-type UserResult = { id: string; username: string };
+type FriendResult = {
+  id: string;
+  username: string;
+  avatar_url: string | null;
+  online_status: string;
+};
 
 export default function ChatScreen() {
   const { user, loading: authLoading } = useRequireAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const [newChatVisible, setNewChatVisible] = useState(false);
-  const [searchText, setSearchText] = useState("");
-  const [searchResults, setSearchResults] = useState<UserResult[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [friends, setFriends] = useState<FriendResult[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [filterText, setFilterText] = useState("");
   const [creating, setCreating] = useState(false);
 
   async function loadConversations() {
@@ -67,28 +72,46 @@ export default function ChatScreen() {
     setLoading(false);
   }
 
-  async function searchUsers(text: string) {
-    if (!text.trim() || !user) { setSearchResults([]); return; }
-    setSearching(true);
-    const { data } = await supabase
+  async function loadFriends() {
+    if (!user) return;
+    setFriendsLoading(true);
+
+    const { data: fs } = await supabase
+      .from("friendships")
+      .select("user_id, friend_id")
+      .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
+      .eq("status", "accepted");
+
+    if (!fs || fs.length === 0) {
+      setFriends([]);
+      setFriendsLoading(false);
+      return;
+    }
+
+    const ids = fs.map((f: any) => f.user_id === user.id ? f.friend_id : f.user_id);
+
+    const { data: profiles } = await supabase
       .from("profiles")
-      .select("id, username")
-      .ilike("username", `%${text.trim()}%`)
-      .neq("id", user.id)
-      .limit(8);
-    setSearchResults(data ?? []);
-    setSearching(false);
+      .select("id, username, avatar_url, online_status")
+      .in("id", ids);
+
+    setFriends((profiles ?? []).map((p: any) => ({
+      id: p.id,
+      username: p.username ?? "Unknown",
+      avatar_url: p.avatar_url ?? null,
+      online_status: p.online_status ?? "offline",
+    })));
+    setFriendsLoading(false);
   }
 
-  async function openOrCreateConversation(otherUserId: string) {
+  async function openOrCreateConversation(friend: FriendResult) {
     if (!user || creating) return;
     setCreating(true);
 
-    // Look for existing conversation (either direction)
     const { data: existing } = await supabase
       .from("conversations")
       .select("id")
-      .or(`and(participant_1.eq.${user.id},participant_2.eq.${otherUserId}),and(participant_1.eq.${otherUserId},participant_2.eq.${user.id})`)
+      .or(`and(participant_1.eq.${user.id},participant_2.eq.${friend.id}),and(participant_1.eq.${friend.id},participant_2.eq.${user.id})`)
       .maybeSingle();
 
     let convId: string;
@@ -98,7 +121,7 @@ export default function ChatScreen() {
     } else {
       const { data: created, error } = await supabase
         .from("conversations")
-        .insert({ participant_1: user.id, participant_2: otherUserId })
+        .insert({ participant_1: user.id, participant_2: friend.id })
         .select("id")
         .single();
       if (error || !created) { setCreating(false); return; }
@@ -107,11 +130,22 @@ export default function ChatScreen() {
 
     setCreating(false);
     setNewChatVisible(false);
-    setSearchText("");
-    setSearchResults([]);
+    setFilterText("");
 
-    const other = searchResults.find((r) => r.id === otherUserId);
-    router.push({ pathname: "/chat-conversation" as any, params: { conversationId: convId, otherUsername: other?.username ?? "Chat" } });
+    router.push({
+      pathname: "/chat-conversation" as any,
+      params: {
+        conversationId: convId,
+        otherUserId: friend.id,
+        otherUsername: friend.username,
+        otherAvatarUrl: friend.avatar_url ?? "",
+      },
+    });
+  }
+
+  function openModal() {
+    setNewChatVisible(true);
+    loadFriends();
   }
 
   useEffect(() => { if (user) loadConversations(); }, [user]);
@@ -120,12 +154,16 @@ export default function ChatScreen() {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
   }
 
+  const filteredFriends = filterText.trim()
+    ? friends.filter((f) => f.username.toLowerCase().includes(filterText.toLowerCase()))
+    : friends;
+
   return (
     <View style={styles.root}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Messages</Text>
-          <Pressable style={styles.newBtn} onPress={() => setNewChatVisible(true)}>
+          <Pressable style={styles.newBtn} onPress={openModal}>
             <Ionicons name="create-outline" size={22} color="#06b6d4" />
           </Pressable>
         </View>
@@ -135,8 +173,8 @@ export default function ChatScreen() {
             <View style={styles.empty}>
               <Ionicons name="chatbubbles-outline" size={52} color="#222" />
               <Text style={styles.emptyTitle}>No messages yet</Text>
-              <Text style={styles.emptySub}>Start a conversation with another player.</Text>
-              <Pressable style={styles.emptyBtn} onPress={() => setNewChatVisible(true)}>
+              <Text style={styles.emptySub}>Send a message to someone on your friends list.</Text>
+              <Pressable style={styles.emptyBtn} onPress={openModal}>
                 <Text style={styles.emptyBtnText}>New Message</Text>
               </Pressable>
             </View>
@@ -145,7 +183,15 @@ export default function ChatScreen() {
               <Pressable
                 key={c.id}
                 style={({ pressed }) => [styles.convRow, pressed && { backgroundColor: "#0d0d0d" }]}
-                onPress={() => router.push({ pathname: "/chat-conversation" as any, params: { conversationId: c.id, otherUsername: c.other_username, otherAvatarUrl: c.other_avatar_url ?? "" } })}
+                onPress={() => router.push({
+                  pathname: "/chat-conversation" as any,
+                  params: {
+                    conversationId: c.id,
+                    otherUserId: c.other_user_id,
+                    otherUsername: c.other_username,
+                    otherAvatarUrl: c.other_avatar_url ?? "",
+                  },
+                })}
               >
                 <Avatar uri={c.other_avatar_url} name={c.other_username} size={46} />
                 <View style={styles.convBody}>
@@ -169,7 +215,7 @@ export default function ChatScreen() {
             <View style={styles.modalHandle} />
             <View style={styles.modalTop}>
               <Text style={styles.modalTitle}>New Message</Text>
-              <Pressable onPress={() => { setNewChatVisible(false); setSearchText(""); setSearchResults([]); }}>
+              <Pressable onPress={() => { setNewChatVisible(false); setFilterText(""); }}>
                 <Ionicons name="close" size={22} color="#555" />
               </Pressable>
             </View>
@@ -178,31 +224,49 @@ export default function ChatScreen() {
               <Ionicons name="search-outline" size={16} color="#444" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search by username…"
+                placeholder="Search friends…"
                 placeholderTextColor="#333"
                 autoFocus
                 autoCapitalize="none"
-                value={searchText}
-                onChangeText={(t) => { setSearchText(t); searchUsers(t); }}
+                value={filterText}
+                onChangeText={setFilterText}
               />
-              {searching && <ActivityIndicator size="small" color="#06b6d4" />}
             </View>
 
             <ScrollView style={styles.resultsList} keyboardShouldPersistTaps="handled">
-              {searchResults.map((u) => (
-                <Pressable
-                  key={u.id}
-                  style={({ pressed }) => [styles.resultRow, pressed && { opacity: 0.7 }]}
-                  onPress={() => openOrCreateConversation(u.id)}
-                  disabled={creating}
-                >
-                  <Avatar uri={null} name={u.username} size={40} />
-                  <Text style={styles.resultUsername}>{u.username}</Text>
-                  <Ionicons name="chevron-forward" size={16} color="#333" />
-                </Pressable>
-              ))}
-              {searchText.trim().length > 0 && searchResults.length === 0 && !searching && (
-                <Text style={styles.noResults}>No users found</Text>
+              {friendsLoading ? (
+                <ActivityIndicator color="#06b6d4" style={{ paddingVertical: 24 }} />
+              ) : filteredFriends.length === 0 ? (
+                <View style={styles.noFriendsWrap}>
+                  <Ionicons name="people-outline" size={32} color="#222" />
+                  <Text style={styles.noResults}>
+                    {friends.length === 0 ? "No friends yet" : "No matches"}
+                  </Text>
+                  {friends.length === 0 && (
+                    <Pressable onPress={() => { setNewChatVisible(false); router.push("/friends" as any); }}>
+                      <Text style={styles.addFriendsLink}>Add friends →</Text>
+                    </Pressable>
+                  )}
+                </View>
+              ) : (
+                filteredFriends.map((f) => (
+                  <Pressable
+                    key={f.id}
+                    style={({ pressed }) => [styles.resultRow, pressed && { opacity: 0.7 }]}
+                    onPress={() => openOrCreateConversation(f)}
+                    disabled={creating}
+                  >
+                    <View style={styles.avatarWrap}>
+                      <Avatar uri={f.avatar_url} name={f.username} size={40} />
+                      <View style={[styles.statusDot, f.online_status === "online" && styles.statusDotOnline]} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.resultUsername}>{f.username}</Text>
+                      <Text style={styles.resultStatus}>{f.online_status === "online" ? "Online" : "Offline"}</Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color="#333" />
+                  </Pressable>
+                ))
               )}
             </ScrollView>
           </View>
@@ -245,8 +309,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#111",
   },
-  convAvatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: "#1c1c1c", alignItems: "center", justifyContent: "center" },
-  convAvatarText: { color: "#fff", fontWeight: "800", fontSize: 18 },
   convBody: { flex: 1 },
   convName: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 2 },
   convLast: { color: "#555", fontSize: 13 },
@@ -275,8 +337,16 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
   },
-  resultAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: "#1c1c1c", alignItems: "center", justifyContent: "center" },
-  resultAvatarText: { color: "#fff", fontWeight: "800", fontSize: 16 },
-  resultUsername: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
-  noResults: { color: "#444", textAlign: "center", paddingVertical: 20, fontSize: 14 },
+  avatarWrap: { position: "relative" },
+  statusDot: {
+    position: "absolute", bottom: 0, right: 0,
+    width: 11, height: 11, borderRadius: 6,
+    backgroundColor: "#444", borderWidth: 2, borderColor: "#111",
+  },
+  statusDotOnline: { backgroundColor: "#22c55e" },
+  resultUsername: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  resultStatus: { color: "#555", fontSize: 12, marginTop: 1 },
+  noFriendsWrap: { alignItems: "center", gap: 8, paddingVertical: 28 },
+  noResults: { color: "#444", textAlign: "center", fontSize: 14 },
+  addFriendsLink: { color: "#06b6d4", fontSize: 14, fontWeight: "700" },
 });

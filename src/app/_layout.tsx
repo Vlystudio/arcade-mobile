@@ -57,6 +57,7 @@ export default function RootLayout() {
           <Stack.Screen name="mfa-setup" options={{ headerShown: false }} />
           <Stack.Screen name="mfa-verify" options={{ headerShown: false }} />
           <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+          <Stack.Screen name="friends" options={{ headerShown: false }} />
         </Stack>
       </ThemeProvider>
       </CartProvider>

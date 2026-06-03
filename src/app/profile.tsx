@@ -67,10 +67,16 @@ export default function ProfileScreen() {
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [disablingMfa, setDisablingMfa] = useState(false);
 
+  // Privacy & status
+  const [isPrivate, setIsPrivate]       = useState(false);
+  const [onlineStatus, setOnlineStatus] = useState<"online" | "offline">("offline");
+  const [savingPrivacy, setSavingPrivacy] = useState(false);
+  const [savingStatus, setSavingStatus]   = useState(false);
+
   async function loadProfile() {
     if (!user) return;
     const [profileRes, scoresRes, pendingRes, teamRes, placementsRes] = await Promise.all([
-      supabase.from("profiles").select("username, avatar_url, is_admin, featured_game_id").eq("id", user.id).single(),
+      supabase.from("profiles").select("username, avatar_url, is_admin, featured_game_id, is_private, online_status").eq("id", user.id).single(),
       supabase.from("scores").select("score, game_id, games(id, name, type)").eq("user_id", user.id).eq("status", "approved"),
       supabase.from("scores").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       supabase.from("team_members").select("role, teams(name)").eq("user_id", user.id).maybeSingle(),
@@ -87,6 +93,8 @@ export default function ProfileScreen() {
       setAvatarUrl(profileRes.data.avatar_url ?? null);
       setIsAdmin(profileRes.data.is_admin ?? false);
       setFeaturedGameId(profileRes.data.featured_game_id ?? null);
+      setIsPrivate(profileRes.data.is_private ?? false);
+      setOnlineStatus((profileRes.data.online_status ?? "offline") as "online" | "offline");
     }
     setEmail(user.email ?? null);
     setPendingCount(pendingRes.count ?? 0);
@@ -233,6 +241,24 @@ export default function ProfileScreen() {
         },
       ]
     );
+  }
+
+  async function togglePrivacy() {
+    if (!user || savingPrivacy) return;
+    setSavingPrivacy(true);
+    const next = !isPrivate;
+    const { error } = await supabase.from("profiles").update({ is_private: next }).eq("id", user.id);
+    if (!error) setIsPrivate(next);
+    setSavingPrivacy(false);
+  }
+
+  async function toggleStatus() {
+    if (!user || savingStatus) return;
+    setSavingStatus(true);
+    const next: "online" | "offline" = onlineStatus === "online" ? "offline" : "online";
+    const { error } = await supabase.from("profiles").update({ online_status: next }).eq("id", user.id);
+    if (!error) setOnlineStatus(next);
+    setSavingStatus(false);
   }
 
   function handleLogout() {
@@ -397,6 +423,7 @@ export default function ProfileScreen() {
           <Text style={styles.sectionLabel}>Quick Actions</Text>
           <View style={styles.actionsCard}>
             <ActionRow icon="qr-code-outline" label="Scan Lane QR" onPress={() => router.push("/scan-lane")} />
+            <ActionRow icon="people-circle-outline" label="Friends" onPress={() => router.push("/friends" as any)} divider />
             <ActionRow icon="people-outline" label="Manage Teams" onPress={() => router.push("/teams")} divider />
             <ActionRow icon="podium-outline" label="Leaderboard" onPress={() => router.push("/leaderboard")} divider />
             <ActionRow icon="trophy-outline" label="Leagues" onPress={() => router.push("/leagues")} divider />
@@ -409,6 +436,54 @@ export default function ProfileScreen() {
                 badge={pendingCount > 0 ? pendingCount : undefined}
               />
             )}
+          </View>
+
+          {/* Privacy & Status */}
+          <Text style={[styles.sectionLabel, { marginTop: 8 }]}>Privacy & Status</Text>
+          <View style={[styles.actionsCard, { marginBottom: 16 }]}>
+            <Pressable
+              style={({ pressed }) => [styles.actionRow, pressed && { opacity: 0.7 }]}
+              onPress={togglePrivacy}
+              disabled={savingPrivacy}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: "rgba(168,85,247,0.08)" }]}>
+                <Ionicons
+                  name={isPrivate ? "lock-closed-outline" : "globe-outline"}
+                  size={18}
+                  color="#a855f7"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.actionLabel}>Profile Visibility</Text>
+                <Text style={{ color: "#555", fontSize: 11, marginTop: 1 }}>
+                  {isPrivate ? "Private — friends only" : "Public — visible to all"}
+                </Text>
+              </View>
+              {savingPrivacy
+                ? <ActivityIndicator size="small" color="#555" />
+                : <Ionicons name={isPrivate ? "lock-closed" : "lock-open"} size={16} color={isPrivate ? "#a855f7" : "#333"} />
+              }
+            </Pressable>
+            <View style={styles.rowDivider} />
+            <Pressable
+              style={({ pressed }) => [styles.actionRow, pressed && { opacity: 0.7 }]}
+              onPress={toggleStatus}
+              disabled={savingStatus}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: onlineStatus === "online" ? "rgba(34,197,94,0.08)" : "rgba(85,85,85,0.08)" }]}>
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: onlineStatus === "online" ? "#22c55e" : "#555" }} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.actionLabel}>Online Status</Text>
+                <Text style={{ color: onlineStatus === "online" ? "#22c55e" : "#555", fontSize: 11, marginTop: 1 }}>
+                  {onlineStatus === "online" ? "Appearing online" : "Appearing offline"}
+                </Text>
+              </View>
+              {savingStatus
+                ? <ActivityIndicator size="small" color="#555" />
+                : <Ionicons name="chevron-forward" size={16} color="#333" />
+              }
+            </Pressable>
           </View>
 
           {/* Security */}
