@@ -459,11 +459,15 @@ export default function TeamsScreen() {
                     <View style={styles.memberActions}>
                       {t.isCaptain && (
                         <>
-                          {t.pendingRequestCount > 0 && (
-                            <Pressable style={styles.requestsBadgeBtn} onPress={(e) => { e.stopPropagation(); loadRequests(t); }}>
-                              <Text style={styles.requestsBadgeText}>{t.pendingRequestCount}</Text>
-                            </Pressable>
-                          )}
+                          <Pressable
+                            style={[styles.requestsBtn, t.pendingRequestCount > 0 && styles.requestsBtnActive]}
+                            onPress={(e) => { e.stopPropagation(); loadRequests(t); }}
+                          >
+                            <Ionicons name="people-outline" size={14} color={t.pendingRequestCount > 0 ? "#000" : "#06b6d4"} />
+                            <Text style={[styles.requestsBtnText, t.pendingRequestCount > 0 && styles.requestsBtnTextActive]}>
+                              {t.pendingRequestCount > 0 ? `${t.pendingRequestCount} Request${t.pendingRequestCount > 1 ? "s" : ""}` : "Requests"}
+                            </Text>
+                          </Pressable>
                           <Pressable style={styles.inviteIconBtn} onPress={(e) => { e.stopPropagation(); setInviteError(null); setInviteSentTo(null); setInviteTeamId(t.id); }}>
                             <Ionicons name="person-add-outline" size={18} color="#06b6d4" />
                           </Pressable>
@@ -936,6 +940,14 @@ const styles = StyleSheet.create({
   memberActions: { flexDirection: "row", alignItems: "center", gap: 8 },
   requestsBadgeBtn: { width: 24, height: 24, borderRadius: 12, backgroundColor: "#ef4444", alignItems: "center", justifyContent: "center" },
   requestsBadgeText: { color: "#fff", fontSize: 11, fontWeight: "900" },
+  requestsBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.06)",
+  },
+  requestsBtnActive: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
+  requestsBtnText: { color: "#06b6d4", fontWeight: "700", fontSize: 12 },
+  requestsBtnTextActive: { color: "#000" },
   inviteIconBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center" },
   leaveBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: "#2a1515" },
   leaveBtnText: { color: "#ef4444", fontWeight: "800", fontSize: 13 },
