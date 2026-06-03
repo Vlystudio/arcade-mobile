@@ -43,7 +43,7 @@ export default function SubmitScoreScreen() {
 
   useEffect(() => {
     if (!submitted) return;
-    const t = setTimeout(() => router.replace("/"), 1400);
+    const t = setTimeout(() => router.replace("/games"), 1400);
     return () => clearTimeout(t);
   }, [submitted]);
 
@@ -159,7 +159,7 @@ export default function SubmitScoreScreen() {
             <Ionicons name="checkmark-circle" size={72} color="#22c55e" />
           </View>
           <Text style={styles.successTitle}>Score Submitted!</Text>
-          <Text style={styles.successSub}>Pending admin review — heading home…</Text>
+          <Text style={styles.successSub}>Pending admin review — heading to games…</Text>
         </View>
       </SafeAreaView>
     );
