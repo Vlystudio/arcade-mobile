@@ -21,6 +21,7 @@ import { supabase } from "../../lib/supabase";
 type LeaderEntry = { rank: number; user_id: string; username: string; game_name: string; score: number; created_at: string };
 type TimeFilter = "alltime" | "season";
 type GameOption = { id: string; name: string; type: string };
+type ShareFriend = { id: string; username: string; avatar_url: string | null };
 
 const GAME_TYPE_COLORS: Record<string, string> = {
   skeeball:   "#06b6d4",
@@ -44,6 +45,14 @@ export default function LeaderboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [myRank, setMyRank] = useState<number | null>(null);
   const [myScore, setMyScore] = useState<number | null>(null);
+
+  // Score sharing
+  const [shareEntry, setShareEntry] = useState<LeaderEntry | null>(null);
+  const [shareFriends, setShareFriends] = useState<ShareFriend[]>([]);
+  const [shareFriendsLoading, setShareFriendsLoading] = useState(false);
+  const [shareFriendSearch, setShareFriendSearch] = useState("");
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
+  const [sentTo, setSentTo] = useState<Set<string>>(new Set());
 
   async function loadGames() {
     const { data } = await supabase.from("games").select("id, name, type").order("name");
@@ -117,6 +126,58 @@ export default function LeaderboardScreen() {
   const filteredGames = games.filter((g) =>
     g.name.toLowerCase().includes(gameSearch.toLowerCase())
   );
+
+  async function openShareModal(entry: LeaderEntry) {
+    setShareEntry(entry);
+    setSentTo(new Set());
+    setShareFriendSearch("");
+    setShareFriendsLoading(true);
+    // Load friends
+    if (!user) return;
+    const { data: fs } = await supabase
+      .from("friendships")
+      .select("requester_id, addressee_id")
+      .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+      .eq("status", "accepted");
+    const ids = (fs ?? []).map((f: any) => f.requester_id === user.id ? f.addressee_id : f.requester_id);
+    if (ids.length) {
+      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", ids);
+      setShareFriends((profiles ?? []).map((p: any) => ({ id: p.id, username: p.username ?? "Unknown", avatar_url: p.avatar_url ?? null })));
+    } else {
+      setShareFriends([]);
+    }
+    setShareFriendsLoading(false);
+  }
+
+  async function sendScoreDM(friend: ShareFriend) {
+    if (!user || !shareEntry || sendingTo) return;
+    setSendingTo(friend.id);
+
+    const { data: existing } = await supabase
+      .from("conversations")
+      .select("id")
+      .or(`and(participant_1.eq.${user.id},participant_2.eq.${friend.id}),and(participant_1.eq.${friend.id},participant_2.eq.${user.id})`)
+      .maybeSingle();
+
+    let convId: string;
+    if (existing) {
+      convId = existing.id;
+    } else {
+      const { data: created, error } = await supabase
+        .from("conversations")
+        .insert({ participant_1: user.id, participant_2: friend.id })
+        .select("id").single();
+      if (error || !created) { setSendingTo(null); return; }
+      convId = created.id;
+    }
+
+    const content = `🏆 Check out my leaderboard score!\n#${shareEntry.rank} · ${shareEntry.score.toLocaleString()} pts\n${shareEntry.game_name}`;
+    await supabase.from("messages").insert({ conversation_id: convId, sender_id: user.id, content });
+    await supabase.from("conversations").update({ last_message: `🏆 Shared a score`, last_message_at: new Date().toISOString() }).eq("id", convId);
+
+    setSendingTo(null);
+    setSentTo((prev) => new Set([...prev, friend.id]));
+  }
 
   async function shareScore(entry: LeaderEntry) {
     const msg = `I ranked #${entry.rank} on the ${entry.game_name} leaderboard with ${entry.score.toLocaleString()} pts! 🎯`;
@@ -222,7 +283,7 @@ export default function LeaderboardScreen() {
                   {[top3.find((e) => e.rank === 2), top3.find((e) => e.rank === 1), top3.find((e) => e.rank === 3)]
                     .filter(Boolean)
                     .map((entry) => (
-                      <PodiumCard key={entry!.rank} entry={entry!} isMe={entry!.user_id === user?.id} onShare={() => shareScore(entry!)} />
+                      <PodiumCard key={entry!.rank} entry={entry!} isMe={entry!.user_id === user?.id} onShare={() => openShareModal(entry!)} />
                     ))}
                 </View>
               )}
@@ -246,7 +307,7 @@ export default function LeaderboardScreen() {
                       </View>
                       <Text style={styles.listScore}>{entry.score.toLocaleString()}</Text>
                       {entry.user_id === user?.id && (
-                        <Pressable style={styles.listShareBtn} onPress={() => shareScore(entry)}>
+                        <Pressable style={styles.listShareBtn} onPress={() => openShareModal(entry)}>
                           <Ionicons name="share-outline" size={16} color="#06b6d4" />
                         </Pressable>
                       )}
@@ -259,6 +320,89 @@ export default function LeaderboardScreen() {
         </ScrollView>
       </SafeAreaView>
       <BottomTabBar />
+
+      {/* Score share modal */}
+      <Modal visible={!!shareEntry} transparent animationType="slide" onRequestClose={() => setShareEntry(null)}>
+        <Pressable style={styles.pickerBg} onPress={() => setShareEntry(null)}>
+          <Pressable style={styles.shareSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.pickerHandle} />
+
+            {/* Score preview */}
+            <View style={styles.shareScorePreview}>
+              <Text style={styles.shareScoreRank}>#{shareEntry?.rank}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.shareScoreVal}>{shareEntry?.score.toLocaleString()} pts</Text>
+                <Text style={styles.shareScoreGame}>{shareEntry?.game_name}</Text>
+              </View>
+            </View>
+
+            {/* Friends section */}
+            <Text style={styles.shareSectionLabel}>Send to a Friend</Text>
+            <View style={styles.shareFriendSearch}>
+              <Ionicons name="search-outline" size={14} color="#444" />
+              <TextInput
+                style={styles.shareFriendSearchInput}
+                placeholder="Search friends…"
+                placeholderTextColor="#333"
+                value={shareFriendSearch}
+                onChangeText={setShareFriendSearch}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+
+            {shareFriendsLoading ? (
+              <ActivityIndicator color="#06b6d4" style={{ marginVertical: 20 }} />
+            ) : shareFriends.length === 0 ? (
+              <View style={styles.shareNoFriends}>
+                <Ionicons name="people-outline" size={28} color="#2a2a2a" />
+                <Text style={styles.shareNoFriendsText}>No friends yet — add some from Leaderboard profiles</Text>
+              </View>
+            ) : (
+              <ScrollView style={styles.shareFriendList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                {shareFriends
+                  .filter((f) => f.username.toLowerCase().includes(shareFriendSearch.toLowerCase()))
+                  .map((friend) => {
+                    const sent = sentTo.has(friend.id);
+                    const sending = sendingTo === friend.id;
+                    return (
+                      <Pressable
+                        key={friend.id}
+                        style={[styles.shareFriendRow, sent && styles.shareFriendRowSent]}
+                        onPress={() => !sent && sendScoreDM(friend)}
+                        disabled={sending || sent}
+                      >
+                        <View style={styles.shareFriendAvatar}>
+                          <Text style={styles.shareFriendAvatarText}>{friend.username[0].toUpperCase()}</Text>
+                        </View>
+                        <Text style={styles.shareFriendName} numberOfLines={1}>{friend.username}</Text>
+                        {sending ? (
+                          <ActivityIndicator size="small" color="#06b6d4" />
+                        ) : sent ? (
+                          <View style={styles.shareSentBadge}>
+                            <Ionicons name="checkmark" size={13} color="#22c55e" />
+                            <Text style={styles.shareSentText}>Sent</Text>
+                          </View>
+                        ) : (
+                          <View style={styles.shareSendBtn}>
+                            <Ionicons name="paper-plane-outline" size={14} color="#000" />
+                            <Text style={styles.shareSendBtnText}>Send</Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    );
+                  })}
+              </ScrollView>
+            )}
+
+            {/* External share */}
+            <Pressable style={styles.shareExternalBtn} onPress={() => shareEntry && shareScore(shareEntry)}>
+              <Ionicons name="link-outline" size={16} color="#888" />
+              <Text style={styles.shareExternalBtnText}>Share as Link</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Game picker modal */}
       <Modal visible={gamePickerVisible} transparent animationType="slide" onRequestClose={() => { setGamePickerVisible(false); setGameSearch(""); }}>
@@ -484,4 +628,70 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center",
     borderWidth: 1, borderColor: "rgba(6,182,212,0.15)",
   },
+
+  // Score share modal
+  shareSheet: {
+    backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
+    borderTopWidth: 1, borderColor: "#1e1e1e", maxHeight: "80%",
+  },
+  shareScorePreview: {
+    flexDirection: "row", alignItems: "center", gap: 16,
+    backgroundColor: "#0d0d0d", borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 20,
+  },
+  shareScoreRank: { color: "#06b6d4", fontSize: 28, fontWeight: "900", letterSpacing: -1 },
+  shareScoreVal: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  shareScoreGame: { color: "#555", fontSize: 12, marginTop: 2 },
+
+  shareSectionLabel: {
+    color: "#444", fontSize: 11, fontWeight: "700",
+    textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10,
+  },
+  shareFriendSearch: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#0d0d0d", borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 10,
+  },
+  shareFriendSearchInput: { flex: 1, color: "#fff", fontSize: 14 },
+
+  shareFriendList: { maxHeight: 260 },
+  shareFriendRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  shareFriendRowSent: { opacity: 0.6 },
+  shareFriendAvatar: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: "#1a1a1a", alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "#2a2a2a",
+  },
+  shareFriendAvatarText: { color: "#fff", fontWeight: "800", fontSize: 15 },
+  shareFriendName: { flex: 1, color: "#fff", fontSize: 14, fontWeight: "700" },
+
+  shareSendBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#06b6d4", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 7,
+  },
+  shareSendBtnText: { color: "#000", fontWeight: "800", fontSize: 12 },
+  shareSentBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(34,197,94,0.1)", borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderWidth: 1, borderColor: "rgba(34,197,94,0.2)",
+  },
+  shareSentText: { color: "#22c55e", fontSize: 12, fontWeight: "700" },
+
+  shareNoFriends: { alignItems: "center", paddingVertical: 24, gap: 8 },
+  shareNoFriendsText: { color: "#444", fontSize: 13, textAlign: "center" },
+
+  shareExternalBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    marginTop: 16, backgroundColor: "#0d0d0d", borderRadius: 14,
+    paddingVertical: 14, borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  shareExternalBtnText: { color: "#555", fontWeight: "700", fontSize: 14 },
 });
