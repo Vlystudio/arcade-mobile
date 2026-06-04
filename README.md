@@ -68,6 +68,13 @@ Run these SQL scripts **in order** in the Supabase SQL Editor:
 | 7 | `scripts/rls-security-patches.sql` | Critical RLS patches (C1-C3, H1-H5, M1-M3) |
 | 8 | `scripts/venue-migration.sql` | Multi-venue support (`venues` table, `venue_id` columns) |
 | 9 | `scripts/security-hardening.sql` | P2-P9 hardening: rate limits, constraints, audit log, forum RPC, score RPC, public profiles, team features |
+| 10 | `scripts/security-hardening-2.sql` | MFA enforcement, score proof RPC, QR expiry, score range, privacy view |
+| 11 | `scripts/security-events.sql` | Structured security audit log (`security_events` table, `log_security_event` RPC) |
+| 12 | `scripts/venue-role-hardening.sql` | Venue role hierarchy (`owner`/`admin`/`staff`), scoped helper functions |
+| 13 | `scripts/qr-token-hardening.sql` | Hashed QR tokens with expiry, revocation, and backfill migration |
+| 14 | `scripts/storage-security.sql` | Storage bucket RLS policies for all 5 buckets + cleanup queue |
+
+> **Verification:** After all scripts are applied, run `scripts/security-verification-tests.sql` in the SQL Editor. Every row should return `result = 'PASS'`.
 
 Then grant yourself admin access:
 ```sql
@@ -77,26 +84,17 @@ WHERE id = (SELECT id FROM auth.users WHERE email = 'your@email.com');
 ```
 
 ### 4. Supabase Storage
-Create two **public** buckets in the Supabase dashboard:
-- `post-photos` — feed post images
-- `avatars` — profile pictures
+Create the following buckets in the Supabase dashboard:
 
-For each bucket, add Storage RLS policies (paste into SQL Editor):
-```sql
--- post-photos: users can upload to their own folder, anyone can read
-CREATE POLICY "Users upload own photos" ON storage.objects
-  FOR INSERT WITH CHECK (
-    bucket_id = 'post-photos'
-    AND auth.uid()::text = (storage.foldername(name))[1]
-  );
-CREATE POLICY "Public read post-photos" ON storage.objects
-  FOR SELECT USING (bucket_id = 'post-photos');
-CREATE POLICY "Users delete own photos" ON storage.objects
-  FOR DELETE USING (
-    bucket_id = 'post-photos'
-    AND auth.uid()::text = (storage.foldername(name))[1]
-  );
-```
+| Bucket | Visibility | Max size | MIME types |
+|--------|-----------|----------|------------|
+| `avatars` | **Public** | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
+| `post-photos` | **Public** | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
+| `score-proofs` | **Private** | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
+| `message-media` | **Private** | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
+| `team-photos` | **Public** | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
+
+Storage RLS policies are applied by `scripts/storage-security.sql` (step 14 above). Do **not** add manual policies for these buckets — the script handles everything.
 
 ### 5. Start the dev server
 ```bash
@@ -152,10 +150,15 @@ Every table has RLS enabled. The anon key cannot bypass it. Key rules:
 Admin screens verify `profiles.is_admin` with a live DB query on every mount (`checkAdminAndLoad` in `admin.tsx`). The frontend check is for UX only — all sensitive operations are blocked by RLS regardless.
 
 ### QR codes
-Lane QR tokens are static secrets. The app enforces:
-1. Only one active check-in per user at a time (client + RLS).
-2. Rate-limit: 30-minute cooldown before re-checking into the same lane.
-3. Test-lane buttons (`__DEV__` only) are hidden in production builds.
+Lane QR tokens are **hashed and expiring** — raw token values are never stored in the DB.
+
+1. Admins generate tokens via `rpc_admin_generate_lane_qr_token(lane_id)` — the raw token is returned once and must be printed/embedded in the QR code.
+2. The DB stores only the SHA-256 hash (`lane_qr_tokens.token_hash`). A compromised DB reveals nothing usable.
+3. Tokens expire after 90 days. Admins can force-rotate any time.
+4. Revoked and expired tokens are rejected with distinct error codes in `rpc_check_in`.
+5. Only one active check-in per user at a time (RLS enforced).
+6. Rate-limit: 30-minute cooldown before re-checking into the same lane.
+7. Test-lane buttons (`__DEV__` only) are hidden in production builds.
 
 ### Score submission
 Score inserts are routed through `rpc_submit_score` (SECURITY DEFINER). The RPC:
@@ -165,16 +168,30 @@ Score inserts are routed through `rpc_submit_score` (SECURITY DEFINER). The RPC:
 - Rate-limits to 20 submissions per user per hour
 
 ### Admin writes
-All admin-only mutations use SECURITY DEFINER RPCs that call `is_admin()` server-side:
-- `rpc_admin_review_score` — approve/deny scores
-- `rpc_admin_update_forum_status` — approve/reject forum posts
-- `rpc_admin_approve_tournament` / `rpc_admin_deny_tournament` — tournament requests
-- `rpc_admin_set_tournament_status` — tournament lifecycle
-- `rpc_admin_save_placements` — tournament results
-- `rpc_admin_delete_team` — team deletion
-- `rpc_admin_create_first_friday` — official events
+All admin-only mutations use SECURITY DEFINER RPCs. Every RPC:
+1. Calls `public.require_mfa()` — rejects callers without AAL2 (TOTP/passkey second factor).
+2. Checks `is_admin()` or `is_venue_admin(venue_id)` depending on scope.
+3. Writes to `admin_audit_log` for traceability.
 
-Every admin RPC writes to `admin_audit_log` for traceability.
+| RPC | Who can call |
+|-----|-------------|
+| `rpc_admin_review_score` | Platform admin **or** venue admin of that score's venue |
+| `rpc_admin_update_forum_status` | Platform admin only |
+| `rpc_admin_approve_tournament` / `rpc_admin_deny_tournament` | Platform admin only |
+| `rpc_admin_set_tournament_status` | Platform admin only |
+| `rpc_admin_save_placements` | Platform admin only |
+| `rpc_admin_delete_team` | Platform admin only |
+| `rpc_admin_create_first_friday` | Platform admin only |
+
+### Venue role hierarchy
+`venue_admins.role` has three levels: `owner > admin > staff`.
+
+| Helper function | Returns true for |
+|----------------|-----------------|
+| `is_platform_admin()` | `profiles.is_admin = true` |
+| `is_venue_owner(venue_id)` | platform admin OR venue owner |
+| `is_venue_admin(venue_id)` | platform admin OR venue owner/admin |
+| `is_venue_staff(venue_id)` | platform admin OR any venue role |
 
 ### Rate limiting
 BEFORE INSERT triggers on `posts` (10/h), `messages` (60/min), `team_messages` (60/min), `forums` (5/h), and `team_requests` (10/day) call `check_and_log_rate_limit()` which raises an exception if the limit is exceeded. The `rate_limit_log` table is cleaned up automatically.
@@ -185,35 +202,24 @@ BEFORE INSERT triggers on `posts` (10/h), `messages` (60/min), `team_messages` (
 ### Square / payments
 Square prices are **never derived from the client**. The server-side `/api/square/orders` route fetches prices directly from the Square Catalog API using `SQUARE_ACCESS_TOKEN`. The client only sends variation IDs; the server resolves prices and creates the order. A client cannot submit an arbitrary amount.
 
-### Security testing checklist
-Run these checks after every migration:
+### Security testing
+Run `scripts/security-verification-tests.sql` in the Supabase SQL Editor after every migration. It uses `SET LOCAL ROLE` to simulate anonymous, authenticated, and admin callers across 9 test blocks. Every row should return `result = 'PASS'`.
 
-```sql
--- 1. Verify check_ins blocks direct insert (should fail)
--- Run as anon or a regular user:
-INSERT INTO check_ins (user_id, lane_id, status) VALUES (auth.uid(), '<lane_id>', 'active');
--- Expected: RLS policy violation
+The test suite verifies:
+- Anonymous cannot read scores, profiles, audit log, security events, check-ins, rate-limit log, QR tokens, venue admins
+- Authenticated user cannot insert directly into `check_ins` or `scores`
+- Authenticated user cannot read `admin_audit_log`
+- Authenticated user cannot update another user's profile
+- Authenticated user cannot self-promote to admin (escalation trigger fires)
+- Admin RPCs are rejected without MFA (P0003 exception)
+- Invalid QR token returns `lane_not_found`
+- `hash_lane_token()` produces consistent 64-char hex output
+- `public_profiles` view does not expose `is_admin`, `email`, or `phone`
+- `scores_score_range` constraint exists
+- RLS is enabled on all 12 sensitive tables
 
--- 2. Verify score status cannot be set to 'approved' on insert (should fail)
-INSERT INTO scores (user_id, game_id, score, status) VALUES (auth.uid(), '<game_id>', 100, 'approved');
--- Expected: RLS policy violation (status must be 'pending')
-
--- 3. Verify non-admin cannot approve a forum post (should fail)
-SELECT rpc_admin_update_forum_status('<forum_id>', 'approved');
--- Expected: {"error":"unauthorized"}
-
--- 4. Verify username constraint (should fail)
-UPDATE profiles SET username = 'a' WHERE id = auth.uid();
--- Expected: constraint violation (length < 3)
-
--- 5. Verify score range constraint (should fail via RPC)
-SELECT rpc_submit_score(null, null, null, null, -1, null);
--- Expected: {"error":"invalid_score"}
-
--- 6. Verify is_admin cannot be self-escalated (should fail)
-UPDATE profiles SET is_admin = true WHERE id = auth.uid();
--- Expected: trigger exception (guard_role_escalation_trigger)
-```
+### Monitoring and alerting
+See `docs/security-monitoring.md` for the full event catalogue, alert thresholds, triage queries, and recommended tooling (Sentry, Supabase log drain, DB webhook → `notify-admin` Edge Function).
 
 ---
 
@@ -250,21 +256,43 @@ eas submit --platform android
 
 ## Environment Variables Reference
 
+### Client (Expo — `EXPO_PUBLIC_*` prefix, safe to expose)
+
 | Variable | Description |
 |----------|-------------|
 | `EXPO_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (public, safe to expose) |
-| `EXPO_PUBLIC_SITE_URL` | Public web origin used as an auth email redirect fallback |
-| `EXPO_PUBLIC_API_BASE_URL` | Public web origin used by native builds for server API calls |
-| `SQUARE_ACCESS_TOKEN` | Server-only Square access token with catalog/order scopes |
-| `SQUARE_ENVIRONMENT` | `sandbox` for Square Sandbox, omit or use production env vars for live |
-| `SQUARE_LOCATION_ARCADE_BAR_ID` | Square location ID for Arcade Bar |
-| `SQUARE_LOCATION_VINYL_HALL_ID` | Square location ID for Vinyl Hall |
-| `SQUARE_LOCATION_ID` | Optional fallback Square location ID |
-| `SQUARE_VERSION` | Square API version, defaults to `2026-05-20` |
-| `SQUARE_REFERENCE_PREFIX` | Optional prefix for Square order reference IDs |
-| `SQUARE_CURRENCY` | Currency for fallback non-catalog checkout items, defaults to `USD` |
-| `SQUARE_CHECKOUT_REDIRECT_URL` | Optional URL Square sends customers to after payment |
+| `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (public — RLS is the real guard) |
+| `EXPO_PUBLIC_SITE_URL` | Public web origin for auth redirect fallback |
+| `EXPO_PUBLIC_API_BASE_URL` | Public web origin for server API calls from native builds |
+
+### Server (never `EXPO_PUBLIC_*`, never commit to source control)
+
+| Variable | Used by | Description |
+|----------|---------|-------------|
+| `SQUARE_ACCESS_TOKEN` | `api/square/` | Square access token with catalog + order scopes |
+| `SQUARE_ENVIRONMENT` | `api/square/` | `sandbox` or `production` |
+| `SQUARE_LOCATION_ARCADE_BAR_ID` | `api/square/` | Square location ID for Arcade Bar |
+| `SQUARE_LOCATION_VINYL_HALL_ID` | `api/square/` | Square location ID for Vinyl Hall |
+| `SQUARE_LOCATION_ID` | `api/square/` | Optional fallback location ID |
+| `SQUARE_VERSION` | `api/square/` | Square API version (e.g., `2026-05-20`) |
+| `SQUARE_REFERENCE_PREFIX` | `api/square/` | Optional prefix for order reference IDs |
+| `SQUARE_CURRENCY` | `api/square/` | Currency code, defaults to `USD` |
+| `SQUARE_CHECKOUT_REDIRECT_URL` | `api/square/` | URL Square redirects to after payment |
+| `UPSTASH_REDIS_REST_URL` | `api/_ratelimit.ts` | Upstash Redis URL for API rate limiting |
+| `UPSTASH_REDIS_REST_TOKEN` | `api/_ratelimit.ts` | Upstash Redis token |
+| `IS_PRODUCTION` | `api/_ratelimit.ts`, Edge Functions | Set to `true` in production to enable fail-closed behavior |
+
+### Supabase Edge Function secrets (set via Dashboard → Settings → Secrets)
+
+| Variable | Used by | Description |
+|----------|---------|-------------|
+| `SUPABASE_SERVICE_ROLE_KEY` | All Edge Functions | Service role key (auto-injected by Supabase) |
+| `AWS_ACCESS_KEY_ID` | `moderate-image` | AWS credentials for Rekognition |
+| `AWS_SECRET_ACCESS_KEY` | `moderate-image` | AWS credentials for Rekognition |
+| `AWS_REGION` | `moderate-image` | AWS region (e.g., `us-east-1`) |
+| `OPENAI_API_KEY` | `moderate-text` | OpenAI API key for text moderation |
+| `IS_PRODUCTION` | `moderate-image`, `moderate-text` | Set to `true` to enable fail-closed behavior in production |
+| `SLACK_WEBHOOK_URL` | `notify-admin` (optional) | Slack webhook for critical security event alerts |
 
 ---
 

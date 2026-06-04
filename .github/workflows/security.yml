@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [master, main]
 
+permissions:
+  contents: read
+  security-events: write   # CodeQL / dependency-review
+  actions: read
+
 jobs:
   security:
     name: Type-check, lint, and audit
@@ -43,3 +48,26 @@ jobs:
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
+          # Deny any package with a known license incompatibility
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+
+  secret-scan:
+    name: Secret scanning check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for accidental secrets in diff
+        run: |
+          # Fail if any EXPO_PUBLIC_ key that looks like a secret appears in staged files
+          # (anon keys are fine; service role keys are not)
+          if git diff origin/${{ github.base_ref || 'master' }}...HEAD -- '*.ts' '*.tsx' '*.js' '*.env*' \
+            | grep -E 'service_role|SUPABASE_SERVICE_ROLE|SQUARE_ACCESS_TOKEN\s*=' | grep -v '^\-'; then
+            echo "::error::Possible secret detected in diff. Check the lines above."
+            exit 1
+          fi
+        continue-on-error: false

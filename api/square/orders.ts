@@ -2,10 +2,8 @@ import { checkRateLimit } from "../_ratelimit";
 import { assertSquareConfigured, sendJson, squareRequest } from "./_shared";
 
 type SquareOrderItem = {
-  name?: string;
-  price?: number;
+  squareVariationId: string;
   quantity: number;
-  squareVariationId?: string;
 };
 
 export default async function handler(req: any, res: any) {
@@ -31,14 +29,66 @@ export default async function handler(req: any, res: any) {
     return sendJson(res, 400, { error: "Order must include at least one item." });
   }
 
-  // Reject any item that doesn't have a Square catalog variation ID.
-  // All real menu items sourced from the Square catalog always have squareVariationId.
-  // Accepting custom name+price from the client is a server-side price manipulation risk.
+  // Validate quantity bounds (client must not send 0 or absurdly large quantities)
+  for (const item of items) {
+    const qty = Number(item.quantity);
+    if (!Number.isInteger(qty) || qty < 1 || qty > 50) {
+      return sendJson(res, 400, {
+        error: "Each item quantity must be a whole number between 1 and 50.",
+      });
+    }
+  }
+
+  // Reject any item that lacks a Square catalog variation ID.
+  // Custom name+price from the client is a server-side price manipulation risk.
   const nonCatalogItem = items.find((item) => !item.squareVariationId);
   if (nonCatalogItem) {
     return sendJson(res, 400, {
       error: "Each item must include a Square variation ID. Custom-priced items are not accepted.",
     });
+  }
+
+  // Validate all variation IDs against the Square Catalog API.
+  // This prevents fake/spoofed variation IDs from reaching the checkout link.
+  const variationIds = [...new Set(items.map((i) => i.squareVariationId))];
+  let catalogObjects: Map<string, any>;
+  try {
+    catalogObjects = await fetchCatalogVariations(variationIds, config);
+  } catch (err: any) {
+    return sendJson(res, 502, {
+      error: "Unable to verify menu items with Square. Please try again.",
+    });
+  }
+
+  // Each variation must exist, be active, and belong to this location
+  for (const item of items) {
+    const obj = catalogObjects.get(item.squareVariationId);
+    if (!obj) {
+      return sendJson(res, 400, {
+        error: `Item "${item.squareVariationId}" was not found in the Square catalog.`,
+      });
+    }
+    if (obj.is_deleted) {
+      return sendJson(res, 400, {
+        error: `A selected item is no longer available.`,
+      });
+    }
+    const variationData = obj.item_variation_data ?? {};
+    if (variationData.sold_out) {
+      return sendJson(res, 400, {
+        error: `A selected item is currently sold out.`,
+      });
+    }
+    // Verify the variation is available at this location
+    if (
+      variationData.location_overrides?.some(
+        (o: any) => o.location_id === config.locationId && o.sold_out
+      )
+    ) {
+      return sendJson(res, 400, {
+        error: `A selected item is sold out at this location.`,
+      });
+    }
   }
 
   const localOrderId = body?.localOrderId ?? createUuid();
@@ -64,16 +114,9 @@ export default async function handler(req: any, res: any) {
           table_or_lane: String(body?.tableNumber ?? "").slice(0, 40) || undefined,
         }).filter(([, v]) => v !== undefined && v !== "")
       ),
+      // Prices come entirely from Square's catalog — client quantity only.
       line_items: items.map((item) => ({
-        ...(item.squareVariationId
-          ? { catalog_object_id: item.squareVariationId }
-          : {
-              name: item.name,
-              base_price_money: {
-                amount: Math.round(Number(item.price) * 100),
-                currency: process.env.SQUARE_CURRENCY ?? "USD",
-              },
-            }),
+        catalog_object_id: item.squareVariationId,
         quantity: String(Math.max(1, Number(item.quantity) || 1)),
         ...(note ? { note } : {}),
       })),
@@ -98,6 +141,32 @@ export default async function handler(req: any, res: any) {
       error: error?.message ?? "Unable to create Square checkout.",
     });
   }
+}
+
+/**
+ * Fetch catalog ITEM_VARIATION objects from Square by their IDs.
+ * Returns a Map<variationId, catalogObject>.
+ * Only ITEM_VARIATION type is relevant for order line items.
+ */
+async function fetchCatalogVariations(
+  variationIds: string[],
+  config: Parameters<typeof squareRequest>[1]
+): Promise<Map<string, any>> {
+  const result = await squareRequest("/v2/catalog/batch-retrieve", config, {
+    method: "POST",
+    body: JSON.stringify({
+      object_ids: variationIds,
+      include_related_objects: false,
+    }),
+  });
+
+  const map = new Map<string, any>();
+  for (const obj of result?.objects ?? []) {
+    if (obj?.id && obj?.type === "ITEM_VARIATION") {
+      map.set(obj.id, obj);
+    }
+  }
+  return map;
 }
 
 function buildOrderNote(tableNumber?: string, instructions?: string) {
