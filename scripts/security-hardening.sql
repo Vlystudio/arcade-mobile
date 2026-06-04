@@ -170,10 +170,10 @@ CREATE TRIGGER enforce_team_request_rate_limit
 -- P6: DB constraints and performance indexes
 -- ────────────────────────────────────────────────────────────
 
--- Scores: enforce sane range (0 – 9,999,999)
+-- Scores: must be non-negative (no upper cap — pinball/arcade can exceed 9M)
 ALTER TABLE scores
   DROP CONSTRAINT IF EXISTS scores_score_range,
-  ADD  CONSTRAINT scores_score_range CHECK (score >= 0 AND score <= 9999999);
+  ADD  CONSTRAINT scores_score_range CHECK (score >= 0);
 
 -- Profiles: username format (3-32 chars, letters/digits/underscores only)
 ALTER TABLE profiles
@@ -337,10 +337,9 @@ BEGIN
     RETURN json_build_object('error', 'unauthenticated');
   END IF;
 
-  -- Server-side score range validation
-  IF p_score < 0 OR p_score > 9999999 THEN
+  IF p_score < 0 THEN
     RETURN json_build_object('error', 'invalid_score',
-      'message', 'Score must be between 0 and 9,999,999.');
+      'message', 'Score cannot be negative.');
   END IF;
 
   -- Validate check_in ownership when provided
