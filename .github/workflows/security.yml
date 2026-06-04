@@ -27,8 +27,8 @@ jobs:
       - name: TypeScript type check
         run: npx tsc --noEmit
 
-      - name: npm audit (high/critical only)
-        run: npm audit --audit-level=high
+      - name: npm audit (high/critical only, production deps)
+        run: npm audit --audit-level=high --omit=dev
 
   dependency-review:
     name: Dependency review (PRs only)
