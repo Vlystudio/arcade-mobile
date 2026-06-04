@@ -215,7 +215,7 @@ export default function AdminScreen() {
   const [tournError, setTournError] = useState<string | null>(null);
 
   // Forums state
-  type PendingForum = { id: string; title: string; description: string | null; game_type: string | null; creator_username: string; created_at: string };
+  type PendingForum = { id: string; title: string; description: string | null; game_type: string | null; creator_username: string; created_at: string; auto_flagged: boolean; flag_category: string | null };
   const [pendingForums, setPendingForums] = useState<PendingForum[]>([]);
   const [forumsLoading, setForumsLoading] = useState(false);
   const [forumsError, setForumsError] = useState<string | null>(null);
@@ -471,7 +471,7 @@ export default function AdminScreen() {
     setForumsError(null);
     const { data, error } = await supabase
       .from("forums")
-      .select("id, title, description, game_type, creator_id, created_at")
+      .select("id, title, description, game_type, creator_id, created_at, auto_flagged, flag_category")
       .eq("status", status)
       .order("created_at", { ascending: status === "pending" });
 
@@ -489,6 +489,8 @@ export default function AdminScreen() {
       game_type: f.game_type,
       creator_username: f.creator_id ? (usernameMap[f.creator_id] ?? "Unknown") : "Unknown",
       created_at: f.created_at,
+      auto_flagged:  f.auto_flagged  ?? false,
+      flag_category: f.flag_category ?? null,
     })));
     setForumsLoading(false);
   }
@@ -1340,6 +1342,14 @@ export default function AdminScreen() {
                       <View style={{ flex: 1 }}>
                         <Text style={styles.tournTitle}>{forum.title}</Text>
                         <Text style={styles.tournMeta}>By {forum.creator_username} · {relTime(forum.created_at)}</Text>
+                        {forum.auto_flagged && (
+                          <View style={styles.modFlagBadge}>
+                            <Ionicons name="warning-outline" size={12} color="#f59e0b" />
+                            <Text style={styles.modFlagText}>
+                              Auto-flagged · {forum.flag_category === "hate_speech" ? "hate speech" : forum.flag_category ?? "content"}
+                            </Text>
+                          </View>
+                        )}
                       </View>
                       {forum.game_type && (
                         <View style={styles.tournGameChip}>
@@ -2093,4 +2103,11 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(239,68,68,0.2)",
   },
   schedRemoveBtnText: { color: "#ef4444", fontWeight: "800", fontSize: 15 },
+  modFlagBadge: {
+    flexDirection: "row", alignItems: "center", gap: 5, marginTop: 5,
+    backgroundColor: "rgba(245,158,11,0.12)", borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 4, alignSelf: "flex-start",
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.3)",
+  },
+  modFlagText: { color: "#f59e0b", fontSize: 11, fontWeight: "700" },
 });
