@@ -223,7 +223,7 @@ DECLARE
   v_result jsonb;
   v_combined text;
 BEGIN
-  v_combined := coalesce(NEW.title, '') || ' ' || coalesce(NEW.description, '') || ' ' || coalesce(NEW.content, '');
+  v_combined := coalesce(NEW.title, '') || ' ' || coalesce(NEW.description, '');
   v_result   := public.check_content_moderation(v_combined);
 
   IF v_result IS NOT NULL THEN
@@ -240,5 +240,5 @@ $$;
 
 DROP TRIGGER IF EXISTS flag_forum_content ON forums;
 CREATE TRIGGER flag_forum_content
-  BEFORE INSERT OR UPDATE OF title, description, content ON forums
+  BEFORE INSERT OR UPDATE OF title, description ON forums
   FOR EACH ROW EXECUTE FUNCTION public.flag_forum_content();
