@@ -7,16 +7,31 @@ import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
+
+const SLOTS = ["6:00 PM", "7:15 PM", "8:30 PM"] as const;
+type SlotTime = typeof SLOTS[number];
+
+type Announcement = {
+  id: string;
+  user_id: string;
+  username: string;
+  avatar_url: string | null;
+  content: string;
+  created_at: string;
+};
 
 const SEASON_WEEKS = 8;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -71,12 +86,27 @@ export default function TeamDetailScreen() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
+  // Slot preferences
+  const [slotPref1, setSlotPref1] = useState<string | null>(null);
+  const [slotPref2, setSlotPref2] = useState<string | null>(null);
+  const [editSlotsVisible, setEditSlotsVisible] = useState(false);
+  const [editSlot1, setEditSlot1] = useState<string | null>(null);
+  const [editSlot2, setEditSlot2] = useState<string | null>(null);
+  const [savingSlots, setSavingSlots] = useState(false);
+
+  // Announcements
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(false);
+  const [newAnnouncement, setNewAnnouncement] = useState("");
+  const [postingAnnouncement, setPostingAnnouncement] = useState(false);
+  const [announceVisible, setAnnounceVisible] = useState(false);
+
   async function loadData() {
     if (!teamId || !user) return;
 
     const [membersRes, teamRes, profileRes] = await Promise.all([
       supabase.from("team_members").select("user_id, role, profiles(username, avatar_url)").eq("team_id", teamId),
-      supabase.from("teams").select("captain_user_id, photo_url").eq("id", teamId).single(),
+      supabase.from("teams").select("captain_user_id, photo_url, slot_pref_1, slot_pref_2").eq("id", teamId).single(),
       supabase.from("profiles").select("role").eq("id", user.id).single(),
     ]);
 
@@ -89,6 +119,30 @@ export default function TeamDetailScreen() {
     const r = (profileRes.data as any)?.role ?? "user";
     setIsAdmin(r === "admin" || r === "owner" || r === "architect");
     setPhotoUrl((teamRes.data as any)?.photo_url ?? null);
+    setSlotPref1((teamRes.data as any)?.slot_pref_1 ?? null);
+    setSlotPref2((teamRes.data as any)?.slot_pref_2 ?? null);
+
+    // Load announcements
+    setAnnouncementsLoading(true);
+    const { data: annData } = await supabase
+      .from("team_announcements")
+      .select("id, user_id, content, created_at")
+      .eq("team_id", teamId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    const annUserIds = [...new Set((annData ?? []).map((a: any) => a.user_id as string))];
+    let annProfileMap: Record<string, { username: string; avatar_url: string | null }> = {};
+    if (annUserIds.length) {
+      const { data: ap } = await supabase.from("profiles").select("id, username, avatar_url").in("id", annUserIds);
+      for (const p of ap ?? []) annProfileMap[(p as any).id] = { username: (p as any).username, avatar_url: (p as any).avatar_url };
+    }
+    setAnnouncements((annData ?? []).map((a: any) => ({
+      id: a.id, user_id: a.user_id,
+      username: annProfileMap[a.user_id]?.username ?? "Unknown",
+      avatar_url: annProfileMap[a.user_id]?.avatar_url ?? null,
+      content: a.content, created_at: a.created_at,
+    })));
+    setAnnouncementsLoading(false);
 
     if (memberList.length > 0) {
       const { data } = await supabase
@@ -180,6 +234,34 @@ export default function TeamDetailScreen() {
     }
   }
 
+  async function saveSlots() {
+    if (!teamId) return;
+    setSavingSlots(true);
+    await supabase.from("teams").update({ slot_pref_1: editSlot1, slot_pref_2: editSlot2 }).eq("id", teamId);
+    setSlotPref1(editSlot1);
+    setSlotPref2(editSlot2);
+    setSavingSlots(false);
+    setEditSlotsVisible(false);
+  }
+
+  async function postAnnouncement() {
+    if (!user || !teamId || !newAnnouncement.trim()) return;
+    setPostingAnnouncement(true);
+    const { data, error } = await supabase
+      .from("team_announcements")
+      .insert({ team_id: teamId, user_id: user.id, content: newAnnouncement.trim() })
+      .select("id, created_at")
+      .single();
+    setPostingAnnouncement(false);
+    if (error) { Alert.alert("Error", error.message); return; }
+    setAnnouncements((prev) => [{
+      id: data.id, user_id: user.id, username: "You", avatar_url: null,
+      content: newAnnouncement.trim(), created_at: data.created_at,
+    }, ...prev]);
+    setNewAnnouncement("");
+    setAnnounceVisible(false);
+  }
+
   useEffect(() => { if (user) loadData(); }, [user, teamId]);
 
   // Build seasons as 8-week chunks from the date of the first score
@@ -262,11 +344,18 @@ export default function TeamDetailScreen() {
           <Pressable style={styles.iconBtn} onPress={() => router.canGoBack() ? router.back() : router.replace("/teams" as any)}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </Pressable>
-          {isCaptain && (
-            <Pressable style={styles.iconBtn} onPress={() => router.push({ pathname: "/teams" as any })}>
-              <Ionicons name="settings-outline" size={19} color="#555" />
-            </Pressable>
-          )}
+          <View style={{ flexDirection: "row", gap: 4 }}>
+            {isTeamMember && (
+              <Pressable style={styles.iconBtn} onPress={() => router.push({ pathname: "/team-chat" as any, params: { teamId, teamName } })}>
+                <Ionicons name="chatbubbles-outline" size={20} color="#555" />
+              </Pressable>
+            )}
+            {isCaptain && (
+              <Pressable style={styles.iconBtn} onPress={() => router.push({ pathname: "/teams" as any })}>
+                <Ionicons name="settings-outline" size={19} color="#555" />
+              </Pressable>
+            )}
+          </View>
         </View>
 
         {/* Hero */}
@@ -303,6 +392,20 @@ export default function TeamDetailScreen() {
               <Text style={styles.trackBtnText}>Track Scores</Text>
             </Pressable>
           )}
+          <View style={styles.slotPrefRow}>
+            <Ionicons name="time-outline" size={14} color="#444" />
+            <Text style={styles.slotPrefText}>
+              {slotPref1 ? `${slotPref1}${slotPref2 ? ` · ${slotPref2}` : ""}` : "No time preference set"}
+            </Text>
+            {isCaptain && (
+              <Pressable
+                style={styles.slotEditBtn}
+                onPress={() => { setEditSlot1(slotPref1); setEditSlot2(slotPref2); setEditSlotsVisible(true); }}
+              >
+                <Ionicons name="pencil" size={12} color="#06b6d4" />
+              </Pressable>
+            )}
+          </View>
         </View>
 
         {/* Season picker pill */}
@@ -328,6 +431,38 @@ export default function TeamDetailScreen() {
           <View style={styles.emptyCard}>
             <Ionicons name="stats-chart-outline" size={32} color="#2a2a2a" />
             <Text style={styles.emptyCardText}>No scores recorded for {seasonLabel}.</Text>
+          </View>
+        )}
+
+        {/* Announcements */}
+        <View style={styles.announceSectionRow}>
+          <Text style={styles.annSectionLabel}>Announcements</Text>
+          {isCaptain && (
+            <Pressable style={styles.announceAddBtn} onPress={() => setAnnounceVisible(true)}>
+              <Ionicons name="add-circle" size={22} color="#06b6d4" />
+            </Pressable>
+          )}
+        </View>
+        {announcementsLoading ? (
+          <ActivityIndicator size="small" color="#06b6d4" style={{ marginBottom: 20 }} />
+        ) : announcements.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyCardText}>No announcements yet.</Text>
+          </View>
+        ) : (
+          <View style={{ marginBottom: 28 }}>
+            {announcements.map((ann) => (
+              <View key={ann.id} style={styles.annCard}>
+                <Avatar uri={ann.avatar_url} name={ann.username} size={36} radius={11} />
+                <View style={{ flex: 1 }}>
+                  <View style={styles.annCardHeader}>
+                    <Text style={styles.annUsername}>{ann.username}</Text>
+                    <Text style={styles.annTime}>{fmtRelTime(ann.created_at)}</Text>
+                  </View>
+                  <Text style={styles.annContent}>{ann.content}</Text>
+                </View>
+              </View>
+            ))}
           </View>
         )}
 
@@ -396,6 +531,80 @@ export default function TeamDetailScreen() {
             </ScrollView>
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* Edit slot preferences modal */}
+      <Modal visible={editSlotsVisible} transparent animationType="slide" onRequestClose={() => setEditSlotsVisible(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setEditSlotsVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Preferred Play Times</Text>
+            <Text style={styles.modalSub}>Admin uses these when scheduling matches</Text>
+            <Text style={styles.slotModalLabel}>1st Choice</Text>
+            <View style={styles.slotModalRow}>
+              {SLOTS.map((s) => (
+                <Pressable
+                  key={s}
+                  style={[styles.slotChip, editSlot1 === s && styles.slotChipActive]}
+                  onPress={() => { setEditSlot1(editSlot1 === s ? null : s); if (editSlot2 === s) setEditSlot2(null); }}
+                >
+                  <Text style={[styles.slotChipText, editSlot1 === s && styles.slotChipTextActive]}>{s}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Text style={styles.slotModalLabel}>2nd Choice (optional)</Text>
+            <View style={styles.slotModalRow}>
+              {SLOTS.filter((s) => s !== editSlot1).map((s) => (
+                <Pressable
+                  key={s}
+                  style={[styles.slotChip, editSlot2 === s && styles.slotChipActive2]}
+                  onPress={() => setEditSlot2(editSlot2 === s ? null : s)}
+                >
+                  <Text style={[styles.slotChipText, editSlot2 === s && styles.slotChipTextActive2]}>{s}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable
+              style={[styles.slotSaveBtn, savingSlots && { opacity: 0.5 }]}
+              onPress={saveSlots}
+              disabled={savingSlots}
+            >
+              {savingSlots
+                ? <ActivityIndicator size="small" color="#000" />
+                : <Text style={styles.slotSaveBtnText}>Save Preferences</Text>}
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Post announcement modal */}
+      <Modal visible={announceVisible} transparent animationType="slide" onRequestClose={() => setAnnounceVisible(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+          <Pressable style={styles.modalBg} onPress={() => setAnnounceVisible(false)}>
+            <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+              <View style={styles.modalHandle} />
+              <Text style={styles.modalTitle}>New Announcement</Text>
+              <TextInput
+                style={styles.annInput}
+                placeholder="Write an announcement…"
+                placeholderTextColor="#444"
+                value={newAnnouncement}
+                onChangeText={setNewAnnouncement}
+                multiline
+                maxLength={500}
+              />
+              <Pressable
+                style={[styles.annPostBtn, (postingAnnouncement || !newAnnouncement.trim()) && { opacity: 0.4 }]}
+                onPress={postAnnouncement}
+                disabled={postingAnnouncement || !newAnnouncement.trim()}
+              >
+                {postingAnnouncement
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <Text style={styles.annPostBtnText}>Post</Text>}
+              </Pressable>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
       </Modal>
     </SafeAreaView>
   );
@@ -469,6 +678,17 @@ function Pip({ label, value, color = "#fff" }: { label: string; value: number; c
 
 function fmtDate(ms: number) {
   return new Date(ms).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function fmtRelTime(iso: string): string {
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -616,4 +836,70 @@ const styles = StyleSheet.create({
   photoPickerLibraryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   photoPickerCancel: { backgroundColor: "#0d0d0d", borderRadius: 16, padding: 16, alignItems: "center", marginTop: 4 },
   photoPickerCancelText: { color: "#555", fontWeight: "700", fontSize: 15 },
+
+  // Slot preferences
+  slotPrefRow: {
+    flexDirection: "row", alignItems: "center", gap: 7, marginTop: 14,
+    backgroundColor: "#0d0d0d", borderRadius: 12,
+    paddingHorizontal: 14, paddingVertical: 9,
+    borderWidth: 1, borderColor: "#1a1a1a",
+  },
+  slotPrefText: { color: "#555", fontSize: 13, fontWeight: "600", flex: 1 },
+  slotEditBtn: {
+    width: 28, height: 28, borderRadius: 8, backgroundColor: "rgba(6,182,212,0.1)",
+    alignItems: "center", justifyContent: "center",
+  },
+
+  // Slot modal
+  slotModalLabel: { color: "#555", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, marginTop: 6 },
+  slotModalRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
+  slotChip: {
+    flex: 1, paddingVertical: 11, borderRadius: 12,
+    backgroundColor: "#1a1a1a", alignItems: "center",
+    borderWidth: 1, borderColor: "#2a2a2a",
+  },
+  slotChipActive: { backgroundColor: "rgba(6,182,212,0.15)", borderColor: "#06b6d4" },
+  slotChipActive2: { backgroundColor: "rgba(99,102,241,0.15)", borderColor: "#6366f1" },
+  slotChipText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  slotChipTextActive: { color: "#06b6d4" },
+  slotChipTextActive2: { color: "#6366f1" },
+  slotSaveBtn: {
+    backgroundColor: "#06b6d4", borderRadius: 16, paddingVertical: 15,
+    alignItems: "center", marginTop: 8,
+  },
+  slotSaveBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
+
+  // Announcements section
+  announceSectionRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 20, marginBottom: 12,
+  },
+  annSectionLabel: {
+    color: "#444", fontSize: 11, fontWeight: "700",
+    textTransform: "uppercase", letterSpacing: 1.2,
+  },
+  announceAddBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  annCard: {
+    flexDirection: "row", gap: 12, alignItems: "flex-start",
+    backgroundColor: "#111", borderRadius: 16, padding: 14,
+    marginHorizontal: 20, marginBottom: 8,
+    borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  annCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
+  annUsername: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  annTime: { color: "#333", fontSize: 11 },
+  annContent: { color: "#aaa", fontSize: 14, lineHeight: 20 },
+
+  // Announcement input
+  annInput: {
+    backgroundColor: "#1a1a1a", borderRadius: 14, padding: 16,
+    color: "#fff", fontSize: 15, lineHeight: 22,
+    minHeight: 100, textAlignVertical: "top",
+    borderWidth: 1, borderColor: "#2a2a2a", marginBottom: 16,
+  },
+  annPostBtn: {
+    backgroundColor: "#06b6d4", borderRadius: 16, paddingVertical: 15,
+    alignItems: "center",
+  },
+  annPostBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
 });

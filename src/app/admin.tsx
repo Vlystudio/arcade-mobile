@@ -21,7 +21,7 @@ import { supabase } from "../../lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler";
 type ReviewTab = "pending" | "approved" | "denied";
 
 type ReviewScore = {
@@ -101,10 +101,22 @@ const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
   { key: "stats",       label: "Stats",       icon: "bar-chart-outline" },
   { key: "health",      label: "Health",      icon: "pulse-outline" },
   { key: "teams",       label: "Teams",       icon: "people-outline" },
+  { key: "scheduler",  label: "Schedule",    icon: "calendar-outline" },
   { key: "tournaments", label: "Tourneys",    icon: "trophy-outline" },
   { key: "forums",      label: "Forums",      icon: "chatbubbles-outline" },
   { key: "users",       label: "Users",       icon: "person-outline" },
 ];
+
+const SCHED_SLOTS = ["6:00 PM", "7:15 PM", "8:30 PM"] as const;
+const MAX_TEAMS_PER_SLOT = 8;
+
+type SchedulerTeam = {
+  id: string;
+  name: string;
+  slot_pref_1: string | null;
+  slot_pref_2: string | null;
+  avg_score: number;
+};
 
 const REVIEW_TABS: ReviewTab[] = ["pending", "approved", "denied"];
 
@@ -210,6 +222,14 @@ export default function AdminScreen() {
   const [forumsTab, setForumsTab] = useState<"pending" | "approved">("pending");
   const [actioningForum, setActioningForum] = useState<string | null>(null);
 
+  // Scheduler state
+  const [schedTeams, setSchedTeams] = useState<SchedulerTeam[]>([]);
+  const [schedLoading, setSchedLoading] = useState(false);
+  const [schedule, setSchedule] = useState<Record<string, string[]>>({ "6:00 PM": [], "7:15 PM": [], "8:30 PM": [] });
+  const [weekLabel, setWeekLabel] = useState("");
+  const [savingSchedule, setSavingSchedule] = useState(false);
+  const [reassignTarget, setReassignTarget] = useState<SchedulerTeam | null>(null);
+
   useEffect(() => { if (user) checkAdminAndLoad(); }, [user]);
   useEffect(() => { if (isAdmin) loadReviews(reviewTab); }, [reviewTab, isAdmin]);
   useEffect(() => {
@@ -217,6 +237,7 @@ export default function AdminScreen() {
     if (mainTab === "stats" && !statsData) loadStats();
     if (mainTab === "health" && !healthData) loadHealth();
     if (mainTab === "teams") loadAdminTeams();
+    if (mainTab === "scheduler" && schedTeams.length === 0) loadSchedulerTeams();
     if (mainTab === "users") loadUsers();
     if (mainTab === "forums") loadPendingForums(forumsTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -481,6 +502,99 @@ export default function AdminScreen() {
     setActioningForum(null);
   }
 
+  // ── Scheduler ─────────────────────────────────────────────────────────────
+
+  async function loadSchedulerTeams() {
+    setSchedLoading(true);
+    const [teamsRes, membersRes] = await Promise.all([
+      supabase.from("teams").select("id, name, slot_pref_1, slot_pref_2"),
+      supabase.from("team_members").select("team_id, user_id"),
+    ]);
+
+    const teams = (teamsRes.data ?? []) as any[];
+    const members = (membersRes.data ?? []) as any[];
+
+    const teamUserIds: Record<string, string[]> = {};
+    for (const m of members) (teamUserIds[m.team_id] ??= []).push(m.user_id);
+
+    const allUserIds = [...new Set(members.map((m) => m.user_id as string))];
+    let userAvgMap: Record<string, number> = {};
+    if (allUserIds.length) {
+      const { data: scoreData } = await supabase
+        .from("scores").select("user_id, score").in("user_id", allUserIds).eq("status", "approved");
+      const userBuckets: Record<string, number[]> = {};
+      for (const s of scoreData ?? []) (userBuckets[(s as any).user_id] ??= []).push((s as any).score);
+      for (const [uid, vals] of Object.entries(userBuckets))
+        userAvgMap[uid] = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+    }
+
+    setSchedTeams(teams.map((t) => {
+      const uids = teamUserIds[t.id] ?? [];
+      const avgs = uids.map((uid) => userAvgMap[uid]).filter(Boolean) as number[];
+      return {
+        id: t.id, name: t.name,
+        slot_pref_1: t.slot_pref_1, slot_pref_2: t.slot_pref_2,
+        avg_score: avgs.length ? Math.round(avgs.reduce((a, b) => a + b, 0) / avgs.length) : 0,
+      };
+    }));
+    setSchedLoading(false);
+  }
+
+  function runAutoSchedule() {
+    const sorted = [...schedTeams].sort((a, b) => b.avg_score - a.avg_score);
+    // Snake-draft interleave so each slot gets a mix of skill levels
+    const interleaved: SchedulerTeam[] = [];
+    let lo = 0, hi = sorted.length - 1;
+    while (lo <= hi) {
+      interleaved.push(sorted[lo++]);
+      if (lo <= hi) interleaved.push(sorted[hi--]);
+    }
+
+    const result: Record<string, string[]> = { "6:00 PM": [], "7:15 PM": [], "8:30 PM": [] };
+    const unassigned: SchedulerTeam[] = [];
+
+    for (const team of interleaved) {
+      if (team.slot_pref_1 && result[team.slot_pref_1].length < MAX_TEAMS_PER_SLOT)
+        result[team.slot_pref_1].push(team.id);
+      else unassigned.push(team);
+    }
+
+    const stillUnassigned: SchedulerTeam[] = [];
+    for (const team of unassigned) {
+      if (team.slot_pref_2 && result[team.slot_pref_2].length < MAX_TEAMS_PER_SLOT)
+        result[team.slot_pref_2].push(team.id);
+      else stillUnassigned.push(team);
+    }
+
+    for (const team of stillUnassigned) {
+      const slot = [...SCHED_SLOTS].sort((a, b) => result[a].length - result[b].length)[0];
+      if (result[slot].length < MAX_TEAMS_PER_SLOT) result[slot].push(team.id);
+    }
+
+    setSchedule(result);
+  }
+
+  function moveTeamToSlot(teamId: string, newSlot: string) {
+    setSchedule((prev) => {
+      const next = { ...prev };
+      for (const slot of SCHED_SLOTS) next[slot] = next[slot].filter((id) => id !== teamId);
+      if (next[newSlot].length < MAX_TEAMS_PER_SLOT) next[newSlot] = [...next[newSlot], teamId];
+      return next;
+    });
+    setReassignTarget(null);
+  }
+
+  async function saveSchedule() {
+    setSavingSchedule(true);
+    const label = weekLabel.trim() || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    await supabase.from("team_schedule").delete().eq("week_label", label);
+    const inserts = Object.entries(schedule).flatMap(([slot, ids]) =>
+      ids.map((tid) => ({ team_id: tid, slot_time: slot, week_label: label }))
+    );
+    if (inserts.length) await supabase.from("team_schedule").insert(inserts);
+    setSavingSchedule(false);
+  }
+
   // ── Tournaments ────────────────────────────────────────────────────────────
 
   async function loadTournRequests(status: "pending" | "approved" | "denied") {
@@ -627,6 +741,7 @@ export default function AdminScreen() {
             {mainTab === "reviews" ? "Score review queue"
               : mainTab === "stats" ? "Submission metrics"
               : mainTab === "teams" ? "Manage all teams"
+              : mainTab === "scheduler" ? "Assign teams to time slots"
               : mainTab === "tournaments" ? "Tournament requests"
               : mainTab === "forums" ? "Forum approvals"
               : "Business health"}
@@ -770,6 +885,156 @@ export default function AdminScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* ── Scheduler ── */}
+      {mainTab === "scheduler" && (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+          {schedLoading ? (
+            <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
+          ) : (
+            <>
+              {/* Week label + actions */}
+              <View style={styles.schedHeader}>
+                <TextInput
+                  style={styles.schedWeekInput}
+                  placeholder="Week label (e.g. Week 1, June 9…)"
+                  placeholderTextColor="#333"
+                  value={weekLabel}
+                  onChangeText={setWeekLabel}
+                />
+                <View style={styles.schedBtnRow}>
+                  <Pressable style={styles.schedAutoBtn} onPress={runAutoSchedule}>
+                    <Ionicons name="flash" size={15} color="#000" />
+                    <Text style={styles.schedAutoBtnText}>Auto-Schedule</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.schedSaveBtn, savingSchedule && { opacity: 0.5 }]}
+                    onPress={saveSchedule}
+                    disabled={savingSchedule}
+                  >
+                    {savingSchedule
+                      ? <ActivityIndicator size="small" color="#000" />
+                      : <><Ionicons name="save-outline" size={15} color="#000" /><Text style={styles.schedSaveBtnText}>Save</Text></>}
+                  </Pressable>
+                </View>
+                {schedTeams.length === 0 && (
+                  <Text style={styles.schedNoTeams}>No teams found. Teams need to be created first.</Text>
+                )}
+              </View>
+
+              {/* Slot sections */}
+              {SCHED_SLOTS.map((slot) => {
+                const assignedIds = schedule[slot] ?? [];
+                const assigned = assignedIds.map((id) => schedTeams.find((t) => t.id === id)).filter(Boolean) as SchedulerTeam[];
+                return (
+                  <View key={slot} style={styles.schedSlotSection}>
+                    <View style={styles.schedSlotHeader}>
+                      <Text style={styles.schedSlotTime}>{slot}</Text>
+                      <View style={styles.schedSlotCount}>
+                        <Text style={styles.schedSlotCountText}>{assigned.length}/{MAX_TEAMS_PER_SLOT}</Text>
+                      </View>
+                    </View>
+                    {assigned.length === 0 ? (
+                      <Text style={styles.schedEmptySlot}>No teams assigned</Text>
+                    ) : (
+                      assigned.map((team) => (
+                        <Pressable
+                          key={team.id}
+                          style={styles.schedTeamCard}
+                          onPress={() => setReassignTarget(team)}
+                        >
+                          <View style={styles.schedTeamLeft}>
+                            <Text style={styles.schedTeamName}>{team.name}</Text>
+                            <View style={styles.schedTeamPrefs}>
+                              {team.slot_pref_1 && (
+                                <View style={[styles.schedPrefChip, team.slot_pref_1 === slot && styles.schedPrefChipMatch]}>
+                                  <Text style={[styles.schedPrefChipText, team.slot_pref_1 === slot && styles.schedPrefChipTextMatch]}>1st: {team.slot_pref_1}</Text>
+                                </View>
+                              )}
+                              {team.slot_pref_2 && (
+                                <View style={[styles.schedPrefChip, team.slot_pref_2 === slot && styles.schedPrefChip2Match]}>
+                                  <Text style={[styles.schedPrefChipText, team.slot_pref_2 === slot && styles.schedPrefChip2MatchText]}>2nd: {team.slot_pref_2}</Text>
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                          <View style={styles.schedTeamRight}>
+                            {team.avg_score > 0 && <Text style={styles.schedTeamAvg}>{team.avg_score} avg</Text>}
+                            <Ionicons name="swap-horizontal-outline" size={16} color="#444" />
+                          </View>
+                        </Pressable>
+                      ))
+                    )}
+                  </View>
+                );
+              })}
+
+              {/* Unassigned teams */}
+              {(() => {
+                const assignedAll = new Set(Object.values(schedule).flat());
+                const unassigned = schedTeams.filter((t) => !assignedAll.has(t.id));
+                if (!unassigned.length) return null;
+                return (
+                  <View style={styles.schedSlotSection}>
+                    <View style={styles.schedSlotHeader}>
+                      <Text style={[styles.schedSlotTime, { color: "#ef4444" }]}>Unassigned</Text>
+                      <View style={[styles.schedSlotCount, { backgroundColor: "rgba(239,68,68,0.15)", borderColor: "#ef4444" }]}>
+                        <Text style={[styles.schedSlotCountText, { color: "#ef4444" }]}>{unassigned.length}</Text>
+                      </View>
+                    </View>
+                    {unassigned.map((team) => (
+                      <Pressable key={team.id} style={styles.schedTeamCard} onPress={() => setReassignTarget(team)}>
+                        <Text style={styles.schedTeamName}>{team.name}</Text>
+                        <Ionicons name="add-circle-outline" size={18} color="#06b6d4" />
+                      </Pressable>
+                    ))}
+                  </View>
+                );
+              })()}
+            </>
+          )}
+        </ScrollView>
+      )}
+
+      {/* Reassign modal */}
+      <Modal visible={!!reassignTarget} transparent animationType="slide" onRequestClose={() => setReassignTarget(null)}>
+        <Pressable style={styles.modalBg} onPress={() => setReassignTarget(null)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>{reassignTarget?.name}</Text>
+            <Text style={styles.modalSub}>Move to which time slot?</Text>
+            {SCHED_SLOTS.map((slot) => {
+              const count = (schedule[slot] ?? []).length;
+              const full = count >= MAX_TEAMS_PER_SLOT && !schedule[slot].includes(reassignTarget?.id ?? "");
+              return (
+                <Pressable
+                  key={slot}
+                  style={[styles.schedReassignRow, full && { opacity: 0.4 }]}
+                  onPress={() => !full && reassignTarget && moveTeamToSlot(reassignTarget.id, slot)}
+                  disabled={full}
+                >
+                  <Text style={styles.schedReassignTime}>{slot}</Text>
+                  <Text style={styles.schedReassignCount}>{count}/{MAX_TEAMS_PER_SLOT}</Text>
+                  {schedule[slot]?.includes(reassignTarget?.id ?? "") && (
+                    <Ionicons name="checkmark-circle" size={18} color="#06b6d4" />
+                  )}
+                </Pressable>
+              );
+            })}
+            <Pressable style={styles.schedRemoveBtn} onPress={() => {
+              if (!reassignTarget) return;
+              setSchedule((prev) => {
+                const next = { ...prev };
+                for (const s of SCHED_SLOTS) next[s] = next[s].filter((id) => id !== reassignTarget.id);
+                return next;
+              });
+              setReassignTarget(null);
+            }}>
+              <Text style={styles.schedRemoveBtnText}>Remove from schedule</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* ── Tournaments ── */}
       {mainTab === "tournaments" && (
@@ -1741,4 +2006,83 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 5,
   },
   userRoleBtnText: { color: "#888", fontSize: 11, fontWeight: "700" },
+
+  // Scheduler
+  schedHeader: { marginBottom: 20 },
+  schedWeekInput: {
+    backgroundColor: "#111", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
+    color: "#fff", fontSize: 14, paddingHorizontal: 16, paddingVertical: 13,
+    marginBottom: 10,
+  },
+  schedBtnRow: { flexDirection: "row", gap: 10 },
+  schedAutoBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    backgroundColor: "#f59e0b", borderRadius: 14, paddingVertical: 13,
+  },
+  schedAutoBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
+  schedSaveBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    backgroundColor: "#06b6d4", borderRadius: 14, paddingVertical: 13, paddingHorizontal: 20,
+  },
+  schedSaveBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
+  schedNoTeams: { color: "#444", fontSize: 13, textAlign: "center", marginTop: 12 },
+
+  schedSlotSection: {
+    backgroundColor: "#0d0d0d", borderRadius: 18, padding: 16,
+    marginBottom: 14, borderWidth: 1, borderColor: "#1a1a1a",
+  },
+  schedSlotHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  schedSlotTime: { color: "#fff", fontSize: 16, fontWeight: "900", flex: 1 },
+  schedSlotCount: {
+    backgroundColor: "rgba(6,182,212,0.12)", borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 4,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.3)",
+  },
+  schedSlotCountText: { color: "#06b6d4", fontSize: 12, fontWeight: "800" },
+  schedEmptySlot: { color: "#333", fontSize: 13, fontStyle: "italic", paddingVertical: 6 },
+
+  schedTeamCard: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#111", borderRadius: 14, padding: 12,
+    marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  schedTeamLeft: { flex: 1 },
+  schedTeamName: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 4 },
+  schedTeamPrefs: { flexDirection: "row", gap: 6, flexWrap: "wrap" },
+  schedPrefChip: {
+    backgroundColor: "#1a1a1a", borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: "#2a2a2a",
+  },
+  schedPrefChipMatch: { backgroundColor: "rgba(6,182,212,0.12)", borderColor: "rgba(6,182,212,0.4)" },
+  schedPrefChip2Match: { backgroundColor: "rgba(99,102,241,0.12)", borderColor: "rgba(99,102,241,0.4)" },
+  schedPrefChipText: { color: "#555", fontSize: 10, fontWeight: "700" },
+  schedPrefChipTextMatch: { color: "#06b6d4" },
+  schedPrefChip2MatchText: { color: "#6366f1" },
+  schedTeamRight: { flexDirection: "row", alignItems: "center", gap: 10 },
+  schedTeamAvg: { color: "#444", fontSize: 12, fontWeight: "700" },
+
+  modalSheet: {
+    backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40,
+    borderTopWidth: 1, borderColor: "#1e1e1e",
+  },
+  modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
+  modalSub:   { color: "#555", fontSize: 13, marginBottom: 20 },
+
+  // Reassign modal (reuses modalBg / modalSheet / modalHandle / modalTitle / modalSub)
+  schedReassignRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+    gap: 12,
+  },
+  schedReassignTime: { color: "#fff", fontSize: 16, fontWeight: "800", flex: 1 },
+  schedReassignCount: { color: "#444", fontSize: 13 },
+  schedRemoveBtn: {
+    marginTop: 16, backgroundColor: "rgba(239,68,68,0.1)", borderRadius: 14,
+    paddingVertical: 14, alignItems: "center",
+    borderWidth: 1, borderColor: "rgba(239,68,68,0.2)",
+  },
+  schedRemoveBtnText: { color: "#ef4444", fontWeight: "800", fontSize: 15 },
 });

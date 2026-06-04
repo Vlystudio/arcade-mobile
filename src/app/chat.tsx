@@ -249,6 +249,9 @@ export default function ChatScreen() {
     <View style={styles.root}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.header}>
+          <Pressable style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace("/")}>
+            <Ionicons name="chevron-back" size={22} color="#fff" />
+          </Pressable>
           <Text style={styles.headerTitle}>Messages</Text>
           <Pressable style={styles.newBtn} onPress={openModal}>
             <Ionicons name="create-outline" size={22} color="#06b6d4" />
@@ -481,6 +484,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
   },
   headerTitle: { color: "#fff", fontSize: 22, fontWeight: "900" },
+  backBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
   newBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
 
   emptyWrap: { flex: 1 },

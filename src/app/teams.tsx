@@ -44,6 +44,8 @@ export default function TeamsScreen() {
   // Create team modal
   const [createVisible, setCreateVisible] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
+  const [newSlotPref1, setNewSlotPref1] = useState<string | null>(null);
+  const [newSlotPref2, setNewSlotPref2] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -267,7 +269,7 @@ export default function TeamsScreen() {
     setCreating(true);
     const { data: team, error } = await supabase
       .from("teams")
-      .insert({ name, captain_user_id: user.id })
+      .insert({ name, captain_user_id: user.id, slot_pref_1: newSlotPref1, slot_pref_2: newSlotPref2 })
       .select("id")
       .single();
     if (error || !team) {
@@ -279,6 +281,8 @@ export default function TeamsScreen() {
     setCreating(false);
     setCreateVisible(false);
     setNewTeamName("");
+    setNewSlotPref1(null);
+    setNewSlotPref2(null);
     router.push({ pathname: "/team-detail" as any, params: { teamId: team.id, teamName: name } });
     loadTeams();
   }
@@ -576,6 +580,33 @@ export default function TeamsScreen() {
               returnKeyType="done"
               onSubmitEditing={handleCreateTeam}
             />
+
+            <Text style={styles.slotLabel}>Preferred Play Time — 1st Choice</Text>
+            <View style={styles.slotRow}>
+              {["6:00 PM", "7:15 PM", "8:30 PM"].map((s) => (
+                <Pressable
+                  key={s}
+                  style={[styles.slotChip, newSlotPref1 === s && styles.slotChipActive]}
+                  onPress={() => { setNewSlotPref1(newSlotPref1 === s ? null : s); if (newSlotPref2 === s) setNewSlotPref2(null); }}
+                >
+                  <Text style={[styles.slotChipText, newSlotPref1 === s && styles.slotChipTextActive]}>{s}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <Text style={styles.slotLabel}>2nd Choice (optional)</Text>
+            <View style={styles.slotRow}>
+              {["6:00 PM", "7:15 PM", "8:30 PM"].filter(s => s !== newSlotPref1).map((s) => (
+                <Pressable
+                  key={s}
+                  style={[styles.slotChip, newSlotPref2 === s && styles.slotChipActive2]}
+                  onPress={() => setNewSlotPref2(newSlotPref2 === s ? null : s)}
+                >
+                  <Text style={[styles.slotChipText, newSlotPref2 === s && styles.slotChipTextActive2]}>{s}</Text>
+                </Pressable>
+              ))}
+            </View>
+
             {createError && (
               <View style={styles.inlineError}>
                 <Ionicons name="alert-circle-outline" size={14} color="#ef4444" />
@@ -583,7 +614,7 @@ export default function TeamsScreen() {
               </View>
             )}
             <View style={styles.modalBtns}>
-              <Pressable style={styles.modalCancel} onPress={() => { setCreateVisible(false); setNewTeamName(""); setCreateError(null); }}>
+              <Pressable style={styles.modalCancel} onPress={() => { setCreateVisible(false); setNewTeamName(""); setNewSlotPref1(null); setNewSlotPref2(null); setCreateError(null); }}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </Pressable>
               <Pressable style={[styles.modalConfirm, (!newTeamName.trim() || creating) && styles.modalConfirmOff]} onPress={handleCreateTeam} disabled={creating || !newTeamName.trim()}>
@@ -1045,4 +1076,13 @@ const styles = StyleSheet.create({
 
   transferRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   transferRowSelected: { backgroundColor: "rgba(6,182,212,0.06)", borderRadius: 12, paddingHorizontal: 8, marginHorizontal: -8 },
+
+  slotLabel: { color: "#555", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
+  slotRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
+  slotChip: { flex: 1, paddingVertical: 9, borderRadius: 12, backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#2a2a2a", alignItems: "center" },
+  slotChipActive: { backgroundColor: "rgba(6,182,212,0.14)", borderColor: "#06b6d4" },
+  slotChipActive2: { backgroundColor: "rgba(245,158,11,0.12)", borderColor: "#f59e0b" },
+  slotChipText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  slotChipTextActive: { color: "#06b6d4", fontWeight: "800" },
+  slotChipTextActive2: { color: "#f59e0b", fontWeight: "800" },
 });
