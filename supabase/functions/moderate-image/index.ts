@@ -1,27 +1,49 @@
-// Supabase Edge Function — moderate-image
-// Called after every photo upload. Checks the image with Sightengine for
-// nudity, hate symbols, gore, and offensive content.
-// If flagged: deletes the file from storage, reverts the DB record, logs to
-// admin_audit_log, and returns { flagged: true, message: "..." } so the
-// client can show the user a warning.
-// Fails open — if credentials are missing or the API is unavailable the
-// upload is allowed through so the app keeps working.
+// Supabase Edge Function — moderate-image (AWS Rekognition)
+// Called after every photo upload. Downloads the image and sends it to
+// AWS Rekognition DetectModerationLabels. If flagged: deletes the file
+// from storage, reverts the DB record, logs to admin_audit_log, and
+// returns { flagged: true, message } so the client can warn the user.
+// Fails open — if credentials are missing or the API errors the upload
+// is allowed through so the app keeps working.
+//
+// Required env vars (set in Supabase Dashboard → Edge Functions → Secrets):
+//   AWS_ACCESS_KEY_ID      — IAM user with rekognition:DetectModerationLabels
+//   AWS_SECRET_ACCESS_KEY  — IAM user secret
+//   AWS_REGION             — e.g. us-east-1 (default: us-east-1)
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient }                                from "https://esm.sh/@supabase/supabase-js@2";
+import { RekognitionClient, DetectModerationLabelsCommand } from "https://esm.sh/@aws-sdk/client-rekognition@3";
 
-const SE_USER    = Deno.env.get("SIGHTENGINE_API_USER")    ?? "";
-const SE_SECRET  = Deno.env.get("SIGHTENGINE_API_SECRET")  ?? "";
+const AWS_KEY    = Deno.env.get("AWS_ACCESS_KEY_ID")     ?? "";
+const AWS_SECRET = Deno.env.get("AWS_SECRET_ACCESS_KEY") ?? "";
+const AWS_REGION = Deno.env.get("AWS_REGION")            ?? "us-east-1";
 const SUPA_URL   = Deno.env.get("SUPABASE_URL")!;
 const SUPA_SVC   = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Confidence thresholds (0–1). Lower = more sensitive.
-const T = {
-  sexual_activity:  0.40,
-  sexual_display:   0.40,
-  erotica:          0.50,
-  suggestive:       0.75,
-  offensive:        0.60,   // hate symbols, hate speech imagery
-  gore:             0.55,   // blood, gore, graphic violence
+// Minimum Rekognition confidence to act on (0–100). 70 = fairly strict.
+const MIN_CONFIDENCE = 70;
+
+// Rekognition label → user-facing reason string.
+// Only labels in this map trigger removal.
+const BLOCK_LABELS: Record<string, string> = {
+  "Explicit Nudity":          "explicit nudity",
+  "Graphic Male Nudity":      "explicit nudity",
+  "Graphic Female Nudity":    "explicit nudity",
+  "Sexual Activity":          "explicit sexual content",
+  "Partial Nudity":           "nudity",
+  "Suggestive":               "suggestive content",
+  "Revealing Clothes":        "suggestive content",
+  "Violence":                 "violent content",
+  "Graphic Violence Or Gore": "graphic violence or gore",
+  "Physical Violence":        "violent content",
+  "Weapon Violence":          "violent content",
+  "Hate Symbols":             "hate symbols",
+  "Nazi Party":               "hateful content",
+  "White Supremacy":          "hateful content",
+  "Extremist":                "extremist content",
+  "Visually Disturbing":      "disturbing content",
+  "Gore":                     "graphic violence or gore",
+  "Explosions And Blasts":    "violent content",
 };
 
 const CORS = {
@@ -34,9 +56,9 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST")
     return Response.json({ error: "method_not_allowed" }, { status: 405, headers: CORS });
 
-  // Skip gracefully when credentials not set (dev / CI environments)
-  if (!SE_USER || !SE_SECRET) {
-    console.warn("[moderate-image] Sightengine credentials not configured — skipping");
+  // Fail open when credentials not configured (dev environments)
+  if (!AWS_KEY || !AWS_SECRET) {
+    console.warn("[moderate-image] AWS credentials not configured — skipping moderation");
     return Response.json({ ok: true, flagged: false, skipped: true }, { headers: CORS });
   }
 
@@ -53,37 +75,39 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // ── Call Sightengine ──────────────────────────────────────────────────────
-    const seUrl = new URL("https://api.sightengine.com/1.0/check.json");
-    seUrl.searchParams.set("url",        image_url);
-    seUrl.searchParams.set("models",     "nudity-2.1,offensive,gore");
-    seUrl.searchParams.set("api_user",   SE_USER);
-    seUrl.searchParams.set("api_secret", SE_SECRET);
-
-    const seRes  = await fetch(seUrl.toString());
-    const seData = await seRes.json() as any;
-
-    if (seData.status !== "success") {
-      console.error("[moderate-image] Sightengine error:", JSON.stringify(seData));
-      return Response.json({ ok: true, flagged: false }, { headers: CORS }); // fail open
-    }
-
-    // ── Score evaluation ──────────────────────────────────────────────────────
-    const n       = seData.nudity  ?? {};
-    const reasons: string[] = [];
-
-    if ((n.sexual_activity ?? 0) > T.sexual_activity) reasons.push("explicit sexual content");
-    if ((n.sexual_display  ?? 0) > T.sexual_display)  reasons.push("explicit sexual content");
-    if ((n.erotica         ?? 0) > T.erotica)         reasons.push("explicit sexual content");
-    if ((n.suggestive      ?? 0) > T.suggestive)      reasons.push("suggestive content");
-    if ((seData.offensive?.prob ?? 0) > T.offensive)  reasons.push("offensive or hateful imagery");
-    if ((seData.gore?.prob       ?? 0) > T.gore)      reasons.push("graphic violence or gore");
-
-    const uniqueReasons = [...new Set(reasons)];
-
-    if (uniqueReasons.length === 0) {
+    // ── Fetch image bytes ─────────────────────────────────────────────────────
+    const imgRes = await fetch(image_url);
+    if (!imgRes.ok) {
+      console.warn("[moderate-image] Could not fetch image — skipping:", imgRes.status);
       return Response.json({ ok: true, flagged: false }, { headers: CORS });
     }
+    const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
+
+    // ── Call AWS Rekognition ──────────────────────────────────────────────────
+    const rekognition = new RekognitionClient({
+      region:      AWS_REGION,
+      credentials: { accessKeyId: AWS_KEY, secretAccessKey: AWS_SECRET },
+    });
+
+    const { ModerationLabels = [] } = await rekognition.send(
+      new DetectModerationLabelsCommand({
+        Image:         { Bytes: imgBytes },
+        MinConfidence: MIN_CONFIDENCE,
+      }),
+    );
+
+    // ── Evaluate labels ───────────────────────────────────────────────────────
+    const reasons = new Set<string>();
+    for (const label of ModerationLabels) {
+      const name = label.Name ?? "";
+      if (BLOCK_LABELS[name]) reasons.add(BLOCK_LABELS[name]);
+    }
+
+    if (reasons.size === 0) {
+      return Response.json({ ok: true, flagged: false }, { headers: CORS });
+    }
+
+    const uniqueReasons = [...reasons];
 
     // ── Flagged: clean up ─────────────────────────────────────────────────────
     const admin = createClient(SUPA_URL, SUPA_SVC, { auth: { persistSession: false } });
@@ -109,12 +133,8 @@ Deno.serve(async (req: Request) => {
       details: {
         bucket,
         path,
-        reasons:  uniqueReasons,
-        scores: {
-          nudity:    n,
-          offensive: seData.offensive,
-          gore:      seData.gore,
-        },
+        reasons:    uniqueReasons,
+        labels:     ModerationLabels.map((l) => ({ name: l.Name, confidence: l.Confidence })),
       },
     });
 
