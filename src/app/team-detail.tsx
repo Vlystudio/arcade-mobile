@@ -115,7 +115,9 @@ export default function TeamDetailScreen() {
       return { user_id: m.user_id, role: m.role, username: p?.username ?? "Unknown", avatar_url: p?.avatar_url ?? null };
     });
     setMembers(memberList);
-    setIsCaptain(teamRes.data?.captain_user_id === user.id);
+    const isCaptainByTeam = teamRes.data?.captain_user_id === user.id;
+    const isCaptainByRole = memberList.some((m) => m.user_id === user.id && m.role === "captain");
+    setIsCaptain(isCaptainByTeam || isCaptainByRole);
     const r = (profileRes.data as any)?.role ?? "user";
     setIsAdmin(r === "admin" || r === "owner" || r === "architect");
     setPhotoUrl((teamRes.data as any)?.photo_url ?? null);
@@ -437,7 +439,7 @@ export default function TeamDetailScreen() {
         {/* Announcements */}
         <View style={styles.announceSectionRow}>
           <Text style={styles.annSectionLabel}>Announcements</Text>
-          {isCaptain && (
+          {(isCaptain || isAdmin) && (
             <Pressable style={styles.announceAddBtn} onPress={() => setAnnounceVisible(true)}>
               <Ionicons name="add-circle" size={22} color="#06b6d4" />
             </Pressable>

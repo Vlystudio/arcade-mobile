@@ -3,9 +3,11 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -116,6 +118,17 @@ export default function LeaderboardScreen() {
     g.name.toLowerCase().includes(gameSearch.toLowerCase())
   );
 
+  async function shareScore(entry: LeaderEntry) {
+    const msg = `I ranked #${entry.rank} on the ${entry.game_name} leaderboard with ${entry.score.toLocaleString()} pts! 🎯`;
+    try {
+      if (Platform.OS === "web" && typeof navigator !== "undefined" && (navigator as any).share) {
+        await (navigator as any).share({ title: "My Arcade Score", text: msg });
+      } else {
+        await Share.share({ message: msg });
+      }
+    } catch {}
+  }
+
   if (authLoading || loading) {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
   }
@@ -209,7 +222,7 @@ export default function LeaderboardScreen() {
                   {[top3.find((e) => e.rank === 2), top3.find((e) => e.rank === 1), top3.find((e) => e.rank === 3)]
                     .filter(Boolean)
                     .map((entry) => (
-                      <PodiumCard key={entry!.rank} entry={entry!} isMe={entry!.user_id === user?.id} />
+                      <PodiumCard key={entry!.rank} entry={entry!} isMe={entry!.user_id === user?.id} onShare={() => shareScore(entry!)} />
                     ))}
                 </View>
               )}
@@ -232,6 +245,11 @@ export default function LeaderboardScreen() {
                         <Text style={styles.listGame}>{entry.game_name}</Text>
                       </View>
                       <Text style={styles.listScore}>{entry.score.toLocaleString()}</Text>
+                      {entry.user_id === user?.id && (
+                        <Pressable style={styles.listShareBtn} onPress={() => shareScore(entry)}>
+                          <Ionicons name="share-outline" size={16} color="#06b6d4" />
+                        </Pressable>
+                      )}
                     </View>
                   ))}
                 </View>
@@ -313,7 +331,7 @@ export default function LeaderboardScreen() {
   );
 }
 
-function PodiumCard({ entry, isMe }: { entry: LeaderEntry; isMe: boolean }) {
+function PodiumCard({ entry, isMe, onShare }: { entry: LeaderEntry; isMe: boolean; onShare: () => void }) {
   const isFirst = entry.rank === 1;
   const medals = ["🥇", "🥈", "🥉"];
   const accents = ["#f59e0b", "#94a3b8", "#b45309"];
@@ -330,6 +348,12 @@ function PodiumCard({ entry, isMe }: { entry: LeaderEntry; isMe: boolean }) {
       <Text style={styles.podiumUsername} numberOfLines={1}>{entry.username}</Text>
       <Text style={[styles.podiumScore, { color: accent }]}>{entry.score.toLocaleString()}</Text>
       <Text style={styles.podiumGame} numberOfLines={1}>{entry.game_name}</Text>
+      {isMe && (
+        <Pressable style={styles.shareBtn} onPress={onShare}>
+          <Ionicons name="share-outline" size={14} color="#06b6d4" />
+          <Text style={styles.shareBtnText}>Share</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -447,4 +471,17 @@ const styles = StyleSheet.create({
 
   pickerCancel: { backgroundColor: "#0d0d0d", borderRadius: 16, padding: 16, alignItems: "center" },
   pickerCancelText: { color: "#555", fontWeight: "700", fontSize: 15 },
+
+  shareBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(6,182,212,0.1)", borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 5, marginTop: 4,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.2)",
+  },
+  shareBtnText: { color: "#06b6d4", fontSize: 11, fontWeight: "700" },
+  listShareBtn: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.15)",
+  },
 });
