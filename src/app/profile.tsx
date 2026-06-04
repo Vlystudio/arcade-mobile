@@ -17,6 +17,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
+import { Avatar } from "../components/avatar";
+import { RoleBadge, isElevatedRole } from "../components/role-badge";
+import type { AppRole } from "../components/role-badge";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 
@@ -31,7 +34,8 @@ export default function ProfileScreen() {
   const [username, setUsername] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState<AppRole>("user");
+  const isAdmin = isElevatedRole(role);
   const [pendingCount, setPendingCount] = useState(0);
   const [teamName, setTeamName] = useState<string | null>(null);
   const [teamRole, setTeamRole] = useState<string | null>(null);
@@ -73,10 +77,23 @@ export default function ProfileScreen() {
   const [savingPrivacy, setSavingPrivacy] = useState(false);
   const [savingStatus, setSavingStatus]   = useState(false);
 
+  // Bio
+  const BIO_LIMIT = 160;
+  const [bio, setBio]               = useState<string | null>(null);
+  const [editingBio, setEditingBio] = useState(false);
+  const [draftBio, setDraftBio]     = useState("");
+  const [savingBio, setSavingBio]   = useState(false);
+
+  // User search
+  const [searchVisible, setSearchVisible]   = useState(false);
+  const [searchQuery, setSearchQuery]       = useState("");
+  const [searchResults, setSearchResults]   = useState<{ id: string; username: string; avatar_url: string | null; role: AppRole }[]>([]);
+  const [searching, setSearching]           = useState(false);
+
   async function loadProfile() {
     if (!user) return;
     const [profileRes, scoresRes, pendingRes, teamRes, placementsRes] = await Promise.all([
-      supabase.from("profiles").select("username, avatar_url, is_admin, featured_game_id, is_private, online_status").eq("id", user.id).single(),
+      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio").eq("id", user.id).single(),
       supabase.from("scores").select("score, game_id, games(id, name, type)").eq("user_id", user.id).eq("status", "approved"),
       supabase.from("scores").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       supabase.from("team_members").select("role, teams(name)").eq("user_id", user.id).maybeSingle(),
@@ -91,10 +108,11 @@ export default function ProfileScreen() {
     if (profileRes.data) {
       setUsername(profileRes.data.username);
       setAvatarUrl(profileRes.data.avatar_url ?? null);
-      setIsAdmin(profileRes.data.is_admin ?? false);
+      setRole((profileRes.data.role ?? "user") as AppRole);
       setFeaturedGameId(profileRes.data.featured_game_id ?? null);
       setIsPrivate(profileRes.data.is_private ?? false);
       setOnlineStatus((profileRes.data.online_status ?? "offline") as "online" | "offline");
+      setBio(profileRes.data.bio ?? null);
     }
     setEmail(user.email ?? null);
     setPendingCount(pendingRes.count ?? 0);
@@ -252,6 +270,41 @@ export default function ProfileScreen() {
     setSavingPrivacy(false);
   }
 
+  async function saveBio() {
+    if (!user) return;
+    setSavingBio(true);
+    const trimmed = draftBio.trim();
+    const { error } = await supabase.from("profiles").update({ bio: trimmed || null }).eq("id", user.id);
+    if (!error) { setBio(trimmed || null); setEditingBio(false); }
+    else Alert.alert("Error", error.message);
+    setSavingBio(false);
+  }
+
+  async function searchUsers(q: string) {
+    setSearchQuery(q);
+    if (!q.trim()) { setSearchResults([]); return; }
+    setSearching(true);
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url, role")
+      .ilike("username", `%${q.trim()}%`)
+      .neq("id", user!.id)
+      .limit(15);
+    setSearchResults((data ?? []).map((p: any) => ({
+      id: p.id,
+      username: p.username ?? "Unknown",
+      avatar_url: p.avatar_url ?? null,
+      role: (p.role ?? "user") as AppRole,
+    })));
+    setSearching(false);
+  }
+
+  function closeSearch() {
+    setSearchVisible(false);
+    setSearchQuery("");
+    setSearchResults([]);
+  }
+
   async function toggleStatus() {
     if (!user || savingStatus) return;
     setSavingStatus(true);
@@ -278,6 +331,12 @@ export default function ProfileScreen() {
   return (
     <View style={styles.root}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
+        <View style={styles.topBar}>
+          <Text style={styles.topBarTitle}>Profile</Text>
+          <Pressable style={styles.searchIconBtn} onPress={() => setSearchVisible(true)}>
+            <Ionicons name="search-outline" size={21} color="#06b6d4" />
+          </Pressable>
+        </View>
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
@@ -330,13 +389,16 @@ export default function ProfileScreen() {
                 )}
               </View>
             ) : (
-              <Pressable
-                style={styles.usernameRow}
-                onPress={() => { setDraftUsername(username ?? ""); setEditingUsername(true); }}
-              >
-                <Text style={styles.heroName}>{username ?? "Player"}</Text>
-                <Ionicons name="pencil-outline" size={14} color="#444" />
-              </Pressable>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Pressable
+                  style={styles.usernameRow}
+                  onPress={() => { setDraftUsername(username ?? ""); setEditingUsername(true); }}
+                >
+                  <Text style={styles.heroName}>{username ?? "Player"}</Text>
+                  <Ionicons name="pencil-outline" size={14} color="#444" />
+                </Pressable>
+                <RoleBadge role={role} size={16} />
+              </View>
             )}
 
             <Text style={styles.heroEmail}>{email ?? ""}</Text>
@@ -345,6 +407,41 @@ export default function ProfileScreen() {
                 {teamRole === "captain" && <Ionicons name="star" size={11} color="#f59e0b" />}
                 <Text style={styles.teamPillText}>{teamName}</Text>
               </View>
+            )}
+
+            {/* Bio */}
+            {editingBio ? (
+              <View style={styles.bioEditWrap}>
+                <TextInput
+                  style={styles.bioInput}
+                  value={draftBio}
+                  onChangeText={setDraftBio}
+                  multiline
+                  maxLength={BIO_LIMIT}
+                  placeholder="Write something about yourself…"
+                  placeholderTextColor="#333"
+                  autoFocus
+                />
+                <View style={styles.bioBtmRow}>
+                  <Text style={styles.bioCount}>{draftBio.length}/{BIO_LIMIT}</Text>
+                  <View style={{ flexDirection: "row", gap: 4 }}>
+                    <Pressable onPress={() => { setEditingBio(false); setDraftBio(bio ?? ""); }}>
+                      <Text style={styles.bioCancelText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable onPress={saveBio} disabled={savingBio}>
+                      {savingBio
+                        ? <ActivityIndicator size="small" color="#06b6d4" />
+                        : <Text style={styles.bioSaveText}>Save</Text>}
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <Pressable onPress={() => { setDraftBio(bio ?? ""); setEditingBio(true); }} style={styles.bioTapArea}>
+                <Text style={bio ? styles.bioText : styles.bioPlaceholder}>
+                  {bio || "+ Add a bio"}
+                </Text>
+              </Pressable>
             )}
           </View>
 
@@ -428,6 +525,12 @@ export default function ProfileScreen() {
             <ActionRow icon="people-outline" label="Manage Teams" onPress={() => router.push("/teams")} divider />
             <ActionRow icon="podium-outline" label="Leaderboard" onPress={() => router.push("/leaderboard")} divider />
             <ActionRow icon="trophy-outline" label="Leagues" onPress={() => router.push("/leagues")} divider />
+            {(role === "owner" || role === "architect") && (
+              <ActionRow icon="business-outline" label="Owner Dashboard" onPress={() => router.push("/owner" as any)} divider />
+            )}
+            {role === "architect" && (
+              <ActionRow icon="hardware-chip-outline" label="Architect Panel" onPress={() => router.push("/architect" as any)} divider />
+            )}
             {isAdmin && (
               <ActionRow
                 icon="shield-checkmark-outline"
@@ -567,6 +670,57 @@ export default function ProfileScreen() {
             )}
             <Pressable style={styles.pickerCancel} onPress={() => setGamePickerVisible(false)}>
               <Text style={styles.pickerCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* User search modal */}
+      <Modal visible={searchVisible} transparent animationType="slide" onRequestClose={closeSearch}>
+        <View style={styles.pickerBg}>
+          <Pressable style={styles.pickerDismiss} onPress={closeSearch} />
+          <View style={[styles.pickerSheet, { maxHeight: "85%", gap: 0 }]}>
+            <View style={styles.pickerHandle} />
+            <Text style={[styles.pickerTitle, { marginBottom: 16 }]}>Find Users</Text>
+            <View style={styles.searchInputWrap}>
+              <Ionicons name="search-outline" size={16} color="#444" />
+              <TextInput
+                style={styles.searchTextInput}
+                placeholder="Search by username…"
+                placeholderTextColor="#333"
+                autoFocus
+                autoCapitalize="none"
+                value={searchQuery}
+                onChangeText={searchUsers}
+              />
+              {searching && <ActivityIndicator size="small" color="#555" />}
+            </View>
+            <ScrollView style={{ maxHeight: 380 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {searchResults.length === 0 && searchQuery.trim() !== "" && !searching ? (
+                <View style={styles.searchNoResults}>
+                  <Ionicons name="person-outline" size={28} color="#222" />
+                  <Text style={styles.searchNoResultsText}>No users found</Text>
+                </View>
+              ) : (
+                searchResults.map((r) => (
+                  <Pressable
+                    key={r.id}
+                    style={({ pressed }) => [styles.searchResultRow, pressed && { opacity: 0.7 }]}
+                    onPress={() => {
+                      closeSearch();
+                      router.push({ pathname: "/user-profile" as any, params: { userId: r.id } });
+                    }}
+                  >
+                    <Avatar uri={r.avatar_url} name={r.username} size={40} />
+                    <Text style={[styles.searchResultName, { flex: 1 }]}>{r.username}</Text>
+                    <RoleBadge role={r.role} size={14} />
+                    <Ionicons name="chevron-forward" size={16} color="#333" />
+                  </Pressable>
+                ))
+              )}
+            </ScrollView>
+            <Pressable style={[styles.pickerCancel, { marginTop: 10 }]} onPress={closeSearch}>
+              <Text style={styles.pickerCancelText}>Close</Text>
             </Pressable>
           </View>
         </View>
@@ -809,4 +963,45 @@ const styles = StyleSheet.create({
   noGamesWrap: { alignItems: "center", gap: 8, paddingVertical: 24 },
   noGamesText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   noGamesSub: { color: "#444", fontSize: 12, textAlign: "center" },
+
+  topBar: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 18, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  topBarTitle: { color: "#fff", fontSize: 17, fontWeight: "900" },
+  searchIconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
+
+  bioTapArea: { marginTop: 6, marginBottom: 2, paddingHorizontal: 8 },
+  bioText: { color: "#888", fontSize: 14, textAlign: "center", lineHeight: 20, maxWidth: 300 },
+  bioPlaceholder: { color: "#2a2a2a", fontSize: 13, textAlign: "center", fontStyle: "italic" },
+  bioEditWrap: {
+    width: "100%", marginTop: 8, marginBottom: 2,
+    backgroundColor: "#111", borderRadius: 14,
+    padding: 14, borderWidth: 1, borderColor: "#222",
+  },
+  bioInput: {
+    color: "#fff", fontSize: 14, lineHeight: 20,
+    minHeight: 56, maxHeight: 100, textAlignVertical: "top",
+  },
+  bioBtmRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
+  bioCount: { color: "#333", fontSize: 11 },
+  bioCancelText: { color: "#555", fontSize: 13, fontWeight: "700", paddingHorizontal: 6 },
+  bioSaveText: { color: "#06b6d4", fontSize: 13, fontWeight: "800", paddingHorizontal: 6 },
+
+  searchInputWrap: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#0a0a0a", borderRadius: 14,
+    paddingHorizontal: 14, paddingVertical: 12,
+    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12,
+  },
+  searchTextInput: { flex: 1, color: "#fff", fontSize: 15 },
+  searchResultRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  searchResultName: { color: "#fff", fontSize: 15, fontWeight: "700" },
+  searchNoResults: { alignItems: "center", gap: 8, paddingVertical: 32 },
+  searchNoResultsText: { color: "#444", fontSize: 14 },
 });

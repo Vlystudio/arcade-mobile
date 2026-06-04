@@ -31,6 +31,7 @@ import {
 } from "../../lib/crypto";
 
 const MAX_BYTES = 5 * 1024 * 1024;
+const MOD_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
 type RawMessage = {
   id: string;
@@ -178,8 +179,25 @@ export default function ChatConversationScreen() {
   async function sendMessage() {
     if (!text.trim() || !user || !conversationId || sending) return;
     const content = text.trim();
-    setText("");
     setSending(true);
+
+    try {
+      const r = await fetch(`${MOD_BASE}/api/moderation/text`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: content }),
+      });
+      if (r.ok) {
+        const mod = await r.json();
+        if (mod.flagged) {
+          setSending(false);
+          Alert.alert("Message blocked", "Your message violates our community guidelines and cannot be sent.");
+          return;
+        }
+      }
+    } catch { /* allow if moderation unavailable */ }
+
+    setText("");
 
     let insertData: Record<string, any> = {
       conversation_id: conversationId,
@@ -240,6 +258,24 @@ export default function ChatConversationScreen() {
     }
 
     const { data: urlData } = supabase.storage.from("message-media").getPublicUrl(path);
+
+    try {
+      const r = await fetch(`${MOD_BASE}/api/moderation/image`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: urlData.publicUrl }),
+      });
+      if (r.ok) {
+        const mod = await r.json();
+        if (mod.flagged) {
+          await supabase.storage.from("message-media").remove([path]);
+          Alert.alert("Image blocked", "Your image was flagged for inappropriate content and was not sent.");
+          setUploading(false);
+          return;
+        }
+      }
+    } catch { /* allow if moderation unavailable */ }
+
     const { error: msgError } = await supabase.from("messages").insert({
       conversation_id: conversationId,
       sender_id: user.id,

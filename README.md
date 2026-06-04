@@ -38,8 +38,21 @@ Create a `.env` file in the project root (never commit this):
 EXPO_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 EXPO_PUBLIC_SITE_URL=https://your-live-site.example.com
+EXPO_PUBLIC_API_BASE_URL=https://your-live-site.example.com
 ```
 The anon key is safe to ship in a mobile app — it can only do what your RLS policies allow.
+
+Square credentials must be configured only in the server/deployment environment, never as `EXPO_PUBLIC_*` variables:
+```env
+SQUARE_ACCESS_TOKEN=your-square-access-token
+SQUARE_ENVIRONMENT=sandbox
+SQUARE_LOCATION_ARCADE_BAR_ID=square-location-id
+SQUARE_LOCATION_VINYL_HALL_ID=square-location-id
+SQUARE_VERSION=2026-05-20
+SQUARE_REFERENCE_PREFIX=arcadetracker
+SQUARE_CURRENCY=USD
+SQUARE_CHECKOUT_REDIRECT_URL=https://your-live-site.example.com/food
+```
 
 ### 3. Database setup
 Run these SQL scripts **in order** in the Supabase SQL Editor:
@@ -172,6 +185,16 @@ eas submit --platform android
 | `EXPO_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `EXPO_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (public, safe to expose) |
 | `EXPO_PUBLIC_SITE_URL` | Public web origin used as an auth email redirect fallback |
+| `EXPO_PUBLIC_API_BASE_URL` | Public web origin used by native builds for server API calls |
+| `SQUARE_ACCESS_TOKEN` | Server-only Square access token with catalog/order scopes |
+| `SQUARE_ENVIRONMENT` | `sandbox` for Square Sandbox, omit or use production env vars for live |
+| `SQUARE_LOCATION_ARCADE_BAR_ID` | Square location ID for Arcade Bar |
+| `SQUARE_LOCATION_VINYL_HALL_ID` | Square location ID for Vinyl Hall |
+| `SQUARE_LOCATION_ID` | Optional fallback Square location ID |
+| `SQUARE_VERSION` | Square API version, defaults to `2026-05-20` |
+| `SQUARE_REFERENCE_PREFIX` | Optional prefix for Square order reference IDs |
+| `SQUARE_CURRENCY` | Currency for fallback non-catalog checkout items, defaults to `USD` |
+| `SQUARE_CHECKOUT_REDIRECT_URL` | Optional URL Square sends customers to after payment |
 
 ---
 

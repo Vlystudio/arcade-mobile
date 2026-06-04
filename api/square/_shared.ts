@@ -157,5 +157,7 @@ function normalizeCategory(name: string | undefined) {
 
 function getSquareErrorMessage(data: any, fallback: string) {
   const firstError = data?.errors?.[0];
-  return firstError?.detail ?? firstError?.code ?? data?.message ?? fallback;
+  const detail = firstError?.detail ?? firstError?.code ?? data?.message ?? fallback;
+  const field = firstError?.field;
+  return field ? `${detail} (field: ${field})` : detail;
 }

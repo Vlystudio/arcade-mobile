@@ -628,7 +628,7 @@ function FoodTab() {
                 </View>
                 <View style={fd.checkoutBtn}>
                   <Ionicons name="card-outline" size={18} color="#000" />
-                  <Text style={fd.checkoutBtnText}>Checkout via Toast</Text>
+                  <Text style={fd.checkoutBtnText}>Checkout via Square</Text>
                 </View>
               </>
             )}

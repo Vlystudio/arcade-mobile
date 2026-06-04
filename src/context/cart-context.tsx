@@ -7,6 +7,9 @@ export type CartItem = {
   price: number;
   quantity: number;
   customizations: string[];
+  source?: "supabase" | "square";
+  squareVariationId?: string;
+  squareItemId?: string;
 };
 
 type CartsByLocation = {
@@ -40,7 +43,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     setCarts((prev) => {
       const current = prev[slug];
       const existing = current.find(
-        (i) => i.id === item.id && JSON.stringify(i.customizations) === JSON.stringify(item.customizations)
+        (i) =>
+          i.id === item.id &&
+          i.squareVariationId === item.squareVariationId &&
+          JSON.stringify(i.customizations) === JSON.stringify(item.customizations)
       );
       if (existing) {
         return { ...prev, [slug]: current.map((i) => i.id === item.id ? { ...i, quantity: i.quantity + 1 } : i) };

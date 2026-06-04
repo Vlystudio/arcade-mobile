@@ -1,9 +1,12 @@
+import { checkRateLimit } from "../_ratelimit";
 import { assertSquareConfigured, fetchSquareCategories, normalizeSquareCatalogItems, sendJson, squareRequest } from "./_shared";
 
 export default async function handler(req: any, res: any) {
   if (req.method !== "GET") {
     return sendJson(res, 405, { error: "Method not allowed" });
   }
+
+  if (!(await checkRateLimit(req, res))) return;
 
   const locationSlug = String(req.query?.location ?? "arcade_bar");
   const config = assertSquareConfigured(locationSlug);

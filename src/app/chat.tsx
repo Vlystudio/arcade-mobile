@@ -1,9 +1,13 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Animated,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -37,6 +41,7 @@ type FriendResult = {
 export default function ChatScreen() {
   const { user, loading: authLoading } = useRequireAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [unreadMap, setUnreadMap] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [newChatVisible, setNewChatVisible] = useState(false);
   const [friends, setFriends] = useState<FriendResult[]>([]);
@@ -47,22 +52,45 @@ export default function ChatScreen() {
   async function loadConversations() {
     if (!user) return;
 
-    const { data } = await supabase
+    // Step 1: fetch conversations (no join — more reliable cross-platform)
+    const { data: convData } = await supabase
       .from("conversations")
-      .select("id, participant_1, participant_2, last_message, last_message_at, p1:profiles!participant_1(username, avatar_url), p2:profiles!participant_2(username, avatar_url)")
+      .select("id, participant_1, participant_2, last_message, last_message_at")
       .or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`)
       .order("last_message_at", { ascending: false, nullsFirst: false });
 
-    const mapped: Conversation[] = (data ?? []).map((c: any) => {
-      const isP1 = c.participant_1 === user.id;
-      const otherProfile = isP1
-        ? (Array.isArray(c.p2) ? c.p2[0] : c.p2)
-        : (Array.isArray(c.p1) ? c.p1[0] : c.p1);
+    if (!convData?.length) {
+      setConversations([]);
+      setLoading(false);
+      return;
+    }
+
+    // Step 2: fetch profiles for the other participants
+    const otherIds = convData.map((c: any) =>
+      c.participant_1 === user.id ? c.participant_2 : c.participant_1
+    );
+
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url")
+      .in("id", otherIds);
+
+    const profileMap: Record<string, { username: string; avatar_url: string | null }> = {};
+    for (const p of profileData ?? []) {
+      profileMap[(p as any).id] = {
+        username: (p as any).username ?? "Unknown",
+        avatar_url: (p as any).avatar_url ?? null,
+      };
+    }
+
+    const mapped: Conversation[] = convData.map((c: any) => {
+      const otherId = c.participant_1 === user.id ? c.participant_2 : c.participant_1;
+      const profile = profileMap[otherId];
       return {
         id: c.id,
-        other_user_id: isP1 ? c.participant_2 : c.participant_1,
-        other_username: otherProfile?.username ?? "Unknown",
-        other_avatar_url: otherProfile?.avatar_url ?? null,
+        other_user_id: otherId,
+        other_username: profile?.username ?? "Unknown",
+        other_avatar_url: profile?.avatar_url ?? null,
         last_message: c.last_message,
         last_message_at: c.last_message_at,
       };
@@ -70,6 +98,43 @@ export default function ChatScreen() {
 
     setConversations(mapped);
     setLoading(false);
+
+    // Load unread status from AsyncStorage
+    const entries = await Promise.all(
+      mapped.map(async (c) => {
+        const lastRead = await AsyncStorage.getItem(`read_${c.id}`);
+        const isUnread =
+          !!c.last_message_at &&
+          (!lastRead || new Date(c.last_message_at) > new Date(lastRead));
+        return [c.id, isUnread] as [string, boolean];
+      })
+    );
+    setUnreadMap(Object.fromEntries(entries));
+  }
+
+  async function markRead(convId: string) {
+    await AsyncStorage.setItem(`read_${convId}`, new Date().toISOString());
+    setUnreadMap((prev) => ({ ...prev, [convId]: false }));
+  }
+
+  async function openConversation(conv: Conversation) {
+    await markRead(conv.id);
+    router.push({
+      pathname: "/chat-conversation" as any,
+      params: {
+        conversationId: conv.id,
+        otherUserId: conv.other_user_id,
+        otherUsername: conv.other_username,
+        otherAvatarUrl: conv.other_avatar_url ?? "",
+      },
+    });
+  }
+
+  async function deleteConversation(convId: string) {
+    setConversations((prev) => prev.filter((c) => c.id !== convId));
+    await AsyncStorage.removeItem(`read_${convId}`);
+    await supabase.from("messages").delete().eq("conversation_id", convId);
+    await supabase.from("conversations").delete().eq("id", convId);
   }
 
   async function loadFriends() {
@@ -132,6 +197,7 @@ export default function ChatScreen() {
     setNewChatVisible(false);
     setFilterText("");
 
+    await markRead(convId);
     router.push({
       pathname: "/chat-conversation" as any,
       params: {
@@ -148,7 +214,28 @@ export default function ChatScreen() {
     loadFriends();
   }
 
-  useEffect(() => { if (user) loadConversations(); }, [user]);
+  useEffect(() => {
+    if (!user) return;
+
+    loadConversations();
+
+    // Live updates: re-fetch when any conversation involving this user changes
+    const channel = supabase
+      .channel(`chats:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversations", filter: `participant_1=eq.${user.id}` },
+        () => loadConversations()
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversations", filter: `participant_2=eq.${user.id}` },
+        () => loadConversations()
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user]);
 
   if (authLoading || loading) {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
@@ -180,28 +267,22 @@ export default function ChatScreen() {
             </View>
           ) : (
             conversations.map((c) => (
-              <Pressable
+              <SwipeableConvRow
                 key={c.id}
-                style={({ pressed }) => [styles.convRow, pressed && { backgroundColor: "#0d0d0d" }]}
-                onPress={() => router.push({
-                  pathname: "/chat-conversation" as any,
-                  params: {
-                    conversationId: c.id,
-                    otherUserId: c.other_user_id,
-                    otherUsername: c.other_username,
-                    otherAvatarUrl: c.other_avatar_url ?? "",
-                  },
-                })}
-              >
-                <Avatar uri={c.other_avatar_url} name={c.other_username} size={46} />
-                <View style={styles.convBody}>
-                  <Text style={styles.convName}>{c.other_username}</Text>
-                  <Text style={styles.convLast} numberOfLines={1}>{c.last_message ?? "No messages yet"}</Text>
-                </View>
-                {c.last_message_at && (
-                  <Text style={styles.convTime}>{relTime(c.last_message_at)}</Text>
-                )}
-              </Pressable>
+                conv={c}
+                isUnread={!!unreadMap[c.id]}
+                onOpen={() => openConversation(c)}
+                onDelete={() =>
+                  Alert.alert(
+                    "Delete conversation",
+                    "This will remove the chat for both you and the other person.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { text: "Delete", style: "destructive", onPress: () => deleteConversation(c.id) },
+                    ]
+                  )
+                }
+              />
             ))
           )}
         </ScrollView>
@@ -276,6 +357,109 @@ export default function ChatScreen() {
   );
 }
 
+// ─── Swipeable conversation row ───────────────────────────────────────────────
+
+function SwipeableConvRow({
+  conv,
+  isUnread,
+  onOpen,
+  onDelete,
+}: {
+  conv: Conversation;
+  isUnread: boolean;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const isOpen = useRef(false);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, { dx, dy }) =>
+        Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8,
+      onPanResponderMove: (_, { dx }) => {
+        if (dx < 0 && !isOpen.current) {
+          translateX.setValue(Math.max(dx, -80));
+        } else if (isOpen.current) {
+          translateX.setValue(Math.min(-80 + dx, 0));
+        }
+      },
+      onPanResponderRelease: (_, { dx }) => {
+        const shouldOpen = dx < -40 && !isOpen.current;
+        const shouldClose = dx > 30 && isOpen.current;
+        if (shouldOpen) {
+          Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
+          isOpen.current = true;
+        } else if (shouldClose) {
+          Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+          isOpen.current = false;
+        } else {
+          Animated.spring(translateX, {
+            toValue: isOpen.current ? -80 : 0,
+            useNativeDriver: true,
+          }).start();
+        }
+      },
+    })
+  ).current;
+
+  function close() {
+    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
+    isOpen.current = false;
+  }
+
+  return (
+    <View style={styles.swipeContainer}>
+      {/* Delete action revealed on swipe */}
+      <View style={styles.deleteAction}>
+        <Pressable
+          style={styles.deleteBtn}
+          onPress={() => { close(); onDelete(); }}
+        >
+          <Ionicons name="trash-outline" size={20} color="#fff" />
+          <Text style={styles.deleteBtnText}>Delete</Text>
+        </Pressable>
+      </View>
+
+      <Animated.View
+        style={{ transform: [{ translateX }] }}
+        {...panResponder.panHandlers}
+      >
+        <Pressable
+          style={({ pressed }) => [
+            styles.convRow,
+            pressed && !isOpen.current && { backgroundColor: "#0d0d0d" },
+          ]}
+          onPress={() => {
+            if (isOpen.current) { close(); } else { onOpen(); }
+          }}
+        >
+          <Avatar uri={conv.other_avatar_url} name={conv.other_username} size={46} />
+          <View style={styles.convBody}>
+            <Text style={[styles.convName, isUnread && styles.convNameUnread]}>
+              {conv.other_username}
+            </Text>
+            <Text
+              style={[styles.convLast, isUnread && styles.convLastUnread]}
+              numberOfLines={1}
+            >
+              {conv.last_message ?? "No messages yet"}
+            </Text>
+          </View>
+          <View style={styles.convMeta}>
+            {conv.last_message_at && (
+              <Text style={styles.convTime}>{relTime(conv.last_message_at)}</Text>
+            )}
+            {isUnread && <View style={styles.unreadDot} />}
+          </View>
+        </Pressable>
+      </Animated.View>
+    </View>
+  );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function relTime(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
   if (diff < 60) return "now";
@@ -283,6 +467,8 @@ function relTime(iso: string) {
   if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#000" },
@@ -304,15 +490,32 @@ const styles = StyleSheet.create({
   emptyBtn: { marginTop: 8, backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 24, paddingVertical: 12 },
   emptyBtnText: { color: "#000", fontWeight: "900", fontSize: 15 },
 
+  swipeContainer: { overflow: "hidden" },
+  deleteAction: {
+    position: "absolute", right: 0, top: 0, bottom: 0, width: 80,
+    backgroundColor: "#ef4444",
+    alignItems: "center", justifyContent: "center",
+  },
+  deleteBtn: { alignItems: "center", gap: 4 },
+  deleteBtnText: { color: "#fff", fontSize: 11, fontWeight: "700" },
+
   convRow: {
     flexDirection: "row", alignItems: "center", gap: 14,
     paddingHorizontal: 20, paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#111",
+    backgroundColor: "#000",
   },
   convBody: { flex: 1 },
-  convName: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 2 },
-  convLast: { color: "#555", fontSize: 13 },
+  convName: { color: "#ccc", fontSize: 15, fontWeight: "700", marginBottom: 2 },
+  convNameUnread: { color: "#fff", fontWeight: "900" },
+  convLast: { color: "#444", fontSize: 13 },
+  convLastUnread: { color: "#888", fontWeight: "600" },
+  convMeta: { alignItems: "flex-end", gap: 5 },
   convTime: { color: "#444", fontSize: 12 },
+  unreadDot: {
+    width: 9, height: 9, borderRadius: 5,
+    backgroundColor: "#06b6d4",
+  },
 
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   modalSheet: {

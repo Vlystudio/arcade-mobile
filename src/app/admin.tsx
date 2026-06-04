@@ -21,7 +21,7 @@ import { supabase } from "../../lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users";
 type ReviewTab = "pending" | "approved" | "denied";
 
 type ReviewScore = {
@@ -102,6 +102,7 @@ const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
   { key: "health",      label: "Health",      icon: "pulse-outline" },
   { key: "teams",       label: "Teams",       icon: "people-outline" },
   { key: "tournaments", label: "Tourneys",    icon: "trophy-outline" },
+  { key: "users",       label: "Users",       icon: "person-outline" },
 ];
 
 const REVIEW_TABS: ReviewTab[] = ["pending", "approved", "denied"];
@@ -140,7 +141,16 @@ const TYPE_COLORS: Record<string, string> = {
 export default function AdminScreen() {
   const { user, loading: authLoading } = useRequireAuth();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [userRole, setUserRole] = useState<string>("user");
   const [checking, setChecking] = useState(true);
+
+  // Users tab state
+  type UserProfile = { id: string; username: string; avatar_url: string | null; role: string; email?: string };
+  const [usersData, setUsersData] = useState<UserProfile[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [roleChanging, setRoleChanging] = useState<string | null>(null);
+  const [usersError, setUsersError] = useState<string | null>(null);
 
   // Main navigation
   const [mainTab, setMainTab] = useState<MainTab>("reviews");
@@ -198,6 +208,7 @@ export default function AdminScreen() {
     if (mainTab === "stats" && !statsData) loadStats();
     if (mainTab === "health" && !healthData) loadHealth();
     if (mainTab === "teams") loadAdminTeams();
+    if (mainTab === "users") loadUsers();
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
       else loadTournRequests(tournTab as "pending" | "approved" | "denied");
@@ -210,10 +221,34 @@ export default function AdminScreen() {
   }, [tournTab]);
 
   async function checkAdminAndLoad() {
-    const { data } = await supabase.from("profiles").select("is_admin").eq("id", user!.id).single();
-    if (!data?.is_admin) { router.replace("/"); return; }
+    const { data } = await supabase.from("profiles").select("role").eq("id", user!.id).single();
+    const role = data?.role ?? "user";
+    if (!["admin", "owner", "architect"].includes(role)) { router.replace("/"); return; }
     setIsAdmin(true);
+    setUserRole(role);
     setChecking(false);
+  }
+
+  async function loadUsers() {
+    setUsersLoading(true);
+    setUsersError(null);
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, username, avatar_url, role")
+      .order("username", { ascending: true })
+      .limit(200);
+    if (error) { setUsersError(error.message); setUsersLoading(false); return; }
+    setUsersData((data ?? []) as any[]);
+    setUsersLoading(false);
+  }
+
+  async function handleRoleChange(targetId: string, newRole: string) {
+    setRoleChanging(targetId);
+    setUsersError(null);
+    const { error } = await supabase.rpc("set_user_role", { target_user_id: targetId, new_role: newRole });
+    if (error) { setUsersError(error.message); }
+    else { setUsersData((prev) => prev.map((u) => u.id === targetId ? { ...u, role: newRole } : u)); }
+    setRoleChanging(null);
   }
 
   // ── Reviews ────────────────────────────────────────────────────────────────
@@ -556,7 +591,7 @@ export default function AdminScreen() {
 
       {/* Main tab bar */}
       <View style={styles.mainTabBar}>
-        {MAIN_TABS.map(({ key, label, icon }) => (
+        {MAIN_TABS.filter((t) => t.key !== "users" || userRole === "owner" || userRole === "architect").map(({ key, label, icon }) => (
           <Pressable
             key={key}
             style={[styles.mainTabItem, mainTab === key && styles.mainTabItemActive]}
@@ -870,6 +905,70 @@ export default function AdminScreen() {
           </ScrollView>
           )}
         </>
+      )}
+
+      {/* ── Users ── */}
+      {mainTab === "users" && (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={loadUsers} tintColor="#06b6d4" />}
+        >
+          {usersError && <ErrorBanner message={usersError} />}
+          <TextInput
+            style={styles.userSearchInput}
+            placeholder="Search by username…"
+            placeholderTextColor="#444"
+            value={userSearch}
+            onChangeText={setUserSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          {usersLoading ? (
+            <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
+          ) : (
+            usersData
+              .filter((u) => !userSearch || u.username?.toLowerCase().includes(userSearch.toLowerCase()))
+              .map((u) => {
+                const cfg: Record<string, { color: string }> = {
+                  architect: { color: "#a855f7" },
+                  owner:     { color: "#f59e0b" },
+                  admin:     { color: "#3b82f6" },
+                  user:      { color: "#444" },
+                };
+                const color = cfg[u.role]?.color ?? "#444";
+                const availableRoles = userRole === "architect"
+                  ? ["user", "admin", "owner", "architect"]
+                  : ["user", "admin"];
+                return (
+                  <View key={u.id} style={styles.userCard}>
+                    <Avatar uri={u.avatar_url} name={u.username} size={42} radius={13} />
+                    <View style={{ flex: 1, marginLeft: 12 }}>
+                      <Text style={styles.userCardName}>{u.username ?? "Unknown"}</Text>
+                      <View style={[styles.userRolePill, { borderColor: color + "44", backgroundColor: color + "12" }]}>
+                        {u.role !== "user" && <Ionicons name="checkmark-circle" size={11} color={color} />}
+                        <Text style={[styles.userRolePillText, { color }]}>{u.role}</Text>
+                      </View>
+                    </View>
+                    <View style={styles.userRoleActions}>
+                      {availableRoles
+                        .filter((r) => r !== u.role)
+                        .map((r) => (
+                          <Pressable
+                            key={r}
+                            style={[styles.userRoleBtn, roleChanging === u.id && { opacity: 0.4 }]}
+                            onPress={() => handleRoleChange(u.id, r)}
+                            disabled={roleChanging === u.id}
+                          >
+                            <Text style={styles.userRoleBtnText}>→ {r}</Text>
+                          </Pressable>
+                        ))}
+                    </View>
+                  </View>
+                );
+              })
+          )}
+        </ScrollView>
       )}
 
       {/* Post results modal */}
@@ -1484,4 +1583,29 @@ const styles = StyleSheet.create({
   photoModalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
   photoModalTitle:  { color: "#fff", fontSize: 16, fontWeight: "800" },
   photoModalImage:  { width: "100%", height: 420 },
+
+  // Users tab
+  userSearchInput: {
+    backgroundColor: "#111", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
+    color: "#fff", fontSize: 14, paddingHorizontal: 16, paddingVertical: 12,
+    marginBottom: 12,
+  },
+  userCard: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#111", borderRadius: 16, padding: 14,
+    marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  userCardName: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 4 },
+  userRolePill: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderRadius: 8, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 3,
+    alignSelf: "flex-start",
+  },
+  userRolePillText: { fontSize: 11, fontWeight: "700", textTransform: "capitalize" },
+  userRoleActions: { flexDirection: "column", gap: 4, alignItems: "flex-end" },
+  userRoleBtn: {
+    backgroundColor: "#1a1a1a", borderRadius: 8, borderWidth: 1, borderColor: "#2a2a2a",
+    paddingHorizontal: 10, paddingVertical: 5,
+  },
+  userRoleBtnText: { color: "#888", fontSize: 11, fontWeight: "700" },
 });

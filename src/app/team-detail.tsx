@@ -64,6 +64,7 @@ export default function TeamDetailScreen() {
   const [allScores, setAllScores] = useState<ScoreRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCaptain, setIsCaptain] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [pickerVisible, setPickerVisible] = useState(false);
   const [photoSourceVisible, setPhotoSourceVisible] = useState(false);
   const [selectedId, setSelectedId] = useState("all");
@@ -73,9 +74,10 @@ export default function TeamDetailScreen() {
   async function loadData() {
     if (!teamId || !user) return;
 
-    const [membersRes, teamRes] = await Promise.all([
+    const [membersRes, teamRes, profileRes] = await Promise.all([
       supabase.from("team_members").select("user_id, role, profiles(username, avatar_url)").eq("team_id", teamId),
       supabase.from("teams").select("captain_user_id, photo_url").eq("id", teamId).single(),
+      supabase.from("profiles").select("role").eq("id", user.id).single(),
     ]);
 
     const memberList: Member[] = (membersRes.data ?? []).map((m: any) => {
@@ -84,6 +86,8 @@ export default function TeamDetailScreen() {
     });
     setMembers(memberList);
     setIsCaptain(teamRes.data?.captain_user_id === user.id);
+    const r = (profileRes.data as any)?.role ?? "user";
+    setIsAdmin(r === "admin" || r === "owner" || r === "architect");
     setPhotoUrl((teamRes.data as any)?.photo_url ?? null);
 
     if (memberList.length > 0) {
@@ -233,6 +237,9 @@ export default function TeamDetailScreen() {
     };
   }, [filteredScores]);
 
+  const isTeamMember = members.some((m) => m.user_id === user?.id);
+  const isMonday = new Date().getDay() === 1;
+
   const seasonOptions = [{ id: "all", label: "All Time" }, ...seasons];
   const seasonLabel = seasonOptions.find((s) => s.id === selectedId)?.label ?? "Season";
 
@@ -287,6 +294,15 @@ export default function TeamDetailScreen() {
             {members.length} {members.length === 1 ? "member" : "members"}
             {seasons.length > 0 ? `  ·  ${seasons.length} season${seasons.length !== 1 ? "s" : ""}` : ""}
           </Text>
+          {isTeamMember && (isMonday || isAdmin) && (
+            <Pressable
+              style={styles.trackBtn}
+              onPress={() => router.push({ pathname: "/skeeball-tracker" as any, params: { teamId, teamName } })}
+            >
+              <Ionicons name="bowling-ball-outline" size={16} color="#000" />
+              <Text style={styles.trackBtnText}>Track Scores</Text>
+            </Pressable>
+          )}
         </View>
 
         {/* Season picker pill */}
@@ -485,6 +501,12 @@ const styles = StyleSheet.create({
   },
   teamTitle: { color: "#fff", fontSize: 28, fontWeight: "900", letterSpacing: -0.4, marginBottom: 5 },
   teamSub: { color: "#555", fontSize: 13 },
+  trackBtn: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    backgroundColor: "#06b6d4", borderRadius: 20,
+    paddingHorizontal: 20, paddingVertical: 10, marginTop: 16,
+  },
+  trackBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
 
   seasonPill: {
     flexDirection: "row", alignItems: "center", gap: 10,

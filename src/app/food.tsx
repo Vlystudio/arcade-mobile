@@ -19,10 +19,14 @@ import { LocationPicker } from "../components/location-picker";
 import { useCart } from "../context/cart-context";
 import { useLocation } from "../context/location-context";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { fetchSquareMenu } from "../../lib/square-food";
 import { supabase } from "../../lib/supabase";
 
 type MenuItem = {
   id: string;
+  source?: "supabase" | "square";
+  squareVariationId?: string;
+  squareItemId?: string;
   name: string;
   description: string | null;
   price: number;
@@ -41,6 +45,8 @@ const CATEGORIES = [
   { key: "drinks", label: "Drinks", icon: "beer-outline" },
   { key: "desserts", label: "Desserts", icon: "ice-cream-outline" },
 ] as const;
+
+const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(CATEGORIES.map((category) => [category.key, category.label]));
 
 const CATEGORY_COLORS: Record<string, string> = {
   appetizers: "#22c55e",
@@ -66,6 +72,20 @@ export default function FoodScreen() {
   const [locSwitcherVisible, setLocSwitcherVisible] = useState(false);
 
   async function loadMenu() {
+    if (location) {
+      try {
+        const squareMenu = await fetchSquareMenu(location.slug);
+        if (squareMenu.configured && squareMenu.items.length > 0) {
+          setMenuItems(squareMenu.items);
+          setLoading(false);
+          setRefreshing(false);
+          return;
+        }
+      } catch (squareError) {
+        console.warn("[food] Square menu unavailable, falling back to Supabase.", squareError);
+      }
+    }
+
     let query = supabase
       .from("menu_items")
       .select("id, name, description, price, category, ingredients, photo_url, available")
@@ -92,7 +112,15 @@ export default function FoodScreen() {
   }, [location]);
 
   function handleAddToCart(item: MenuItem) {
-    addItem({ id: item.id, name: item.name, price: item.price, customizations: [] });
+    addItem({
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      customizations: [],
+      source: item.source ?? "supabase",
+      squareVariationId: item.squareVariationId,
+      squareItemId: item.squareItemId,
+    });
     setAddedId(item.id);
     setTimeout(() => setAddedId(null), 1200);
     setSelectedItem(null);
@@ -110,6 +138,14 @@ export default function FoodScreen() {
     acc[cat].push(item);
     return acc;
   }, {});
+
+  const categoryOptions = [
+    CATEGORIES[0],
+    ...CATEGORIES.slice(1).filter((category) => menuItems.some((item) => item.category === category.key)),
+    ...Array.from(new Set(menuItems.map((item) => item.category)))
+      .filter((category) => category && !CATEGORY_LABELS[category])
+      .map((category) => ({ key: category, label: titleCase(category), icon: "restaurant-outline" })),
+  ];
 
   if (authLoading) {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
@@ -189,7 +225,7 @@ export default function FoodScreen() {
 
             {/* Category pills */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pillsScroll} contentContainerStyle={styles.pillsContent}>
-              {CATEGORIES.map((cat) => {
+              {categoryOptions.map((cat) => {
                 const active = activeCategory === cat.key;
                 const color = CATEGORY_COLORS[cat.key] ?? "#06b6d4";
                 return (
@@ -338,13 +374,19 @@ export default function FoodScreen() {
 
 function CategoryLabel({ cat }: { cat: string }) {
   const color = CATEGORY_COLORS[cat] ?? "#06b6d4";
-  const label = CATEGORIES.find((c) => c.key === cat)?.label ?? cat;
+  const label = CATEGORIES.find((c) => c.key === cat)?.label ?? titleCase(cat);
   return (
     <View style={styles.catLabelRow}>
       <View style={[styles.catLabelDot, { backgroundColor: color }]} />
       <Text style={[styles.catLabel, { color }]}>{label}</Text>
     </View>
   );
+}
+
+function titleCase(value: string) {
+  return value
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function MenuCard({ item, justAdded, onPress, onAdd }: {

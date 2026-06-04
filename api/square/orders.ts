@@ -1,3 +1,4 @@
+import { checkRateLimit } from "../_ratelimit";
 import { assertSquareConfigured, sendJson, squareRequest } from "./_shared";
 
 type SquareOrderItem = {
@@ -11,6 +12,8 @@ export default async function handler(req: any, res: any) {
   if (req.method !== "POST") {
     return sendJson(res, 405, { error: "Method not allowed" });
   }
+
+  if (!(await checkRateLimit(req, res))) return;
 
   const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
   const locationSlug = String(body?.locationSlug ?? "arcade_bar");
@@ -52,10 +55,12 @@ export default async function handler(req: any, res: any) {
       location_id: config.locationId,
       reference_id: referenceId,
       source: { name: "ArcadeTracker" },
-      metadata: {
-        app_order_id: String(localOrderId).slice(0, 60),
-        table_or_lane: String(body?.tableNumber ?? "").slice(0, 60),
-      },
+      metadata: Object.fromEntries(
+        Object.entries({
+          app_order_id: String(localOrderId).slice(0, 40),
+          table_or_lane: String(body?.tableNumber ?? "").slice(0, 40) || undefined,
+        }).filter(([, v]) => v !== undefined && v !== "")
+      ),
       line_items: items.map((item) => ({
         ...(item.squareVariationId
           ? { catalog_object_id: item.squareVariationId }
