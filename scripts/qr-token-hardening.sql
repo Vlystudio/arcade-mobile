@@ -293,6 +293,17 @@ BEGIN
 
   -- ── Common validation ────────────────────────────────────
 
+  -- Skee-Ball uses manual lane selection — QR check-in disabled
+  SELECT g.name, g.type INTO v_game
+    FROM games g WHERE g.id = v_lane.game_id;
+
+  IF v_game.type = 'skeeball' THEN
+    RETURN json_build_object(
+      'error',   'qr_disabled',
+      'message', 'Skee-Ball lanes don''t use QR check-in. Choose your lane from the Games screen.'
+    );
+  END IF;
+
   IF v_lane.status IS NOT NULL AND v_lane.status = 'inactive' THEN
     RETURN json_build_object('error', 'lane_inactive',
       'message', 'This lane is currently inactive.');
@@ -318,9 +329,6 @@ BEGIN
     RETURN json_build_object('error', 'rate_limited',
       'message', 'You checked into this lane recently. Wait 30 minutes before scanning again.');
   END IF;
-
-  SELECT g.name, g.type INTO v_game
-    FROM games g WHERE g.id = v_lane.game_id;
 
   INSERT INTO check_ins (user_id, lane_id, venue_id, status)
   VALUES (v_user_id, v_lane.id, v_lane.venue_id, 'active')
