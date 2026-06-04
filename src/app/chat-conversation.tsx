@@ -306,15 +306,20 @@ export default function ChatConversationScreen() {
           <Pressable style={styles.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace("/chat" as any)}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </Pressable>
-          <Avatar uri={otherAvatarUrl || null} name={otherUsername ?? "?"} size={36} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerName}>{otherUsername ?? "Chat"}</Text>
-            {isEncrypted && (
-              <Text style={styles.headerEncrypted}>
-                <Ionicons name="lock-closed" size={10} color="#22c55e" /> End-to-end encrypted
-              </Text>
-            )}
-          </View>
+          <Pressable
+            style={styles.headerProfile}
+            onPress={() => otherUserId && router.push({ pathname: "/user-profile" as any, params: { userId: otherUserId } })}
+          >
+            <Avatar uri={otherAvatarUrl || null} name={otherUsername ?? "?"} size={36} />
+            <View>
+              <Text style={styles.headerName}>{otherUsername ?? "Chat"}</Text>
+              {isEncrypted && (
+                <Text style={styles.headerEncrypted}>
+                  <Ionicons name="lock-closed" size={10} color="#22c55e" /> End-to-end encrypted
+                </Text>
+              )}
+            </View>
+          </Pressable>
         </View>
 
         <FlatList
@@ -438,6 +443,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#000",
   },
   backBtn: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+  headerProfile: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
   headerName: { color: "#fff", fontSize: 16, fontWeight: "800" },
   headerEncrypted: { color: "#22c55e", fontSize: 10, fontWeight: "600", marginTop: 1 },
 
