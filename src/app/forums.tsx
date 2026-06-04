@@ -20,9 +20,9 @@ import BottomTabBar from "../components/bottom-tab-bar";
 import { Avatar } from "../components/avatar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { moderateText } from "../../lib/moderate-text";
 
 const GAME_TYPES = ["All", "Skee-Ball", "Pinball", "Arcade", "Basketball", "Air Hockey", "Pool", "General"];
-const MOD_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
 type Forum = {
   id: string;
@@ -89,20 +89,12 @@ export default function ForumsScreen() {
     setSubmitError(null);
     setSubmitting(true);
 
-    try {
-      const modRes = await fetch(`${MOD_BASE}/api/moderation/text`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: `${title} ${description}` }),
-      });
-      if (modRes.ok) {
-        const { flagged, reason } = await modRes.json();
-        if (flagged) {
-          setSubmitError(reason ?? "Content flagged by moderation.");
-          setSubmitting(false);
-          return;
-        }
-      }
-    } catch {}
+    const mod = await moderateText(`${title} ${description}`);
+    if (!mod.ok) {
+      setSubmitError(mod.message);
+      setSubmitting(false);
+      return;
+    }
 
     const { error } = await supabase.from("forums").insert({
       title: title.trim(),

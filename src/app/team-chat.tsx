@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
+import { moderateText } from "../../lib/moderate-text";
 import { useRequireAuth } from "../hooks/use-require-auth";
 
 type Message = {
@@ -95,7 +97,16 @@ export default function TeamChatScreen() {
   async function sendMessage() {
     if (!user || !teamId || !draft.trim()) return;
     setSending(true);
-    await supabase.from("team_messages").insert({ team_id: teamId, user_id: user.id, content: draft.trim() });
+
+    const mod = await moderateText(draft.trim());
+    if (!mod.ok) {
+      Alert.alert("Message blocked", mod.message);
+      setSending(false);
+      return;
+    }
+
+    const { error } = await supabase.from("team_messages").insert({ team_id: teamId, user_id: user.id, content: draft.trim() });
+    if (error) Alert.alert("Error", error.message);
     setDraft("");
     setSending(false);
   }

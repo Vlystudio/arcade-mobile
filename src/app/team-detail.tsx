@@ -19,6 +19,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
+import { moderateText } from "../../lib/moderate-text";
 import { useRequireAuth } from "../hooks/use-require-auth";
 
 const SLOTS = ["6:00 PM", "7:15 PM", "8:30 PM"] as const;
@@ -249,6 +250,14 @@ export default function TeamDetailScreen() {
   async function postAnnouncement() {
     if (!user || !teamId || !newAnnouncement.trim()) return;
     setPostingAnnouncement(true);
+
+    const mod = await moderateText(newAnnouncement.trim());
+    if (!mod.ok) {
+      Alert.alert("Post blocked", mod.message);
+      setPostingAnnouncement(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("team_announcements")
       .insert({ team_id: teamId, user_id: user.id, content: newAnnouncement.trim() })

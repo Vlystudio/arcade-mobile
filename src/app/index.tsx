@@ -26,6 +26,7 @@ import { ImageLightbox } from "../components/image-lightbox";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { moderateImage } from "../../lib/moderate-image";
+import { moderateText } from "../../lib/moderate-text";
 
 type Post = {
   id: string;
@@ -91,7 +92,6 @@ export default function FeedScreen() {
   const [shareConvsLoading, setShareConvsLoading] = useState(false);
   const [sendingShareId, setSendingShareId] = useState<string | null>(null);
 
-  const MOD_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
   // Edit state
   const [editingPost, setEditingPost] = useState<Post | null>(null);
@@ -303,6 +303,15 @@ export default function FeedScreen() {
     setPostError(null);
     setPosting(true);
 
+    if (postContent.trim()) {
+      const textMod = await moderateText(postContent.trim());
+      if (!textMod.ok) {
+        setPostError(textMod.message);
+        setPosting(false);
+        return;
+      }
+    }
+
     let photoUrl: string | null = null;
     if (postPhotoUri) {
       try {
@@ -383,20 +392,13 @@ export default function FeedScreen() {
   async function submitComment() {
     if (!user || !commentPostId || !newComment.trim()) return;
     setCommentPosting(true);
-    try {
-      const modRes = await fetch(`${MOD_BASE}/api/moderation/text`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: newComment }),
-      });
-      if (modRes.ok) {
-        const { flagged, reason } = await modRes.json();
-        if (flagged) {
-          Alert.alert("Comment blocked", reason ?? "Your comment was flagged by our content filter.");
-          setCommentPosting(false);
-          return;
-        }
-      }
-    } catch {}
+
+    const mod = await moderateText(newComment.trim());
+    if (!mod.ok) {
+      Alert.alert("Comment blocked", mod.message);
+      setCommentPosting(false);
+      return;
+    }
 
     const { error } = await supabase.from("post_comments").insert({
       post_id: commentPostId, user_id: user.id, content: newComment.trim(),

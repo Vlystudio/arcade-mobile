@@ -23,6 +23,7 @@ import type { AppRole } from "../components/role-badge";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { moderateImage } from "../../lib/moderate-image";
+import { moderateText } from "../../lib/moderate-text";
 
 type GameOption = { id: string; name: string; type: string; count: number };
 type TournPlacement = { tournament_id: string; title: string; placement: number; proposed_date: string | null };
@@ -278,6 +279,16 @@ export default function ProfileScreen() {
     if (!user) return;
     setSavingBio(true);
     const trimmed = draftBio.trim();
+
+    if (trimmed) {
+      const mod = await moderateText(trimmed);
+      if (!mod.ok) {
+        Alert.alert("Bio blocked", mod.message);
+        setSavingBio(false);
+        return;
+      }
+    }
+
     const { error } = await supabase.from("profiles").update({ bio: trimmed || null }).eq("id", user.id);
     if (!error) { setBio(trimmed || null); setEditingBio(false); }
     else Alert.alert("Error", error.message);
