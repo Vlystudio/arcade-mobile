@@ -1,7 +1,17 @@
+import * as Sentry from "@sentry/react-native";
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import React from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+
+Sentry.init({
+  dsn: "https://483f3f6bbb4581e28ed5ddaf6a17c07e@o4511509249785856.ingest.us.sentry.io/4511509250768896",
+  sendDefaultPii: true,
+  enableLogs: true,
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+});
 import { AdminProvider } from "../context/admin-context";
 import { AuthProvider } from "../context/auth-context";
 import { CartProvider } from "../context/cart-context";
