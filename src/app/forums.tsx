@@ -21,6 +21,7 @@ import { Avatar } from "../components/avatar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
+import { isElevatedRole } from "../components/role-badge";
 
 const GAME_TYPES = ["All", "Skee-Ball", "Pinball", "Arcade", "Basketball", "Air Hockey", "Pool", "General"];
 
@@ -47,6 +48,7 @@ export default function ForumsScreen() {
   const [gameType, setGameType] = useState("General");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string>("user");
 
   async function loadForums() {
     const { data: forumsData } = await supabase
@@ -82,7 +84,12 @@ export default function ForumsScreen() {
     setRefreshing(false);
   }
 
-  useEffect(() => { if (user) loadForums(); }, [user]);
+  useEffect(() => {
+    if (!user) return;
+    loadForums();
+    supabase.from("profiles").select("role").eq("id", user.id).single()
+      .then(({ data }) => { if (data?.role) setUserRole(data.role); });
+  }, [user]);
 
   async function handleCreate() {
     if (!user || !title.trim()) return;
@@ -96,12 +103,13 @@ export default function ForumsScreen() {
       return;
     }
 
+    const elevated = isElevatedRole(userRole);
     const { error } = await supabase.from("forums").insert({
       title: title.trim(),
       description: description.trim() || null,
       game_type: gameType === "General" ? null : gameType,
       creator_id: user.id,
-      status: "pending",
+      status: elevated ? "approved" : "pending",
     });
     setSubmitting(false);
     if (error) { setSubmitError(error.message); return; }
@@ -110,7 +118,11 @@ export default function ForumsScreen() {
     setTitle("");
     setDescription("");
     setGameType("General");
-    Alert.alert("Forum Submitted", "Your forum request has been sent for admin approval. It will appear here once approved.");
+    if (elevated) {
+      loadForums();
+    } else {
+      Alert.alert("Forum Submitted", "Your forum request has been sent for admin approval. It will appear here once approved.");
+    }
   }
 
   const filtered = filter === "All" ? forums : forums.filter((f) => f.game_type === filter || (!f.game_type && filter === "General"));
@@ -216,10 +228,12 @@ export default function ForumsScreen() {
                   <Ionicons name="close" size={18} color="#555" />
                 </Pressable>
               </View>
-              <Text style={styles.pendingNote}>
-                <Ionicons name="information-circle-outline" size={13} color="#f59e0b" />
-                {"  "}Forums require admin approval before going live.
-              </Text>
+              {!isElevatedRole(userRole) && (
+                <Text style={styles.pendingNote}>
+                  <Ionicons name="information-circle-outline" size={13} color="#f59e0b" />
+                  {"  "}Forums require admin approval before going live.
+                </Text>
+              )}
 
               <Text style={styles.fieldLabel}>Title *</Text>
               <TextInput

@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
-import { StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 
 export type AppRole = "user" | "admin" | "owner" | "architect";
 
@@ -22,19 +23,36 @@ export function RoleBadge({
   showLabel?: boolean;
   size?: number;
 }) {
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+
   if (!role || role === "user") return null;
   const config = ROLE_CONFIG[role as Exclude<AppRole, "user">];
   if (!config) return null;
 
+  function handlePress() {
+    if (Platform.OS !== "web") {
+      setTooltipVisible(true);
+      setTimeout(() => setTooltipVisible(false), 2000);
+    }
+  }
+
+  const displayLabel = showLabel || tooltipVisible;
+
   return (
-    <View style={styles.row}>
+    <Pressable
+      style={styles.row}
+      onPress={handlePress}
+      onHoverIn={() => setTooltipVisible(true)}
+      onHoverOut={() => setTooltipVisible(false)}
+      hitSlop={8}
+    >
       <Ionicons name="checkmark-circle" size={size} color={config.color} />
-      {showLabel && (
+      {displayLabel && (
         <Text style={[styles.label, { color: config.color, fontSize: size - 3 }]}>
           {config.label}
         </Text>
       )}
-    </View>
+    </Pressable>
   );
 }
 
