@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -66,8 +67,9 @@ export default function SubmitScoreScreen() {
     if (asset) setProofUri(asset.uri);
   }
 
-  // Returns { url, path } so the caller can delete the file if the score insert fails.
-  async function uploadProofPhoto(userId: string, scoreId: string): Promise<{ url: string; path: string } | null> {
+  // Uploads photo to the private score-proofs bucket and returns the storage path.
+  // The caller then attaches the path via rpc_attach_score_proof; no public URL is stored.
+  async function uploadProofPhoto(userId: string, scoreId: string): Promise<{ path: string } | null> {
     if (!proofUri) return null;
     try {
       const compressed = await compressImage(proofUri);
@@ -82,8 +84,7 @@ export default function SubmitScoreScreen() {
         .from("score-proofs")
         .upload(path, arrayBuffer, { upsert: true, contentType: "image/jpeg" });
       if (error) throw error;
-      const { data } = supabase.storage.from("score-proofs").getPublicUrl(path);
-      return { url: data.publicUrl, path };
+      return { path };
     } catch {
       return null;
     }
@@ -135,11 +136,12 @@ export default function SubmitScoreScreen() {
 
       const uploaded = await uploadProofPhoto(user.id, scoreId);
       if (uploaded) {
-        const { error: updateErr } = await supabase
-          .from("scores")
-          .update({ photo_url: uploaded.url })
-          .eq("id", scoreId);
-        if (updateErr) {
+        const { error: proofErr } = await supabase.rpc("rpc_attach_score_proof", {
+          p_score_id:     scoreId,
+          p_storage_path: uploaded.path,
+        });
+        if (proofErr) {
+          // Path attachment failed — remove the orphaned file from storage
           await supabase.storage.from("score-proofs").remove([uploaded.path]);
         }
       }

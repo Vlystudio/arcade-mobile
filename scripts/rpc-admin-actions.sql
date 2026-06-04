@@ -1,10 +1,16 @@
 -- ============================================================
 -- Admin action RPCs — SECURITY DEFINER wrappers
--- Run in Supabase SQL Editor after rls-policies.sql
--- All functions verify is_admin() server-side before acting.
+-- Run in Supabase SQL Editor after rls-policies.sql and
+-- security-hardening-2.sql (require_mfa must exist first).
+--
+-- All functions:
+--   1. Call require_mfa() — enforces AAL2 session for admin actions
+--   2. Verify is_admin() server-side
+--   3. Write to admin_audit_log on success
 -- ============================================================
 
 -- ── Score review ─────────────────────────────────────────────
+-- Accepts platform admins AND venue admins for the score's venue.
 CREATE OR REPLACE FUNCTION public.rpc_admin_review_score(
   p_score_id uuid,
   p_status   text        -- 'approved' | 'denied'
@@ -14,10 +20,18 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_score_venue_id uuid;
 BEGIN
-  IF NOT public.is_admin() THEN
+  PERFORM public.require_mfa();
+
+  -- Allow platform admin OR venue admin of the score's venue
+  SELECT venue_id INTO v_score_venue_id FROM scores WHERE id = p_score_id;
+
+  IF NOT (public.is_admin() OR public.is_venue_admin(v_score_venue_id)) THEN
     RETURN json_build_object('error', 'unauthorized', 'message', 'Admin only.');
   END IF;
+
   IF p_status NOT IN ('approved', 'denied') THEN
     RETURN json_build_object('error', 'invalid_status');
   END IF;
@@ -26,6 +40,10 @@ BEGIN
   IF NOT FOUND THEN
     RETURN json_build_object('error', 'not_found');
   END IF;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'score_review', 'score', p_score_id::text,
+          jsonb_build_object('new_status', p_status));
 
   RETURN json_build_object('ok', true);
 END;
@@ -44,6 +62,8 @@ DECLARE
   v_req     record;
   v_tourn_id uuid;
 BEGIN
+  PERFORM public.require_mfa();
+
   IF NOT public.is_admin() THEN
     RETURN json_build_object('error', 'unauthorized', 'message', 'Admin only.');
   END IF;
@@ -67,6 +87,10 @@ BEGIN
   )
   RETURNING id INTO v_tourn_id;
 
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'approve_tournament_request', 'tournament_request', p_request_id::text,
+          jsonb_build_object('tournament_id', v_tourn_id, 'title', v_req.title));
+
   RETURN json_build_object('ok', true, 'tournament_id', v_tourn_id);
 END;
 $$;
@@ -81,18 +105,27 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_title text;
 BEGIN
+  PERFORM public.require_mfa();
+
   IF NOT public.is_admin() THEN
     RETURN json_build_object('error', 'unauthorized', 'message', 'Admin only.');
   END IF;
 
   UPDATE tournament_requests
      SET status = 'denied', admin_note = NULLIF(trim(COALESCE(p_note, '')), '')
-   WHERE id = p_request_id AND status = 'pending';
+   WHERE id = p_request_id AND status = 'pending'
+   RETURNING title INTO v_title;
 
   IF NOT FOUND THEN
     RETURN json_build_object('error', 'not_found_or_already_processed');
   END IF;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'deny_tournament_request', 'tournament_request', p_request_id::text,
+          jsonb_build_object('title', v_title, 'note', p_note));
 
   RETURN json_build_object('ok', true);
 END;
@@ -108,18 +141,29 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_title text;
 BEGIN
+  PERFORM public.require_mfa();
+
   IF NOT public.is_admin() THEN
     RETURN json_build_object('error', 'unauthorized', 'message', 'Admin only.');
   END IF;
+
   IF p_status NOT IN ('upcoming', 'active', 'completed', 'cancelled') THEN
     RETURN json_build_object('error', 'invalid_status');
   END IF;
 
-  UPDATE tournaments SET status = p_status WHERE id = p_tournament_id;
+  UPDATE tournaments SET status = p_status WHERE id = p_tournament_id
+  RETURNING title INTO v_title;
+
   IF NOT FOUND THEN
     RETURN json_build_object('error', 'not_found');
   END IF;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'set_tournament_status', 'tournament', p_tournament_id::text,
+          jsonb_build_object('new_status', p_status, 'title', v_title));
 
   RETURN json_build_object('ok', true);
 END;
@@ -140,7 +184,10 @@ DECLARE
   v_uid     uuid;
   v_uname   text;
   v_warnings text[] := '{}';
+  v_title   text;
 BEGIN
+  PERFORM public.require_mfa();
+
   IF NOT public.is_admin() THEN
     RETURN json_build_object('error', 'unauthorized', 'message', 'Admin only.');
   END IF;
@@ -166,7 +213,12 @@ BEGIN
     DO UPDATE SET placement = EXCLUDED.placement;
   END LOOP;
 
-  UPDATE tournaments SET status = 'completed' WHERE id = p_tournament_id;
+  UPDATE tournaments SET status = 'completed' WHERE id = p_tournament_id
+  RETURNING title INTO v_title;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'save_tournament_placements', 'tournament', p_tournament_id::text,
+          jsonb_build_object('title', v_title, 'placement_count', jsonb_array_length(p_placements)));
 
   RETURN json_build_object(
     'ok',       true,
@@ -182,14 +234,24 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_team_name text;
 BEGIN
+  PERFORM public.require_mfa();
+
   IF NOT public.is_admin() THEN
     RETURN json_build_object('error', 'unauthorized', 'message', 'Admin only.');
   END IF;
 
+  SELECT name INTO v_team_name FROM teams WHERE id = p_team_id;
+
   DELETE FROM team_members  WHERE team_id = p_team_id;
   DELETE FROM team_requests WHERE team_id = p_team_id;
   DELETE FROM teams         WHERE id      = p_team_id;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'delete_team', 'team', p_team_id::text,
+          jsonb_build_object('team_name', v_team_name));
 
   RETURN json_build_object('ok', true);
 END;
@@ -208,6 +270,8 @@ AS $$
 DECLARE
   v_id uuid;
 BEGIN
+  PERFORM public.require_mfa();
+
   IF NOT public.is_admin() THEN
     RETURN json_build_object('error', 'unauthorized', 'message', 'Admin only.');
   END IF;
@@ -222,11 +286,15 @@ BEGIN
   )
   RETURNING id INTO v_id;
 
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'create_first_friday', 'tournament', v_id::text,
+          jsonb_build_object('label', p_label, 'date', p_date));
+
   RETURN json_build_object('ok', true, 'tournament_id', v_id);
 END;
 $$;
 
--- Grant execute to authenticated users (is_admin() check is inside each function)
+-- Grant execute to authenticated users (is_admin() + require_mfa() check is inside each function)
 REVOKE ALL ON FUNCTION public.rpc_admin_review_score(uuid, text)         FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.rpc_admin_approve_tournament(uuid)          FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.rpc_admin_deny_tournament(uuid, text)       FROM PUBLIC;

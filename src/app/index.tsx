@@ -266,7 +266,24 @@ export default function FeedScreen() {
           .upload(path, arrayBuffer, { upsert: false, contentType: "image/jpeg" });
         if (upErr) throw upErr;
         const { data: urlData } = supabase.storage.from("post-photos").getPublicUrl(path);
-        nextPhotoUrl = urlData.publicUrl;
+        const candidateUrl = urlData.publicUrl;
+
+        // Moderate before saving to DB — delete orphaned file if flagged
+        const modResult = await moderateImage({
+          imageUrl:   candidateUrl,
+          bucket:     "post-photos",
+          path,
+          recordType: "post",
+          recordId:   editingPost.id,
+        });
+        if (!modResult.ok) {
+          await supabase.storage.from("post-photos").remove([path]);
+          setEditError(modResult.message ?? "Photo was flagged by content moderation.");
+          setEditSaving(false);
+          return;
+        }
+
+        nextPhotoUrl = candidateUrl;
       } catch (err: any) {
         setEditError("Photo upload failed: " + (err.message ?? "unknown error"));
         setEditSaving(false);

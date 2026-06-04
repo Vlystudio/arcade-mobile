@@ -3,7 +3,6 @@ import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,7 +24,7 @@ export default function DeleteAccountScreen() {
     setError(null);
     setDeleting(true);
 
-    // Re-authenticate to confirm identity
+    // Re-authenticate to confirm identity — the fresh JWT is required by the Edge Function
     const { data: sessionData } = await supabase.auth.getSession();
     const email = sessionData.session?.user?.email;
     if (!email) { setError("Not signed in. Please log in and try again."); setDeleting(false); return; }
@@ -37,24 +36,17 @@ export default function DeleteAccountScreen() {
       return;
     }
 
-    // Delete user data in dependency order
-    // Supabase auth.deleteUser requires admin/service role — so we mark account for deletion
-    // and instruct the user, OR call a Supabase Edge Function that uses service role.
-    // Here we soft-delete: anonymise the profile and sign out.
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setError("Could not retrieve user."); setDeleting(false); return; }
+    // Call the delete-account Edge Function with the fresh session JWT.
+    // The function cleans storage, anonymizes the profile, deletes posts/follows,
+    // and calls auth.admin.deleteUser to fully remove the account.
+    const { error: fnErr } = await supabase.functions.invoke("delete-account");
+    if (fnErr) {
+      setError(fnErr.message ?? "Account deletion failed. Please try again.");
+      setDeleting(false);
+      return;
+    }
 
-    const deletedUsername = `deleted_${Date.now()}`;
-    await Promise.all([
-      supabase.from("profiles").update({
-        username: deletedUsername,
-        avatar_url: null,
-        bio: null,
-      }).eq("id", user.id),
-      supabase.from("posts").delete().eq("user_id", user.id),
-      supabase.from("follows").delete().or(`follower_id.eq.${user.id},following_id.eq.${user.id}`),
-    ]);
-
+    // Session is already invalidated server-side; sign out client-side as well
     await supabase.auth.signOut();
     setDeleting(false);
     setStep("done");

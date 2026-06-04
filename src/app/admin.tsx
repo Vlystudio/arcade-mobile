@@ -32,6 +32,7 @@ type ReviewScore = {
   game_name: string;
   score: number;
   photo_url: string | null;
+  proof_storage_path: string | null;
   created_at: string;
 };
 
@@ -177,6 +178,7 @@ export default function AdminScreen() {
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [photoModal, setPhotoModal] = useState<string | null>(null);
+  const [proofUrlLoading, setProofUrlLoading] = useState(false);
 
   // Stats state
   const [statsData, setStatsData] = useState<StatsData | null>(null);
@@ -289,7 +291,7 @@ export default function AdminScreen() {
     setReviewLoading(true);
     const { data } = await supabase
       .from("scores")
-      .select("id, user_id, score, photo_url, created_at, profiles(username, avatar_url), games(name)")
+      .select("id, user_id, score, photo_url, proof_storage_path, created_at, profiles(username, avatar_url), games(name)")
       .eq("status", tab)
       .order("created_at", { ascending: tab === "pending" });
 
@@ -298,12 +300,13 @@ export default function AdminScreen() {
       const game    = Array.isArray(row.games)    ? row.games[0]    : row.games;
       return {
         id: row.id, user_id: row.user_id,
-        username:   profile?.username   ?? "Unknown",
-        avatar_url: profile?.avatar_url ?? null,
-        game_name:  game?.name          ?? "Unknown Game",
-        score: row.score,
-        photo_url:  row.photo_url       ?? null,
-        created_at: row.created_at,
+        username:           profile?.username          ?? "Unknown",
+        avatar_url:         profile?.avatar_url        ?? null,
+        game_name:          game?.name                 ?? "Unknown Game",
+        score:              row.score,
+        photo_url:          row.photo_url              ?? null,
+        proof_storage_path: row.proof_storage_path     ?? null,
+        created_at:         row.created_at,
       };
     }));
     setReviewLoading(false);
@@ -329,6 +332,19 @@ export default function AdminScreen() {
       reapprove: { toStatus: "approved"  as const, title: "Re-approve this score?", body: `Restore ${score.username}'s ${score.score.toLocaleString()} pts on ${score.game_name} to the leaderboard?`, btnLabel: "Approve", btnColor: "#22c55e", btnTextColor: "#000" },
     };
     setConfirmAction({ score, ...map[action] });
+  }
+
+  async function handlePhotoPress(score: ReviewScore) {
+    if (score.proof_storage_path) {
+      setProofUrlLoading(true);
+      const { data } = await supabase.storage
+        .from("score-proofs")
+        .createSignedUrl(score.proof_storage_path, 3600);
+      setProofUrlLoading(false);
+      if (data?.signedUrl) setPhotoModal(data.signedUrl);
+    } else if (score.photo_url) {
+      setPhotoModal(score.photo_url);
+    }
   }
 
   async function executeConfirm() {
@@ -813,11 +829,12 @@ export default function AdminScreen() {
                     item={item}
                     tab={reviewTab}
                     actioning={actioning === item.id}
+                    proofLoading={proofUrlLoading}
                     onApprove={() => handleDirectApprove(item)}
                     onDeny={() => requestConfirm(item, "deny")}
                     onRevoke={() => requestConfirm(item, "revoke")}
                     onReApprove={() => requestConfirm(item, "reapprove")}
-                    onPhotoPress={() => item.photo_url && setPhotoModal(item.photo_url)}
+                    onPhotoPress={() => handlePhotoPress(item)}
                   />
                 ))}
               </>
@@ -1693,10 +1710,11 @@ function ErrorBanner({ message }: { message: string }) {
   );
 }
 
-function ScoreCard({ item, tab, actioning, onApprove, onDeny, onRevoke, onReApprove, onPhotoPress }: {
-  item: ReviewScore; tab: ReviewTab; actioning: boolean;
+function ScoreCard({ item, tab, actioning, proofLoading, onApprove, onDeny, onRevoke, onReApprove, onPhotoPress }: {
+  item: ReviewScore; tab: ReviewTab; actioning: boolean; proofLoading: boolean;
   onApprove: () => void; onDeny: () => void; onRevoke: () => void; onReApprove: () => void; onPhotoPress: () => void;
 }) {
+  const hasProof = !!(item.proof_storage_path || item.photo_url);
   return (
     <View style={styles.card}>
       {tab !== "pending" && (
@@ -1716,12 +1734,17 @@ function ScoreCard({ item, tab, actioning, onApprove, onDeny, onRevoke, onReAppr
         <Text style={styles.cardScore}>{item.score.toLocaleString()}</Text>
       </View>
 
-      {item.photo_url ? (
-        <Pressable style={styles.photoWrap} onPress={onPhotoPress}>
-          <Image source={{ uri: item.photo_url }} style={styles.photoThumb} contentFit="cover" cachePolicy="none" />
+      {hasProof ? (
+        <Pressable style={styles.photoWrap} onPress={onPhotoPress} disabled={proofLoading}>
+          {item.photo_url
+            ? <Image source={{ uri: item.photo_url }} style={styles.photoThumb} contentFit="cover" cachePolicy="none" />
+            : <View style={[styles.photoThumb, { backgroundColor: "#111", alignItems: "center", justifyContent: "center" }]}>
+                <Ionicons name="image-outline" size={28} color="#333" />
+              </View>}
           <View style={styles.photoTapHint}>
-            <Ionicons name="expand-outline" size={14} color="#fff" />
-            <Text style={styles.photoTapText}>Tap to enlarge</Text>
+            {proofLoading
+              ? <ActivityIndicator size="small" color="#fff" />
+              : <><Ionicons name="expand-outline" size={14} color="#fff" /><Text style={styles.photoTapText}>Tap to view</Text></>}
           </View>
         </Pressable>
       ) : (

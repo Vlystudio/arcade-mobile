@@ -8,7 +8,7 @@ export async function moderateImage(params: {
   imageUrl:   string;
   bucket:     string;
   path:       string;
-  recordType: "avatar" | "post" | "score_proof";
+  recordType: "avatar" | "post" | "score_proof" | "team_photo";
   recordId:   string;
 }): Promise<ModerationResult> {
   try {

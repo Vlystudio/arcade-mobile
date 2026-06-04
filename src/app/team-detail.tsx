@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
+import { moderateImage } from "../../lib/moderate-image";
 import { useRequireAuth } from "../hooks/use-require-auth";
 
 const SLOTS = ["6:00 PM", "7:15 PM", "8:30 PM"] as const;
@@ -172,15 +173,26 @@ export default function TeamDetailScreen() {
       : await pickFromLibrary({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
     if (!asset) return;
 
+    // MIME type allowlist — reject non-image files
+    const mimeType = asset.mimeType ?? "image/jpeg";
+    if (!["image/jpeg", "image/png", "image/webp"].includes(mimeType)) {
+      Alert.alert("Unsupported file type", "Please choose a JPEG, PNG, or WebP image.");
+      return;
+    }
+
     setUploadingPhoto(true);
     try {
-      const mimeType = asset.mimeType ?? "image/jpeg";
       const ext = mimeType.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
 
       // Read via FileReader → ArrayBuffer (more reliable than blob in React Native)
       const response = await fetch(asset.uri);
       const blob = await response.blob();
       if (!blob || blob.size === 0) throw new Error("Image file appears empty — try a different photo");
+
+      // 5 MB size limit
+      if (blob.size > 5 * 1024 * 1024) {
+        throw new Error("Photo is too large (max 5 MB). Please choose a smaller image.");
+      }
 
       const arrayBuffer: ArrayBuffer = await new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -207,21 +219,23 @@ export default function TeamDetailScreen() {
           .from("team-photos")
           .createSignedUrl(path, 10 * 365 * 24 * 3600);
         if (signErr || !signed?.signedUrl) {
-          Alert.alert(
-            "Storage setup needed",
-            `Go to Supabase Dashboard → Storage → team-photos → Make Public.\n\nURL check returned: ${urlCheck?.status ?? "network error"}`
-          );
+          Alert.alert("Storage error", "Could not get photo URL. Please try again.");
           return;
         }
         finalUrl = signed.signedUrl;
       }
 
-      // Diagnostic: open this URL in a browser to verify the image is accessible
-      Alert.alert(
-        "Upload complete",
-        `URL check: ${urlCheck?.status ?? "failed"}\n\nOpen in browser to verify:\n${urlData.publicUrl}`,
-        [{ text: "OK" }]
-      );
+      // Content moderation — runs before the DB update so flagged photos are never saved
+      const modResult = await moderateImage({
+        imageUrl:   finalUrl,
+        bucket:     "team-photos",
+        path,
+        recordType: "team_photo",
+        recordId:   teamId,
+      });
+      if (!modResult.ok) {
+        throw new Error(modResult.message ?? "Photo was flagged by content moderation.");
+      }
 
       const { error: dbError } = await supabase
         .from("teams")

@@ -31,10 +31,13 @@ export default async function handler(req: any, res: any) {
     return sendJson(res, 400, { error: "Order must include at least one item." });
   }
 
-  const invalidItem = items.find((item) => !item.squareVariationId && (!item.name || typeof item.price !== "number"));
-  if (invalidItem) {
+  // Reject any item that doesn't have a Square catalog variation ID.
+  // All real menu items sourced from the Square catalog always have squareVariationId.
+  // Accepting custom name+price from the client is a server-side price manipulation risk.
+  const nonCatalogItem = items.find((item) => !item.squareVariationId);
+  if (nonCatalogItem) {
     return sendJson(res, 400, {
-      error: "Each checkout item must include a Square variation ID or a name and price.",
+      error: "Each item must include a Square variation ID. Custom-priced items are not accepted.",
     });
   }
 
