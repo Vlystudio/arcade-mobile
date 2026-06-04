@@ -63,6 +63,11 @@ Run these SQL scripts **in order** in the Supabase SQL Editor:
 | 2 | `scripts/seed-menu.sql` | Food menu seed data |
 | 3 | `scripts/seed-admin-policies.sql` | `is_admin()` helper function |
 | 4 | `scripts/rls-policies.sql` | Full Row Level Security for every table |
+| 5 | `scripts/rpc-check-in.sql` | `rpc_check_in` SECURITY DEFINER function |
+| 6 | `scripts/rpc-admin-actions.sql` | Admin SECURITY DEFINER RPCs (score review, tournament actions, team delete) |
+| 7 | `scripts/rls-security-patches.sql` | Critical RLS patches (C1-C3, H1-H5, M1-M3) |
+| 8 | `scripts/venue-migration.sql` | Multi-venue support (`venues` table, `venue_id` columns) |
+| 9 | `scripts/security-hardening.sql` | P2-P9 hardening: rate limits, constraints, audit log, forum RPC, score RPC, public profiles, team features |
 
 Then grant yourself admin access:
 ```sql
@@ -122,6 +127,13 @@ Open in Expo Go (scan QR), iOS Simulator (`i`), or Android Emulator (`a`).
 | `trivia_events` | `id`, `title`, `signup_deadline`, `status` | |
 | `trivia_teams` | `id`, `event_id`, `name`, `captain_id` | |
 | `trivia_team_members` | `trivia_team_id`, `user_id` | |
+| `venues` | `id`, `slug`, `name`, `address`, `color` | Seeded with Arcade Bar and Vinyl Hall |
+| `venue_admins` | `venue_id`, `user_id`, `granted_by` | Per-venue admin scoping |
+| `team_schedule` | `id`, `team_id`, `week_label`, `slot` | Weekly time slot assignments |
+| `team_announcements` | `id`, `team_id`, `user_id`, `content` | Captain-only broadcast messages |
+| `team_messages` | `id`, `team_id`, `user_id`, `content` | Group chat (Realtime) |
+| `admin_audit_log` | `id`, `admin_id`, `action`, `target_type`, `target_id`, `details` | Admin action history |
+| `rate_limit_log` | `id`, `user_id`, `action`, `created_at` | Rate-limit tracking (auto-pruned) |
 
 ---
 
@@ -144,6 +156,64 @@ Lane QR tokens are static secrets. The app enforces:
 1. Only one active check-in per user at a time (client + RLS).
 2. Rate-limit: 30-minute cooldown before re-checking into the same lane.
 3. Test-lane buttons (`__DEV__` only) are hidden in production builds.
+
+### Score submission
+Score inserts are routed through `rpc_submit_score` (SECURITY DEFINER). The RPC:
+- Always sets `user_id = auth.uid()` and `status = 'pending'` server-side (cannot be spoofed by the client)
+- Enforces score range 0–9,999,999
+- Validates `check_in_id` ownership
+- Rate-limits to 20 submissions per user per hour
+
+### Admin writes
+All admin-only mutations use SECURITY DEFINER RPCs that call `is_admin()` server-side:
+- `rpc_admin_review_score` — approve/deny scores
+- `rpc_admin_update_forum_status` — approve/reject forum posts
+- `rpc_admin_approve_tournament` / `rpc_admin_deny_tournament` — tournament requests
+- `rpc_admin_set_tournament_status` — tournament lifecycle
+- `rpc_admin_save_placements` — tournament results
+- `rpc_admin_delete_team` — team deletion
+- `rpc_admin_create_first_friday` — official events
+
+Every admin RPC writes to `admin_audit_log` for traceability.
+
+### Rate limiting
+BEFORE INSERT triggers on `posts` (10/h), `messages` (60/min), `team_messages` (60/min), `forums` (5/h), and `team_requests` (10/day) call `check_and_log_rate_limit()` which raises an exception if the limit is exceeded. The `rate_limit_log` table is cleaned up automatically.
+
+### Venue isolation
+`venue_admins` table allows per-venue admin scoping. `is_venue_admin(venue_id)` returns true for global admins or explicit venue-admin entries.
+
+### Square / payments
+Square prices are **never derived from the client**. The server-side `/api/square/orders` route fetches prices directly from the Square Catalog API using `SQUARE_ACCESS_TOKEN`. The client only sends variation IDs; the server resolves prices and creates the order. A client cannot submit an arbitrary amount.
+
+### Security testing checklist
+Run these checks after every migration:
+
+```sql
+-- 1. Verify check_ins blocks direct insert (should fail)
+-- Run as anon or a regular user:
+INSERT INTO check_ins (user_id, lane_id, status) VALUES (auth.uid(), '<lane_id>', 'active');
+-- Expected: RLS policy violation
+
+-- 2. Verify score status cannot be set to 'approved' on insert (should fail)
+INSERT INTO scores (user_id, game_id, score, status) VALUES (auth.uid(), '<game_id>', 100, 'approved');
+-- Expected: RLS policy violation (status must be 'pending')
+
+-- 3. Verify non-admin cannot approve a forum post (should fail)
+SELECT rpc_admin_update_forum_status('<forum_id>', 'approved');
+-- Expected: {"error":"unauthorized"}
+
+-- 4. Verify username constraint (should fail)
+UPDATE profiles SET username = 'a' WHERE id = auth.uid();
+-- Expected: constraint violation (length < 3)
+
+-- 5. Verify score range constraint (should fail via RPC)
+SELECT rpc_submit_score(null, null, null, null, -1, null);
+-- Expected: {"error":"invalid_score"}
+
+-- 6. Verify is_admin cannot be self-escalated (should fail)
+UPDATE profiles SET is_admin = true WHERE id = auth.uid();
+-- Expected: trigger exception (guard_role_escalation_trigger)
+```
 
 ---
 

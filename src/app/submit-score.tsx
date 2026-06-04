@@ -110,33 +110,35 @@ export default function SubmitScoreScreen() {
         return;
       }
 
-      const { data: scoreData, error } = await supabase
-        .from("scores")
-        .insert({
-          user_id:     user.id,
-          game_id:     game_id || null,
-          lane_id:     lane_id || null,
-          check_in_id: check_in_id || null,
-          venue_id:    venue_id || null,
-          score:       finalScore,
-          frame_data:  isSkeeball ? balls.map((pts, i) => ({ ball: i + 1, pts })) : null,
-          status:      "pending",
-        })
-        .select("id")
-        .single();
+      const { data: rpcResult, error: rpcError } = await supabase.rpc("rpc_submit_score", {
+        p_game_id:     game_id     || null,
+        p_lane_id:     lane_id     || null,
+        p_check_in_id: check_in_id || null,
+        p_venue_id:    venue_id    || null,
+        p_score:       finalScore,
+        p_frame_data:  isSkeeball ? balls.map((pts, i) => ({ ball: i + 1, pts })) : null,
+      });
 
-      if (error || !scoreData) {
-        setSubmitError(error?.message ?? "Score submission failed. Check Supabase RLS policies on the scores table.");
+      const rpcData = rpcResult as { ok?: boolean; score_id?: string; error?: string; message?: string } | null;
+      if (rpcError || rpcData?.error) {
+        setSubmitError(rpcData?.message ?? rpcError?.message ?? "Score submission failed.");
         setSubmitting(false);
         return;
       }
 
-      const uploaded = await uploadProofPhoto(user.id, scoreData.id);
+      const scoreId = rpcData?.score_id;
+      if (!scoreId) {
+        setSubmitError("Score submission failed — no score ID returned.");
+        setSubmitting(false);
+        return;
+      }
+
+      const uploaded = await uploadProofPhoto(user.id, scoreId);
       if (uploaded) {
         const { error: updateErr } = await supabase
           .from("scores")
           .update({ photo_url: uploaded.url })
-          .eq("id", scoreData.id);
+          .eq("id", scoreId);
         if (updateErr) {
           await supabase.storage.from("score-proofs").remove([uploaded.path]);
         }

@@ -496,8 +496,12 @@ export default function AdminScreen() {
   async function handleForumAction(forumId: string, newStatus: "approved" | "rejected") {
     setForumsError(null);
     setActioningForum(forumId);
-    const { error } = await supabase.from("forums").update({ status: newStatus }).eq("id", forumId);
-    if (error) { setForumsError(error.message); }
+    const { data, error } = await supabase.rpc("rpc_admin_update_forum_status", {
+      p_forum_id: forumId,
+      p_status:   newStatus,
+    });
+    const rpcError = error?.message ?? (data as any)?.error ?? null;
+    if (rpcError) { setForumsError(typeof rpcError === "string" ? rpcError : JSON.stringify(rpcError)); }
     else { setPendingForums((prev) => prev.filter((f) => f.id !== forumId)); }
     setActioningForum(null);
   }
