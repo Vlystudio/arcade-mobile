@@ -506,10 +506,14 @@ export default function AdminScreen() {
 
   async function loadSchedulerTeams() {
     setSchedLoading(true);
-    const [teamsRes, membersRes] = await Promise.all([
-      supabase.from("teams").select("id, name, slot_pref_1, slot_pref_2"),
-      supabase.from("team_members").select("team_id, user_id"),
-    ]);
+
+    // Try with slot_pref columns; fall back to base columns if migration hasn't been run yet
+    let teamsRes = await supabase.from("teams").select("id, name, slot_pref_1, slot_pref_2");
+    if (teamsRes.error) {
+      teamsRes = await supabase.from("teams").select("id, name") as typeof teamsRes;
+    }
+
+    const membersRes = await supabase.from("team_members").select("team_id, user_id");
 
     const teams = (teamsRes.data ?? []) as any[];
     const members = (membersRes.data ?? []) as any[];
