@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getEmailRedirectTo } from "../../lib/auth-redirect";
 import { supabase } from "../../lib/supabase";
+import { CURRENT_TOS_VERSION } from "./terms";
 
 function generateSuggestions(base: string): string[] {
   const clean = base.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().slice(0, 16);
@@ -38,6 +39,8 @@ export default function SignupScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [error, setError]                       = useState<string | null>(null);
 
+  const [tosAgreed, setTosAgreed]               = useState(false);
+
   const [suggestions, setSuggestions]           = useState<string[]>([]);
   const [showSuggestions, setShowSuggestions]   = useState(false);
 
@@ -47,6 +50,10 @@ export default function SignupScreen() {
 
     if (!uname || !email.trim() || !password || !confirmPassword) {
       setError("Fill in all fields to continue.");
+      return;
+    }
+    if (!tosAgreed) {
+      setError("You must be 21 or older and agree to the Terms of Service to create an account.");
       return;
     }
     if (uname.length < 3 || uname.length > 20) {
@@ -85,7 +92,7 @@ export default function SignupScreen() {
       return;
     }
 
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
@@ -93,6 +100,11 @@ export default function SignupScreen() {
         emailRedirectTo: getEmailRedirectTo(),
       },
     });
+
+    // If session is immediately available (no email confirmation required), record ToS acceptance
+    if (signUpData?.session) {
+      await supabase.rpc("rpc_accept_tos", { p_version: CURRENT_TOS_VERSION });
+    }
 
     if (signUpError) {
       setLoading(false);
@@ -201,6 +213,22 @@ export default function SignupScreen() {
               </Pressable>
             </View>
 
+            {/* Age + ToS agreement */}
+            <Pressable style={styles.tosRow} onPress={() => setTosAgreed(!tosAgreed)}>
+              <View style={[styles.checkbox, tosAgreed && styles.checkboxActive]}>
+                {tosAgreed && <Ionicons name="checkmark" size={12} color="#000" />}
+              </View>
+              <Text style={styles.tosLabel}>
+                I am <Text style={styles.tosEmphasis}>21 or older</Text> and agree to the{" "}
+                <Text
+                  style={{ color: "#06b6d4", fontWeight: "700" }}
+                  onPress={() => router.push("/terms" as any)}
+                >
+                  Terms of Service
+                </Text>
+              </Text>
+            </Pressable>
+
             {error && (
               <View style={styles.errorBox}>
                 <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
@@ -303,6 +331,21 @@ const styles = StyleSheet.create({
   inputIcon: { marginRight: 10 },
   input: { flex: 1, color: "#fff", paddingVertical: 15, fontSize: 16 },
   eyeBtn: { padding: 4 },
+
+  tosRow: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: "#0a0a0a", borderRadius: 12,
+    padding: 14, marginBottom: 12,
+    borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  checkbox: {
+    width: 18, height: 18, borderRadius: 4, marginTop: 1,
+    borderWidth: 1.5, borderColor: "#333",
+    alignItems: "center", justifyContent: "center", flexShrink: 0,
+  },
+  checkboxActive: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
+  tosLabel: { color: "#888", fontSize: 13, lineHeight: 20, flex: 1 },
+  tosEmphasis: { color: "#ccc", fontWeight: "700" },
 
   errorBox: {
     flexDirection: "row", alignItems: "center", gap: 8,

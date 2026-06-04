@@ -540,6 +540,8 @@ export default function ProfileScreen() {
             <ActionRow icon="people-outline" label="Manage Teams" onPress={() => router.push("/teams")} divider />
             <ActionRow icon="podium-outline" label="Leaderboard" onPress={() => router.push("/leaderboard")} divider />
             <ActionRow icon="trophy-outline" label="Leagues" onPress={() => router.push("/leagues")} divider />
+            <ActionRow icon="chatbox-ellipses-outline" label="Contact Support" onPress={() => router.push("/support-chat" as any)} divider />
+            <ActionRow icon="star-half-outline" label="Send Feedback" onPress={() => router.push("/feedback" as any)} divider />
             {(role === "owner" || role === "architect") && (
               <ActionRow icon="business-outline" label="Owner Dashboard" onPress={() => router.push("/owner" as any)} divider />
             )}

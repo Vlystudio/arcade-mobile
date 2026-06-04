@@ -16,13 +16,24 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getEmailRedirectTo } from "../../lib/auth-redirect";
 import { supabase } from "../../lib/supabase";
+import { useAuth } from "../context/auth-context";
+import { CURRENT_TOS_VERSION } from "./terms";
 
 export default function LoginScreen() {
+  const { setRememberMe } = useAuth();
+
   const [email, setEmail]               = useState("");
   const [password, setPassword]         = useState("");
   const [loading, setLoading]           = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError]               = useState<string | null>(null);
+  const [rememberMe, setRememberMeLocal] = useState(false);
+
+  // ToS acceptance modal
+  const [showTosModal, setShowTosModal]   = useState(false);
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
+  const [tosAgreed, setTosAgreed]         = useState(false);
+  const [acceptingTos, setAcceptingTos]   = useState(false);
 
   // Forgot username sheet
   const [showForgotUsername, setShowForgotUsername]   = useState(false);
@@ -37,6 +48,12 @@ export default function LoginScreen() {
   const [sendingReset, setSendingReset]               = useState(false);
   const [resetSent, setResetSent]                     = useState(false);
   const [forgotPasswordError, setForgotPasswordError] = useState<string | null>(null);
+
+  function toggleRememberMe() {
+    const next = !rememberMe;
+    setRememberMeLocal(next);
+    setRememberMe(next);
+  }
 
   async function handleLogin() {
     setError(null);
@@ -58,18 +75,51 @@ export default function LoginScreen() {
       loginEmail = resolved;
     }
 
-    const { error: authError } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
-    setLoading(false);
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
     if (authError) {
       setError("Incorrect email, username, or password.");
+      setLoading(false);
       return;
     }
+
+    // Check if user has accepted the current ToS version
+    const userId = authData.user?.id;
+    if (userId) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("tos_accepted_version")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (profile?.tos_accepted_version !== CURRENT_TOS_VERSION) {
+        // Must accept updated ToS before proceeding
+        setPendingUserId(userId);
+        setLoading(false);
+        setShowTosModal(true);
+        return;
+      }
+    }
+
+    setLoading(false);
+    completeLogin(authData.user?.id);
+  }
+
+  async function completeLogin(_userId?: string) {
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
     if (aal?.nextLevel === "aal2" && aal.nextLevel !== aal.currentLevel) {
       router.replace("/mfa-verify" as any);
     } else {
       router.replace("/");
     }
+  }
+
+  async function handleAcceptTos() {
+    if (!tosAgreed || !pendingUserId) return;
+    setAcceptingTos(true);
+    await supabase.rpc("rpc_accept_tos", { p_version: CURRENT_TOS_VERSION });
+    setAcceptingTos(false);
+    setShowTosModal(false);
+    completeLogin(pendingUserId);
   }
 
   async function handleLookupUsername() {
@@ -165,14 +215,22 @@ export default function LoginScreen() {
               </Pressable>
             </View>
 
-            {/* Forgot links */}
-            <View style={styles.forgotRow}>
-              <Pressable onPress={() => setShowForgotUsername(true)}>
-                <Text style={styles.forgotLink}>Forgot username?</Text>
+            {/* Remember Me + Forgot links */}
+            <View style={styles.optionsRow}>
+              <Pressable style={styles.rememberRow} onPress={toggleRememberMe}>
+                <View style={[styles.checkbox, rememberMe && styles.checkboxActive]}>
+                  {rememberMe && <Ionicons name="checkmark" size={12} color="#000" />}
+                </View>
+                <Text style={styles.rememberLabel}>Remember me</Text>
               </Pressable>
-              <Pressable onPress={() => setShowForgotPassword(true)}>
-                <Text style={styles.forgotLink}>Forgot password?</Text>
-              </Pressable>
+              <View style={styles.forgotLinks}>
+                <Pressable onPress={() => setShowForgotUsername(true)}>
+                  <Text style={styles.forgotLink}>Forgot username?</Text>
+                </Pressable>
+                <Pressable onPress={() => setShowForgotPassword(true)}>
+                  <Text style={styles.forgotLink}>Forgot password?</Text>
+                </Pressable>
+              </View>
             </View>
 
             {error && (
@@ -210,6 +268,82 @@ export default function LoginScreen() {
           </Pressable>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* ── ToS Acceptance Modal ─────────────────────────────────── */}
+      <Modal visible={showTosModal} transparent animationType="slide" onRequestClose={() => {}}>
+        <View style={styles.modalBg}>
+          <View style={[styles.sheet, { maxHeight: "85%" }]}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetIconRow}>
+              <View style={[styles.sheetIcon, { backgroundColor: "rgba(6,182,212,0.08)" }]}>
+                <Ionicons name="document-text-outline" size={22} color="#06b6d4" />
+              </View>
+            </View>
+            <Text style={styles.sheetTitle}>Updated Terms of Service</Text>
+            <Text style={styles.sheetSub}>
+              We've updated our Terms of Service. Please review and accept to continue.
+            </Text>
+            <ScrollView style={styles.tosScroll} showsVerticalScrollIndicator>
+              <Text style={styles.tosPreviewText}>
+                {[
+                  "ArcadeTracker is a 21+ platform. By using this app you confirm you are 21 or older.",
+                  "",
+                  "CONTENT STANDARDS: You may not post nudity, sexually explicit content, profanity, racist content, homophobic or transphobic content, hate speech, gore, blood, or violent images on any public area of the app.",
+                  "",
+                  "PRIVATE MESSAGES: Direct messages are end-to-end encrypted. We cannot read them, but prohibited content is still against these Terms.",
+                  "",
+                  "ENFORCEMENT: Violations may result in temporary suspension (24 hours to 30 days) or permanent account deletion depending on severity.",
+                  "",
+                  "SCORE INTEGRITY: All submitted scores are subject to admin review. Falsified scores result in removal and potential ban.",
+                  "",
+                  "By accepting, you agree to the full Terms of Service (version 2026-06) and confirm you are 21 years of age or older.",
+                ].join("\n")}
+              </Text>
+            </ScrollView>
+
+            <Pressable
+              style={styles.checkRow}
+              onPress={() => setTosAgreed(!tosAgreed)}
+            >
+              <View style={[styles.checkbox, tosAgreed && styles.checkboxActive]}>
+                {tosAgreed && <Ionicons name="checkmark" size={12} color="#000" />}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.checkLabel}>
+                  I am 21 or older and agree to the{" "}
+                  <Text
+                    style={{ color: "#06b6d4", fontWeight: "700" }}
+                    onPress={() => router.push("/terms" as any)}
+                  >
+                    Terms of Service
+                  </Text>
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              style={[styles.sheetBtn, (!tosAgreed || acceptingTos) && styles.sheetBtnDisabled]}
+              onPress={handleAcceptTos}
+              disabled={!tosAgreed || acceptingTos}
+            >
+              {acceptingTos
+                ? <ActivityIndicator color="#000" size="small" />
+                : <Text style={styles.sheetBtnText}>Accept and Continue</Text>
+              }
+            </Pressable>
+
+            <Pressable
+              style={styles.sheetCancel}
+              onPress={() => {
+                setShowTosModal(false);
+                supabase.auth.signOut().catch(() => {});
+              }}
+            >
+              <Text style={styles.sheetCancelText}>Decline and Sign Out</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Forgot Username Sheet ─────────────────────────────────── */}
       <Modal visible={showForgotUsername} transparent animationType="slide" onRequestClose={closeForgotUsername}>
@@ -371,8 +505,20 @@ const styles = StyleSheet.create({
   input: { flex: 1, color: "#fff", paddingVertical: 15, fontSize: 16 },
   eyeBtn: { padding: 4 },
 
-  forgotRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 16, marginTop: -4 },
-  forgotLink: { color: "#06b6d4", fontSize: 13, fontWeight: "700" },
+  optionsRow: {
+    flexDirection: "row", justifyContent: "space-between",
+    alignItems: "center", marginBottom: 16, marginTop: -4,
+  },
+  rememberRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  checkbox: {
+    width: 18, height: 18, borderRadius: 4,
+    borderWidth: 1.5, borderColor: "#333",
+    alignItems: "center", justifyContent: "center",
+  },
+  checkboxActive: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
+  rememberLabel: { color: "#555", fontSize: 13, fontWeight: "600" },
+  forgotLinks: { gap: 6 },
+  forgotLink: { color: "#06b6d4", fontSize: 12, fontWeight: "700", textAlign: "right" },
 
   submitBtn: {
     backgroundColor: "#06b6d4", borderRadius: 14,
@@ -407,7 +553,7 @@ const styles = StyleSheet.create({
   backBtnText: { color: "#333", fontSize: 13 },
 
   // Modal / sheet
-  modalBg:      { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
+  modalBg:      { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "flex-end" },
   modalDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   sheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
@@ -423,6 +569,16 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { color: "#fff", fontSize: 20, fontWeight: "900", textAlign: "center" },
   sheetSub:   { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+
+  tosScroll: { maxHeight: 220, backgroundColor: "#0a0a0a", borderRadius: 12, padding: 14 },
+  tosPreviewText: { color: "#666", fontSize: 13, lineHeight: 20 },
+
+  checkRow: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: "#0a0a0a", borderRadius: 12, padding: 14,
+    borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  checkLabel: { color: "#aaa", fontSize: 13, lineHeight: 20 },
 
   sheetBtn: {
     backgroundColor: "#06b6d4", borderRadius: 14,

@@ -3,6 +3,8 @@ import { router } from "expo-router";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+export const CURRENT_TOS_VERSION = "2026-06";
+
 export default function TermsScreen() {
   return (
     <SafeAreaView style={s.root} edges={["top", "bottom"]}>
@@ -15,60 +17,155 @@ export default function TermsScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content}>
-        <Text style={s.updated}>Last updated: June 2025</Text>
+        <Text style={s.updated}>Last updated: June 2026 · Version {CURRENT_TOS_VERSION}</Text>
 
-        <Section title="Acceptance">
-          By downloading or using ArcadeTracker you agree to these Terms of Service. If you do
-          not agree, do not use the app.
+        <Section title="1. Agreement to Terms">
+          By downloading, installing, or using ArcadeTracker ("the App", "we", "us", "our")
+          you agree to be bound by these Terms of Service and all applicable laws. If you do
+          not agree to all of these terms, do not use the App.
         </Section>
 
-        <Section title="Eligibility">
-          You must be at least 13 years old to use ArcadeTracker. By using the app you
-          represent that you meet this requirement.
+        <Section title="2. Age Requirement">
+          {"ArcadeTracker is operated in connection with a 21+ licensed venue. You must be at " +
+           "least 21 years of age to create an account or use the App. By creating an account " +
+           "you represent and warrant that you are 21 years of age or older.\n\n" +
+           "If we discover that an account was created by someone under 21, the account will be " +
+           "immediately and permanently deleted without notice."}
         </Section>
 
-        <Section title="Your Account">
-          {"• You are responsible for keeping your credentials secure.\n• You are responsible for all activity under your account.\n• Do not share your account with others.\n• Notify us immediately if you suspect unauthorized access."}
+        <Section title="3. Your Account">
+          {"• You are solely responsible for maintaining the confidentiality of your login " +
+           "credentials and for all activity that occurs under your account.\n" +
+           "• Do not share your account with any other person.\n" +
+           "• You must notify us immediately if you suspect any unauthorized use of your account.\n" +
+           "• You may not create more than one account. Duplicate accounts will be terminated.\n" +
+           "• Impersonating another user, staff member, or venue employee is strictly prohibited."}
         </Section>
 
-        <Section title="Acceptable Use">
-          {"You agree not to:\n\n• Submit false or inflated scores.\n• Upload content that is illegal, harmful, harassing, defamatory, or obscene.\n• Attempt to reverse-engineer, scrape, or disrupt the service.\n• Impersonate another user or venue staff.\n• Use the app for any commercial purpose without our written consent."}
+        <Section title="4. Community Standards">
+          {"ArcadeTracker is a community platform for a licensed 21+ bar and entertainment venue. " +
+           "All content you post publicly — including profile photos, bio text, posts, team names, " +
+           "score submissions, and chat messages visible to other users — must comply with the " +
+           "following standards.\n\n" +
+           "PROHIBITED CONTENT\n\n" +
+           "The following content is strictly prohibited on ArcadeTracker:\n\n" +
+           "• Nudity, sexually explicit or suggestive content, or pornography of any kind.\n" +
+           "• Profanity, obscene language, or sexually explicit text directed at or visible to " +
+           "other users.\n" +
+           "• Racist, white-supremacist, antisemitic, or other hate-based content targeting any " +
+           "race, ethnicity, or national origin.\n" +
+           "• Homophobic, transphobic, or any content that demeans or dehumanizes individuals " +
+           "based on sexual orientation or gender identity.\n" +
+           "• Hate speech: any content that promotes violence or hatred against individuals or " +
+           "groups based on religion, disability, sex, or any other protected characteristic.\n" +
+           "• Gore, graphic violence, dismemberment, or images of serious injury or death.\n" +
+           "• Images of blood or violent photographs of any kind.\n" +
+           "• Harassment, threats, or targeted intimidation of any user or staff member.\n" +
+           "• Content that glorifies or promotes drug use, illegal firearms, or criminal activity.\n" +
+           "• Spam, phishing links, scam content, or unsolicited commercial promotions.\n" +
+           "• Content that violates any third party's intellectual property rights.\n\n" +
+           "Content moderation is performed by both automated systems and human review. " +
+           "Prohibited content will be removed without notice."}
         </Section>
 
-        <Section title="User Content">
-          You retain ownership of content you post (photos, text). By posting, you grant
-          ArcadeTracker a non-exclusive, royalty-free license to display and store that
-          content to operate the service. We may remove content that violates these terms.
+        <Section title="5. Private Messages">
+          {"ArcadeTracker's direct messaging feature uses end-to-end encryption. This means " +
+           "private messages between users are encrypted on your device before transmission " +
+           "and can only be decrypted by the intended recipient. ArcadeTracker staff cannot " +
+           "read the content of private messages.\n\n" +
+           "While we cannot monitor private messages, we strongly discourage the sharing of " +
+           "any prohibited content — including nudity, hate speech, harassment, or any of the " +
+           "content types listed in Section 4 — in private messages. Sharing such content " +
+           "through private messaging violates these Terms of Service and may result in " +
+           "account suspension if reported and verified.\n\n" +
+           "If another user reports harassment or abuse via private messages, we may take " +
+           "action based on the report and any metadata available to us, even if we cannot " +
+           "read message content."}
         </Section>
 
-        <Section title="Score Integrity">
-          Scores are subject to admin review. Scores submitted with falsified evidence or
-          achieved via cheating may be removed and the account suspended. Decisions by arcade
-          staff are final.
+        <Section title="6. User Content License">
+          {"You retain ownership of all content you create and post on ArcadeTracker " +
+           "(\"User Content\"). By posting User Content, you grant ArcadeTracker a non-exclusive, " +
+           "royalty-free, worldwide, transferable license to host, store, display, reproduce, " +
+           "and distribute that content solely for the purpose of operating and improving the App.\n\n" +
+           "This license ends when you delete your content or your account. You are responsible " +
+           "for ensuring you have all necessary rights to any content you upload."}
         </Section>
 
-        <Section title="Termination">
-          We may suspend or terminate your account at our discretion for violations of these
-          terms. You may delete your account at any time via Profile → Delete Account.
+        <Section title="7. Score Integrity">
+          {"Scores submitted on ArcadeTracker are subject to review by venue staff and platform " +
+           "administrators. By submitting a score, you represent that:\n\n" +
+           "• The score was achieved legitimately by you on the indicated machine.\n" +
+           "• Any photo or video evidence submitted is authentic and unedited.\n" +
+           "• The score was not achieved through any exploit, cheat, or external assistance.\n\n" +
+           "Scores found to be falsified or submitted with fabricated evidence will be removed. " +
+           "Repeated violations will result in account suspension or permanent ban. All " +
+           "administrative decisions regarding score integrity are final."}
         </Section>
 
-        <Section title="Disclaimer of Warranties">
-          The app is provided "as is" without warranties of any kind. We do not guarantee
-          uptime, accuracy of scores or leaderboards, or uninterrupted service.
+        <Section title="8. Enforcement & Account Suspension">
+          {"Violations of these Terms of Service are subject to enforcement action, which " +
+           "may include any of the following at our sole discretion:\n\n" +
+           "• A formal warning issued to your account.\n" +
+           "• Temporary suspension (ranging from 24 hours to 30 days depending on severity).\n" +
+           "• Permanent deletion of your account and all associated data.\n\n" +
+           "Severe violations — including posting child sexual abuse material (CSAM), issuing " +
+           "credible threats of violence, or engaging in targeted harassment campaigns — will " +
+           "result in immediate permanent account deletion and may be reported to law enforcement.\n\n" +
+           "We reserve the right to suspend or terminate any account at our sole discretion " +
+           "for any violation of these terms, or for conduct that we determine to be harmful " +
+           "to our community, even if not explicitly listed above."}
         </Section>
 
-        <Section title="Limitation of Liability">
-          To the fullest extent permitted by law, ArcadeTracker is not liable for indirect,
-          incidental, or consequential damages arising from your use of the service.
+        <Section title="9. Intellectual Property">
+          {"All rights, title, and interest in the ArcadeTracker platform — including its " +
+           "design, software, brand, logos, and features — are owned by or licensed to " +
+           "ArcadeTracker. These terms do not grant you any right to use our trademarks, " +
+           "logos, or brand features without prior written consent."}
         </Section>
 
-        <Section title="Changes">
-          We may update these terms at any time. Continued use after notice of changes
-          constitutes acceptance of the updated terms.
+        <Section title="10. Disclaimer of Warranties">
+          {"THE APP IS PROVIDED \"AS IS\" AND \"AS AVAILABLE\" WITHOUT WARRANTIES OF ANY KIND, " +
+           "EITHER EXPRESS OR IMPLIED. WE DISCLAIM ALL WARRANTIES INCLUDING, BUT NOT LIMITED " +
+           "TO, IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND " +
+           "NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE APP WILL BE UNINTERRUPTED, ERROR-FREE, " +
+           "OR FREE OF VIRUSES OR OTHER HARMFUL COMPONENTS."}
         </Section>
 
-        <Section title="Contact">
-          {"Questions about these terms? Contact us at:\n\nsupport@arcadetracker.app"}
+        <Section title="11. Limitation of Liability">
+          {"TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, ARCADETRACKER AND ITS OFFICERS, " +
+           "DIRECTORS, EMPLOYEES, AND AGENTS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, " +
+           "SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES — INCLUDING LOSS OF PROFITS, DATA, OR " +
+           "GOODWILL — ARISING OUT OF OR IN CONNECTION WITH YOUR USE OF THE APP, EVEN IF WE " +
+           "HAVE BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.\n\n" +
+           "IN NO EVENT SHALL OUR TOTAL LIABILITY TO YOU EXCEED THE GREATER OF $50 OR THE " +
+           "AMOUNT YOU PAID US IN THE PRECEDING 12 MONTHS."}
+        </Section>
+
+        <Section title="12. Indemnification">
+          You agree to indemnify, defend, and hold harmless ArcadeTracker and its affiliates,
+          officers, directors, employees, and agents from and against any claims, liabilities,
+          damages, losses, and expenses — including reasonable attorneys' fees — arising out of
+          or in any way connected with your use of the App, your User Content, or your violation
+          of these Terms.
+        </Section>
+
+        <Section title="13. Governing Law">
+          These Terms are governed by the laws of the state in which ArcadeTracker's principal
+          place of business is located, without regard to its conflict of law provisions. Any
+          disputes arising under these Terms shall be resolved in the courts of that jurisdiction.
+        </Section>
+
+        <Section title="14. Changes to These Terms">
+          {"We may update these Terms at any time. When we make material changes, we will " +
+           "notify you through the App and require you to affirmatively accept the updated " +
+           "Terms before continuing to use the service. Your continued use after accepting " +
+           "updated Terms constitutes your agreement to be bound by them."}
+        </Section>
+
+        <Section title="15. Contact Us">
+          {"Questions about these Terms of Service? Contact us at:\n\nsupport@arcadetracker.app\n\n" +
+           "Or use the Support Chat feature available from your Profile."}
         </Section>
 
         <View style={{ height: 32 }} />
@@ -101,6 +198,6 @@ const s = StyleSheet.create({
   content: { paddingHorizontal: 22, paddingTop: 20 },
   updated: { color: "#444", fontSize: 12, marginBottom: 24 },
   section: { marginBottom: 28 },
-  sectionTitle: { color: "#fff", fontSize: 16, fontWeight: "800", marginBottom: 10 },
+  sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 10 },
   sectionBody: { color: "#888", fontSize: 14, lineHeight: 22 },
 });
