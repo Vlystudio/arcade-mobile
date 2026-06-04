@@ -50,7 +50,7 @@ export function encryptMessage(
 ): EncryptedPayload {
   const nonce = nacl.randomBytes(nacl.box.nonceLength);
   const senderNonce = nacl.randomBytes(nacl.box.nonceLength);
-  const msg = encodeUTF8(plaintext);
+  const msg = decodeUTF8(plaintext);
   return {
     encrypted: encodeBase64(nacl.box(msg, nonce, recipientPublicKey, sender.secretKey)),
     nonce: encodeBase64(nonce),
@@ -66,7 +66,7 @@ export function decryptForRecipient(
 ): string | null {
   try {
     const d = nacl.box.open(decodeBase64(encrypted), decodeBase64(nonce), decodeBase64(senderPublicKeyB64), mySecretKey);
-    return d ? decodeUTF8(d) : null;
+    return d ? encodeUTF8(d) : null;
   } catch { return null; }
 }
 
@@ -76,7 +76,7 @@ export function decryptSenderCopy(
 ): string | null {
   try {
     const d = nacl.box.open(decodeBase64(senderCopy), decodeBase64(senderNonce), myPublicKey, mySecretKey);
-    return d ? decodeUTF8(d) : null;
+    return d ? encodeUTF8(d) : null;
   } catch { return null; }
 }
 

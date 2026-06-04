@@ -35,7 +35,7 @@ export default function MfaSetupScreen() {
     // Un-enroll any stale unverified factor first
     const { data: existing } = await supabase.auth.mfa.listFactors();
     for (const f of existing?.totp ?? []) {
-      if (f.status === "unverified") {
+      if ((f.status as string) === "unverified") {
         await supabase.auth.mfa.unenroll({ factorId: f.id });
       }
     }
