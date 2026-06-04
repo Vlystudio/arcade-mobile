@@ -21,7 +21,7 @@ import { supabase } from "../../lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums";
 type ReviewTab = "pending" | "approved" | "denied";
 
 type ReviewScore = {
@@ -102,6 +102,7 @@ const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
   { key: "health",      label: "Health",      icon: "pulse-outline" },
   { key: "teams",       label: "Teams",       icon: "people-outline" },
   { key: "tournaments", label: "Tourneys",    icon: "trophy-outline" },
+  { key: "forums",      label: "Forums",      icon: "chatbubbles-outline" },
   { key: "users",       label: "Users",       icon: "person-outline" },
 ];
 
@@ -201,6 +202,14 @@ export default function AdminScreen() {
   const [teamsError, setTeamsError] = useState<string | null>(null);
   const [tournError, setTournError] = useState<string | null>(null);
 
+  // Forums state
+  type PendingForum = { id: string; title: string; description: string | null; game_type: string | null; creator_username: string; created_at: string };
+  const [pendingForums, setPendingForums] = useState<PendingForum[]>([]);
+  const [forumsLoading, setForumsLoading] = useState(false);
+  const [forumsError, setForumsError] = useState<string | null>(null);
+  const [forumsTab, setForumsTab] = useState<"pending" | "approved">("pending");
+  const [actioningForum, setActioningForum] = useState<string | null>(null);
+
   useEffect(() => { if (user) checkAdminAndLoad(); }, [user]);
   useEffect(() => { if (isAdmin) loadReviews(reviewTab); }, [reviewTab, isAdmin]);
   useEffect(() => {
@@ -209,6 +218,8 @@ export default function AdminScreen() {
     if (mainTab === "health" && !healthData) loadHealth();
     if (mainTab === "teams") loadAdminTeams();
     if (mainTab === "users") loadUsers();
+    if (mainTab === "forums") loadPendingForums(forumsTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
       else loadTournRequests(tournTab as "pending" | "approved" | "denied");
@@ -432,6 +443,44 @@ export default function AdminScreen() {
     setDeleteTeamTarget(null);
   }
 
+  // ── Forums ─────────────────────────────────────────────────────────────────
+
+  async function loadPendingForums(status: "pending" | "approved") {
+    setForumsLoading(true);
+    setForumsError(null);
+    const { data, error } = await supabase
+      .from("forums")
+      .select("id, title, description, game_type, creator_id, created_at")
+      .eq("status", status)
+      .order("created_at", { ascending: status === "pending" });
+
+    if (error) { setForumsError(error.message); setForumsLoading(false); return; }
+
+    const creatorIds = [...new Set((data ?? []).map((f: any) => f.creator_id).filter(Boolean))] as string[];
+    let usernameMap: Record<string, string> = {};
+    if (creatorIds.length) {
+      const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", creatorIds);
+      for (const p of profiles ?? []) usernameMap[(p as any).id] = (p as any).username;
+    }
+
+    setPendingForums((data ?? []).map((f: any) => ({
+      id: f.id, title: f.title, description: f.description,
+      game_type: f.game_type,
+      creator_username: f.creator_id ? (usernameMap[f.creator_id] ?? "Unknown") : "Unknown",
+      created_at: f.created_at,
+    })));
+    setForumsLoading(false);
+  }
+
+  async function handleForumAction(forumId: string, newStatus: "approved" | "rejected") {
+    setForumsError(null);
+    setActioningForum(forumId);
+    const { error } = await supabase.from("forums").update({ status: newStatus }).eq("id", forumId);
+    if (error) { setForumsError(error.message); }
+    else { setPendingForums((prev) => prev.filter((f) => f.id !== forumId)); }
+    setActioningForum(null);
+  }
+
   // ── Tournaments ────────────────────────────────────────────────────────────
 
   async function loadTournRequests(status: "pending" | "approved" | "denied") {
@@ -579,6 +628,7 @@ export default function AdminScreen() {
               : mainTab === "stats" ? "Submission metrics"
               : mainTab === "teams" ? "Manage all teams"
               : mainTab === "tournaments" ? "Tournament requests"
+              : mainTab === "forums" ? "Forum approvals"
               : "Business health"}
           </Text>
         </View>
@@ -969,6 +1019,89 @@ export default function AdminScreen() {
               })
           )}
         </ScrollView>
+      )}
+
+      {/* ── Forums ── */}
+      {mainTab === "forums" && (
+        <>
+          <View style={styles.subTabBar}>
+            {(["pending", "approved"] as const).map((tab) => (
+              <Pressable
+                key={tab}
+                style={[styles.subTabItem, forumsTab === tab && styles.subTabItemActive]}
+                onPress={() => { setForumsTab(tab); loadPendingForums(tab); }}
+              >
+                <Text style={[styles.subTabLabel, forumsTab === tab && styles.subTabLabelActive]}>
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {forumsError && (
+            <View style={[styles.inlineError, { margin: 12 }]}>
+              <Text style={styles.inlineErrorText}>{forumsError}</Text>
+            </View>
+          )}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.content}
+            refreshControl={<RefreshControl refreshing={false} onRefresh={() => loadPendingForums(forumsTab)} tintColor="#06b6d4" />}
+          >
+            {forumsLoading ? (
+              <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
+            ) : pendingForums.length === 0 ? (
+              <EmptyState
+                title={forumsTab === "pending" ? "No pending forums" : "No approved forums"}
+                sub={forumsTab === "pending" ? "User forum requests will appear here." : "Approved forums appear here."}
+                icon="chatbubbles-outline"
+                color="#06b6d4"
+              />
+            ) : (
+              <>
+                <View style={styles.teamsCountRow}>
+                  <Text style={styles.teamsCountText}>{pendingForums.length} {pendingForums.length === 1 ? "forum" : "forums"}</Text>
+                </View>
+                {pendingForums.map((forum) => (
+                  <View key={forum.id} style={styles.tournCard}>
+                    <View style={styles.tournCardTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.tournTitle}>{forum.title}</Text>
+                        <Text style={styles.tournMeta}>By {forum.creator_username} · {relTime(forum.created_at)}</Text>
+                      </View>
+                      {forum.game_type && (
+                        <View style={styles.tournGameChip}>
+                          <Text style={styles.tournGameChipText}>{forum.game_type}</Text>
+                        </View>
+                      )}
+                    </View>
+                    {forum.description ? <Text style={styles.tournDesc}>{forum.description}</Text> : null}
+                    {forumsTab === "pending" && (
+                      <View style={styles.tournActions}>
+                        <Pressable
+                          style={[styles.tournDenyBtn, actioningForum === forum.id && { opacity: 0.5 }]}
+                          onPress={() => handleForumAction(forum.id, "rejected")}
+                          disabled={actioningForum === forum.id}
+                        >
+                          <Ionicons name="close" size={16} color="#ef4444" />
+                          <Text style={styles.tournDenyBtnText}>Reject</Text>
+                        </Pressable>
+                        <Pressable
+                          style={[styles.tournApproveBtn, actioningForum === forum.id && { opacity: 0.5 }]}
+                          onPress={() => handleForumAction(forum.id, "approved")}
+                          disabled={actioningForum === forum.id}
+                        >
+                          {actioningForum === forum.id
+                            ? <ActivityIndicator size="small" color="#000" />
+                            : <><Ionicons name="checkmark" size={16} color="#000" /><Text style={styles.tournApproveBtnText}>Approve</Text></>}
+                        </Pressable>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </>
+            )}
+          </ScrollView>
+        </>
       )}
 
       {/* Post results modal */}

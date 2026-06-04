@@ -38,7 +38,24 @@ type Post = {
   post_type: string;
   like_count: number;
   liked_by_me: boolean;
+  comment_count: number;
   created_at: string;
+};
+
+type Comment = {
+  id: string;
+  user_id: string;
+  username: string;
+  avatar_url: string | null;
+  content: string;
+  created_at: string;
+};
+
+type ConvPreview = {
+  id: string;
+  other_user_id: string;
+  other_username: string;
+  other_avatar: string | null;
 };
 
 type FeedTab = "following" | "arcade";
@@ -59,6 +76,21 @@ export default function FeedScreen() {
   const [postError, setPostError] = useState<string | null>(null);
   const [postPhotoUri, setPostPhotoUri] = useState<string | null>(null);
   const [lightboxUri, setLightboxUri] = useState<string | null>(null);
+
+  // Comments
+  const [commentPostId, setCommentPostId] = useState<string | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [newComment, setNewComment] = useState("");
+  const [commentPosting, setCommentPosting] = useState(false);
+
+  // Share score as DM
+  const [sharePost, setSharePost] = useState<Post | null>(null);
+  const [shareConvs, setShareConvs] = useState<ConvPreview[]>([]);
+  const [shareConvsLoading, setShareConvsLoading] = useState(false);
+  const [sendingShareId, setSendingShareId] = useState<string | null>(null);
+
+  const MOD_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
   // Edit state
   const [editingPost, setEditingPost] = useState<Post | null>(null);
@@ -103,13 +135,14 @@ export default function FeedScreen() {
     const userIds = [...new Set(postsData.map((p: any) => p.user_id as string))];
     const scoreIds = postsData.map((p: any) => p.score_id).filter(Boolean);
 
-    // Step 2: parallel fetch of profiles, likes, and scores
-    const [profilesRes, likesRes, scoresRes] = await Promise.all([
+    // Step 2: parallel fetch of profiles, likes, scores, and comment counts
+    const [profilesRes, likesRes, scoresRes, commentsRes] = await Promise.all([
       supabase.from("profiles").select("id, username, avatar_url").in("id", userIds),
       supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
       scoreIds.length
         ? supabase.from("scores").select("id, score, game_id, games(name)").in("id", scoreIds)
         : Promise.resolve({ data: [] }),
+      supabase.from("post_comments").select("post_id").in("post_id", postIds),
     ]);
 
     const profileMap = Object.fromEntries((profilesRes.data ?? []).map((p: any) => [p.id, p]));
@@ -119,6 +152,10 @@ export default function FeedScreen() {
       likesMap[l.post_id].push(l.user_id);
     }
     const scoreMap = Object.fromEntries((scoresRes.data ?? []).map((s: any) => [s.id, s]));
+    const commentCountMap: Record<string, number> = {};
+    for (const c of commentsRes.data ?? []) {
+      commentCountMap[(c as any).post_id] = (commentCountMap[(c as any).post_id] ?? 0) + 1;
+    }
 
     const mapped: Post[] = postsData.map((p: any) => {
       const profile = profileMap[p.user_id];
@@ -137,6 +174,7 @@ export default function FeedScreen() {
         post_type: p.post_type,
         like_count: postLikes.length,
         liked_by_me: postLikes.includes(user.id),
+        comment_count: commentCountMap[p.id] ?? 0,
         created_at: p.created_at,
       };
     });
@@ -309,6 +347,105 @@ export default function FeedScreen() {
     loadFeed(tab);
   }
 
+  async function loadComments(postId: string) {
+    setCommentsLoading(true);
+    const { data } = await supabase
+      .from("post_comments")
+      .select("id, user_id, content, created_at")
+      .eq("post_id", postId)
+      .order("created_at", { ascending: true });
+
+    const userIds = [...new Set((data ?? []).map((c: any) => c.user_id as string))];
+    let profileMap: Record<string, { username: string; avatar_url: string | null }> = {};
+    if (userIds.length) {
+      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds);
+      for (const p of profiles ?? []) profileMap[(p as any).id] = { username: (p as any).username, avatar_url: (p as any).avatar_url };
+    }
+
+    setComments((data ?? []).map((c: any) => ({
+      id: c.id, user_id: c.user_id,
+      username: profileMap[c.user_id]?.username ?? "Unknown",
+      avatar_url: profileMap[c.user_id]?.avatar_url ?? null,
+      content: c.content, created_at: c.created_at,
+    })));
+    setCommentsLoading(false);
+  }
+
+  async function submitComment() {
+    if (!user || !commentPostId || !newComment.trim()) return;
+    setCommentPosting(true);
+    try {
+      const modRes = await fetch(`${MOD_BASE}/api/moderation/text`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: newComment }),
+      });
+      if (modRes.ok) {
+        const { flagged, reason } = await modRes.json();
+        if (flagged) {
+          Alert.alert("Comment blocked", reason ?? "Your comment was flagged by our content filter.");
+          setCommentPosting(false);
+          return;
+        }
+      }
+    } catch {}
+
+    const { error } = await supabase.from("post_comments").insert({
+      post_id: commentPostId, user_id: user.id, content: newComment.trim(),
+    });
+    setCommentPosting(false);
+    if (error) { Alert.alert("Error", error.message); return; }
+
+    setComments((prev) => [...prev, {
+      id: Date.now().toString(), user_id: user.id,
+      username: username ?? "You", avatar_url: myAvatarUrl,
+      content: newComment.trim(), created_at: new Date().toISOString(),
+    }]);
+    setNewComment("");
+    setPosts((prev) => prev.map((p) => p.id === commentPostId ? { ...p, comment_count: p.comment_count + 1 } : p));
+  }
+
+  async function openShare(post: Post) {
+    setSharePost(post);
+    setShareConvsLoading(true);
+    const { data: convData } = await supabase
+      .from("conversations")
+      .select("id, participant_1, participant_2")
+      .or(`participant_1.eq.${user!.id},participant_2.eq.${user!.id}`)
+      .order("last_message_at", { ascending: false, nullsFirst: false })
+      .limit(30);
+
+    const otherIds = (convData ?? []).map((c: any) =>
+      c.participant_1 === user!.id ? c.participant_2 : c.participant_1
+    );
+    let profileMap: Record<string, { username: string; avatar_url: string | null }> = {};
+    if (otherIds.length) {
+      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", otherIds);
+      for (const p of profiles ?? []) profileMap[(p as any).id] = { username: (p as any).username, avatar_url: (p as any).avatar_url };
+    }
+
+    setShareConvs((convData ?? []).map((c: any) => {
+      const otherId = c.participant_1 === user!.id ? c.participant_2 : c.participant_1;
+      return { id: c.id, other_user_id: otherId, other_username: profileMap[otherId]?.username ?? "Unknown", other_avatar: profileMap[otherId]?.avatar_url ?? null };
+    }));
+    setShareConvsLoading(false);
+  }
+
+  async function sendShare(convId: string) {
+    if (!sharePost || !user) return;
+    setSendingShareId(convId);
+    const scoreText = sharePost.score_value != null
+      ? `Score: ${sharePost.score_value.toLocaleString()}${sharePost.game_name ? ` on ${sharePost.game_name}` : ""} 🏆`
+      : sharePost.content ?? "";
+    const msgContent = `Check out @${sharePost.username}'s post:\n${scoreText}`;
+
+    await supabase.from("messages").insert({ conversation_id: convId, sender_id: user.id, content: msgContent });
+    await supabase.from("conversations").update({ last_message: msgContent, last_message_at: new Date().toISOString() }).eq("id", convId);
+
+    setSendingShareId(null);
+    setSharePost(null);
+    Alert.alert("Sent!", "Post shared via message.");
+  }
+
   if (authLoading || loading) {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
   }
@@ -325,6 +462,9 @@ export default function FeedScreen() {
             </View>
           </View>
           <View style={styles.headerActions}>
+            <Pressable style={styles.iconBtn} onPress={() => router.push("/forums" as any)}>
+              <Ionicons name="chatbubbles-outline" size={21} color="#888" />
+            </Pressable>
             <Pressable style={styles.iconBtn} onPress={() => router.push("/chat" as any)}>
               <Ionicons name="chatbubble-outline" size={21} color="#888" />
             </Pressable>
@@ -390,6 +530,8 @@ export default function FeedScreen() {
                 onDelete={() => handleDelete(post.id)}
                 onEdit={() => openEdit(post)}
                 onImagePress={(uri) => setLightboxUri(uri)}
+                onComment={() => { setCommentPostId(post.id); setComments([]); setNewComment(""); loadComments(post.id); }}
+                onShare={() => openShare(post)}
               />
             ))
           )}
@@ -400,6 +542,127 @@ export default function FeedScreen() {
 
       <ImageLightbox uri={lightboxUri} onClose={() => setLightboxUri(null)} />
 
+
+      {/* Comments modal */}
+      <Modal
+        visible={commentPostId !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setCommentPostId(null)}
+      >
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={styles.modalBg}>
+            <Pressable style={styles.modalDismiss} onPress={() => setCommentPostId(null)} />
+            <View style={[styles.modalSheet, { maxHeight: "80%" }]}>
+              <View style={styles.modalHandle} />
+              <View style={styles.modalTop}>
+                <Text style={styles.editModalTitle}>Comments</Text>
+                <Pressable style={styles.modalCloseBtn} onPress={() => setCommentPostId(null)}>
+                  <Ionicons name="close" size={18} color="#555" />
+                </Pressable>
+              </View>
+              <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }} keyboardShouldPersistTaps="handled">
+                {commentsLoading ? (
+                  <ActivityIndicator color="#06b6d4" style={{ marginVertical: 30 }} />
+                ) : comments.length === 0 ? (
+                  <View style={styles.cmtEmpty}>
+                    <Ionicons name="chatbubble-outline" size={28} color="#333" />
+                    <Text style={styles.cmtEmptyText}>No comments yet. Be first!</Text>
+                  </View>
+                ) : (
+                  comments.map((c) => (
+                    <View key={c.id} style={styles.cmtRow}>
+                      <Avatar uri={c.avatar_url} name={c.username} size={32} />
+                      <View style={styles.cmtBubble}>
+                        <Text style={styles.cmtAuthor}>{c.username}</Text>
+                        <Text style={styles.cmtContent}>{c.content}</Text>
+                      </View>
+                    </View>
+                  ))
+                )}
+                <View style={{ height: 8 }} />
+              </ScrollView>
+              <View style={styles.cmtInputRow}>
+                <Avatar uri={myAvatarUrl} name={username ?? "Y"} size={30} />
+                <TextInput
+                  style={styles.cmtInput}
+                  placeholder="Add a comment…"
+                  placeholderTextColor="#333"
+                  value={newComment}
+                  onChangeText={setNewComment}
+                  maxLength={280}
+                  returnKeyType="send"
+                  onSubmitEditing={submitComment}
+                  editable={!commentPosting}
+                />
+                <Pressable
+                  style={[styles.cmtSendBtn, (!newComment.trim() || commentPosting) && { opacity: 0.4 }]}
+                  onPress={submitComment}
+                  disabled={!newComment.trim() || commentPosting}
+                >
+                  {commentPosting
+                    ? <ActivityIndicator size="small" color="#000" />
+                    : <Ionicons name="send" size={16} color="#000" />}
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Share score modal */}
+      <Modal
+        visible={sharePost !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSharePost(null)}
+      >
+        <View style={styles.modalBg}>
+          <Pressable style={styles.modalDismiss} onPress={() => setSharePost(null)} />
+          <View style={[styles.modalSheet, { maxHeight: "70%" }]}>
+            <View style={styles.modalHandle} />
+            <View style={styles.modalTop}>
+              <View>
+                <Text style={styles.editModalTitle}>Share to Messages</Text>
+                <Text style={styles.shareSubtitle}>
+                  {sharePost?.score_value != null
+                    ? `${sharePost.score_value.toLocaleString()} pts${sharePost.game_name ? ` · ${sharePost.game_name}` : ""}`
+                    : sharePost?.username ?? ""}
+                </Text>
+              </View>
+              <Pressable style={styles.modalCloseBtn} onPress={() => setSharePost(null)}>
+                <Ionicons name="close" size={18} color="#555" />
+              </Pressable>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {shareConvsLoading ? (
+                <ActivityIndicator color="#06b6d4" style={{ marginVertical: 30 }} />
+              ) : shareConvs.length === 0 ? (
+                <View style={styles.cmtEmpty}>
+                  <Ionicons name="chatbubble-outline" size={28} color="#333" />
+                  <Text style={styles.cmtEmptyText}>No conversations yet. Start a chat first!</Text>
+                </View>
+              ) : (
+                shareConvs.map((conv) => (
+                  <Pressable
+                    key={conv.id}
+                    style={styles.shareConvRow}
+                    onPress={() => sendShare(conv.id)}
+                    disabled={sendingShareId === conv.id}
+                  >
+                    <Avatar uri={conv.other_avatar} name={conv.other_username} size={40} />
+                    <Text style={styles.shareConvName}>{conv.other_username}</Text>
+                    {sendingShareId === conv.id
+                      ? <ActivityIndicator size="small" color="#06b6d4" />
+                      : <Ionicons name="paper-plane-outline" size={18} color="#06b6d4" />}
+                  </Pressable>
+                ))
+              )}
+              <View style={{ height: 16 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Edit post modal */}
       <Modal visible={editingPost !== null} transparent animationType="slide" onRequestClose={() => setEditingPost(null)}>
@@ -563,7 +826,7 @@ export default function FeedScreen() {
   );
 }
 
-function PostCard({ post, canDelete, canEdit, onLike, onDelete, onEdit, onImagePress }: {
+function PostCard({ post, canDelete, canEdit, onLike, onDelete, onEdit, onImagePress, onComment, onShare }: {
   post: Post;
   isMe: boolean;
   canDelete: boolean;
@@ -572,6 +835,8 @@ function PostCard({ post, canDelete, canEdit, onLike, onDelete, onEdit, onImageP
   onDelete: () => void;
   onEdit: () => void;
   onImagePress: (uri: string) => void;
+  onComment: () => void;
+  onShare: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const isAnnouncement = post.post_type === "announcement";
@@ -649,6 +914,21 @@ function PostCard({ post, canDelete, canEdit, onLike, onDelete, onEdit, onImageP
             </Text>
           )}
         </Pressable>
+        <Pressable style={styles.likeBtn} onPress={onComment}>
+          <View style={styles.likeIconWrap}>
+            <Ionicons name="chatbubble-outline" size={15} color="#555" />
+          </View>
+          {post.comment_count > 0 && (
+            <Text style={styles.likeCount}>{post.comment_count}</Text>
+          )}
+        </Pressable>
+        {hasScore && (
+          <Pressable style={styles.likeBtn} onPress={onShare}>
+            <View style={styles.likeIconWrap}>
+              <Ionicons name="paper-plane-outline" size={15} color="#555" />
+            </View>
+          </Pressable>
+        )}
       </View>
     </View>
 
@@ -929,4 +1209,20 @@ const styles = StyleSheet.create({
   menuItemDestructive: { color: "#ef4444" },
   menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#222", marginHorizontal: 16 },
   menuCancelText: { color: "#555", fontSize: 16, fontWeight: "600" },
+
+  // Comments
+  cmtEmpty: { alignItems: "center", justifyContent: "center", paddingVertical: 36, gap: 10 },
+  cmtEmptyText: { color: "#444", fontSize: 14 },
+  cmtRow: { flexDirection: "row", gap: 10, paddingHorizontal: 4, marginBottom: 14, alignItems: "flex-start" },
+  cmtBubble: { flex: 1, backgroundColor: "#161616", borderRadius: 14, padding: 10, borderWidth: 1, borderColor: "#1e1e1e" },
+  cmtAuthor: { color: "#06b6d4", fontSize: 12, fontWeight: "800", marginBottom: 3 },
+  cmtContent: { color: "#ccc", fontSize: 14, lineHeight: 20 },
+  cmtInputRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#222" },
+  cmtInput: { flex: 1, backgroundColor: "#161616", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, color: "#fff", fontSize: 14, borderWidth: 1, borderColor: "#222" },
+  cmtSendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center" },
+
+  // Share
+  shareSubtitle: { color: "#555", fontSize: 12, marginTop: 2 },
+  shareConvRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
+  shareConvName: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
 });
