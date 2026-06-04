@@ -25,6 +25,7 @@ import { Avatar } from "../components/avatar";
 import { ImageLightbox } from "../components/image-lightbox";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { moderateImage } from "../../lib/moderate-image";
 
 type Post = {
   id: string;
@@ -320,6 +321,14 @@ export default function FeedScreen() {
         if (uploadErr) throw uploadErr;
         const { data: urlData } = supabase.storage.from("post-photos").getPublicUrl(path);
         photoUrl = urlData.publicUrl;
+
+        const mod = await moderateImage({ imageUrl: photoUrl, bucket: "post-photos", path, recordType: "post", recordId: "" });
+        if (!mod.ok) {
+          await supabase.storage.from("post-photos").remove([path]);
+          setPostError(mod.message);
+          setPosting(false);
+          return;
+        }
       } catch (err: any) {
         setPostError("Photo upload failed: " + (err.message ?? "unknown error"));
         setPosting(false);

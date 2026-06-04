@@ -22,6 +22,7 @@ import { RoleBadge, isElevatedRole } from "../components/role-badge";
 import type { AppRole } from "../components/role-badge";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { moderateImage } from "../../lib/moderate-image";
 
 type GameOption = { id: string; name: string; type: string; count: number };
 type TournPlacement = { tournament_id: string; title: string; placement: number; proposed_date: string | null };
@@ -193,6 +194,9 @@ export default function ProfileScreen() {
 
       const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
       const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      const mod = await moderateImage({ imageUrl: urlData.publicUrl, bucket: "avatars", path, recordType: "avatar", recordId: user.id });
+      if (!mod.ok) throw new Error(mod.message);
 
       const { error: dbError } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", user.id);
       if (dbError) throw dbError;
