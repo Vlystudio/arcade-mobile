@@ -878,20 +878,27 @@ export default function AdminScreen() {
     setTournError(null);
     setEditingTourn(true);
     const maxP = parseInt(editTournForm.max_players, 10);
-    const updates: Record<string, unknown> = {
-      title: editTournForm.title.trim() || editTournTarget.title,
-      game_type: editTournForm.game_type.trim() || null,
-      max_players: isNaN(maxP) ? editTournTarget.max_players : maxP,
-    };
-    if (editTournForm.proposed_date.trim()) {
-      const d = new Date(editTournForm.proposed_date.trim());
-      if (!isNaN(d.getTime())) updates.proposed_date = d.toISOString();
-    }
-    const { error } = await supabase.from("tournaments").update(updates).eq("id", editTournTarget.id);
+    const proposedDate = editTournForm.proposed_date.trim()
+      ? (() => { const d = new Date(editTournForm.proposed_date.trim()); return isNaN(d.getTime()) ? null : d.toISOString(); })()
+      : null;
+    const { data, error } = await supabase.rpc("rpc_admin_update_tournament", {
+      p_tournament_id: editTournTarget.id,
+      p_title:         editTournForm.title.trim() || editTournTarget.title,
+      p_game_type:     editTournForm.game_type.trim() || null,
+      p_proposed_date: proposedDate,
+      p_max_players:   isNaN(maxP) ? editTournTarget.max_players : maxP,
+    });
     if (error) { setTournError(error.message); }
+    else if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); }
     else {
       setManageTournaments(prev => prev.map(t =>
-        t.id === editTournTarget.id ? { ...t, ...updates } as ManageTournament : t
+        t.id === editTournTarget.id ? {
+          ...t,
+          title:         editTournForm.title.trim() || t.title,
+          game_type:     editTournForm.game_type.trim() || null,
+          proposed_date: proposedDate ?? t.proposed_date,
+          max_players:   isNaN(maxP) ? t.max_players : maxP,
+        } : t
       ));
       setEditTournTarget(null);
     }
@@ -902,8 +909,11 @@ export default function AdminScreen() {
     if (!deleteTournTarget) return;
     setTournError(null);
     setDeletingTourn(true);
-    const { error } = await supabase.from("tournaments").delete().eq("id", deleteTournTarget.id);
+    const { data, error } = await supabase.rpc("rpc_admin_delete_tournament", {
+      p_tournament_id: deleteTournTarget.id,
+    });
     if (error) { setTournError(error.message); }
+    else if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); }
     else {
       setManageTournaments(prev => prev.filter(t => t.id !== deleteTournTarget.id));
       setDeleteTournTarget(null);
@@ -1909,8 +1919,13 @@ export default function AdminScreen() {
 
       {/* Edit tournament modal */}
       <Modal visible={!!editTournTarget} transparent animationType="slide" onRequestClose={() => setEditTournTarget(null)}>
-        <View style={styles.confirmBg}>
+        <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
           <Pressable style={styles.confirmDismiss} onPress={() => setEditTournTarget(null)} />
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }}
+            scrollEnabled={false}
+          >
           <View style={styles.editTournSheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.editTournTitle}>Edit Tournament</Text>
@@ -1975,6 +1990,7 @@ export default function AdminScreen() {
               </Pressable>
             </View>
           </View>
+          </ScrollView>
         </View>
       </Modal>
 
