@@ -1,6 +1,6 @@
 const RESEND_API_KEY  = Deno.env.get("RESEND_API_KEY")  ?? "";
 const NOTIFY_SECRET   = Deno.env.get("NOTIFY_SECRET")   ?? "";
-const TO_EMAIL        = "valeyardvisuals@vlystudios.com";
+const TO_EMAIL        = "valeyardvisuals@gmail.com";
 const FROM_EMAIL      = "ArcadeTracker <noreply@vlystudios.com>";
 
 Deno.serve(async (req) => {
@@ -44,11 +44,13 @@ Deno.serve(async (req) => {
     }),
   });
 
+  const resBody = await res.json().catch(() => ({}));
+
   if (!res.ok) {
-    const err = await res.text();
-    console.error("Resend error:", err);
-    return new Response(JSON.stringify({ error: err }), { status: 502 });
+    console.error("Resend error:", JSON.stringify(resBody));
+    return new Response(JSON.stringify({ error: resBody }), { status: 502 });
   }
 
-  return new Response(JSON.stringify({ ok: true }), { status: 200 });
+  console.log("Resend accepted:", JSON.stringify(resBody));
+  return new Response(JSON.stringify({ ok: true, resend: resBody }), { status: 200 });
 });
