@@ -2222,7 +2222,7 @@ export default function AdminScreen() {
                           </View>
                         </View>
                         {(g.slots ?? []).map(s => (
-                          <View key={s.user_id} style={styles.bracketSlotRow}>
+                          <View key={`${s.user_id}_${s.seed}`} style={styles.bracketSlotRow}>
                             <Ionicons
                               name={s.status === "eliminated" ? "close-circle" : s.status === "advanced" ? "checkmark-circle" : "ellipse"}
                               size={14}
@@ -2260,8 +2260,8 @@ export default function AdminScreen() {
                                 <Text style={{ color: "#f59e0b", fontSize: 10, fontWeight: "800" }}>Edit</Text>
                               </Pressable>
                             </View>
-                            {(gm.scores ?? []).map(sc => (
-                              <Text key={sc.user_id} style={[styles.bracketGameScore, sc.is_eliminated && { color: "#ef4444" }]}>
+                            {(gm.scores ?? []).map((sc, idx) => (
+                              <Text key={`${sc.user_id}_${idx}`} style={[styles.bracketGameScore, sc.is_eliminated && { color: "#ef4444" }]}>
                                 {sc.username}: {sc.score.toLocaleString()}
                                 {sc.rank_points != null ? ` → ${sc.rank_points}rp` : ""}
                                 {sc.is_eliminated ? " ✗" : ""}
@@ -2310,8 +2310,8 @@ export default function AdminScreen() {
                 : scoringGame?.round.round_number === 4
                   ? "Final 4 — scores determine 1st through 4th place."
                   : scoringGame?.game.game_number === 2
-                    ? "Scores convert to rank points added to Game 1 totals. Lowest combined rank points is eliminated."
-                    : "Scores convert to rank points (1st=4, 2nd=3, 3rd=2, 4th=1). Lowest rank points is eliminated."}
+                    ? "3 players compete. Lowest score is eliminated. 2 advance."
+                    : "4 players compete. Lowest score is eliminated. 3 remain for Game 2."}
             </Text>
             {scoringGame && (() => {
               const allSlots = scoringGame.group.slots ?? [];
