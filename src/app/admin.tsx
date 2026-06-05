@@ -951,29 +951,33 @@ export default function AdminScreen() {
         )}
       </View>
 
-      {/* Main tab bar — horizontal scroll so all 9 tabs fit on small screens */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.mainTabBar}
-        contentContainerStyle={styles.mainTabBarContent}
-      >
-        {MAIN_TABS.filter((t) => t.key !== "users" || userRole === "owner" || userRole === "architect").map(({ key, label, icon }) => (
-          <Pressable
-            key={key}
-            style={[styles.mainTabItem, mainTab === key && styles.mainTabItemActive]}
-            onPress={() => setMainTab(key as MainTab)}
-          >
-            <View>
-              <Ionicons name={icon as any} size={16} color={mainTab === key ? "#f59e0b" : "#444"} />
-              {key === "support" && unreadSupport > 0 && mainTab !== "support" && (
-                <View style={styles.tabUnreadDot} />
-              )}
-            </View>
-            <Text style={[styles.mainTabLabel, mainTab === key && styles.mainTabLabelActive]}>{label}</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      {/* Main tab bar — swipe left/right to see all tabs */}
+      <View style={styles.mainTabBarWrap}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.mainTabBar}
+          contentContainerStyle={styles.mainTabBarContent}
+        >
+          {MAIN_TABS.filter((t) => t.key !== "users" || userRole === "owner" || userRole === "architect").map(({ key, label, icon }) => (
+            <Pressable
+              key={key}
+              style={[styles.mainTabItem, mainTab === key && styles.mainTabItemActive]}
+              onPress={() => setMainTab(key as MainTab)}
+            >
+              <View>
+                <Ionicons name={icon as any} size={16} color={mainTab === key ? "#f59e0b" : "#444"} />
+                {key === "support" && unreadSupport > 0 && mainTab !== "support" && (
+                  <View style={styles.tabUnreadDot} />
+                )}
+              </View>
+              <Text style={[styles.mainTabLabel, mainTab === key && styles.mainTabLabelActive]}>{label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+        {/* Right-edge fade hints that more tabs are off-screen */}
+        <View style={styles.mainTabFadeRight} pointerEvents="none" />
+      </View>
 
       {/* ── Reviews ── */}
       {mainTab === "reviews" && (
@@ -2147,12 +2151,19 @@ const styles = StyleSheet.create({
   countBadgeText: { color: "#000", fontWeight: "900", fontSize: 14 },
 
   // Main tabs (Reviews / Stats / Health / …)
+  mainTabBarWrap: { position: "relative" },
   mainTabBar: {
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
   },
   mainTabBarContent: {
     flexDirection: "row", paddingHorizontal: 8,
   },
+  mainTabFadeRight: {
+    position: "absolute", right: 0, top: 0, bottom: 0, width: 32,
+    // Simulates a right-edge fade by overlaying a semi-transparent dark band
+    backgroundColor: "rgba(8,8,8,0.6)",
+    pointerEvents: "none",
+  } as any,
   mainTabItem: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 6, paddingVertical: 13, paddingHorizontal: 12,
