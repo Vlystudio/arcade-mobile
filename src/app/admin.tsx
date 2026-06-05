@@ -102,8 +102,17 @@ type ManageTournament = {
   signup_qr_issued_at: string | null;
   max_players: number;
   registered_count: number;
+  ff_signup_time: string | null;
+  ff_start_time: string | null;
+  has_bracket: boolean;
   created_at: string;
 };
+
+type BracketSlot  = { user_id: string; username: string; seed: number; status: string; eliminated_game: number | null; final_rank: number | null };
+type BracketScore = { user_id: string; username: string; score: number; rank_in_game: number; is_eliminated: boolean };
+type BracketGame  = { id: string; game_number: number; status: string; scores: BracketScore[] | null };
+type BracketGroup = { id: string; group_number: number; status: string; slots: BracketSlot[] | null; games: BracketGame[] | null };
+type BracketRound = { id: string; round_number: number; round_name: string; status: string; groups: BracketGroup[] | null };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -219,7 +228,7 @@ export default function AdminScreen() {
   const [statusActioning, setStatusActioning] = useState<string | null>(null);
   const [firstFridayCreating, setFirstFridayCreating] = useState(false);
   const [editTournTarget, setEditTournTarget] = useState<ManageTournament | null>(null);
-  const [editTournForm, setEditTournForm] = useState({ title: "", game_type: "", proposed_date: "", max_players: "20" });
+  const [editTournForm, setEditTournForm] = useState({ title: "", game_type: "", proposed_date: "", max_players: "20", signup_time: "", start_time: "" });
   const [editingTourn, setEditingTourn] = useState(false);
   const [deleteTournTarget, setDeleteTournTarget] = useState<ManageTournament | null>(null);
   const [deletingTourn, setDeletingTourn] = useState(false);
@@ -233,6 +242,15 @@ export default function AdminScreen() {
   const [tournError, setTournError] = useState<string | null>(null);
   const [qrGenerating, setQrGenerating] = useState<string | null>(null);
   const [qrRevoking, setQrRevoking] = useState<string | null>(null);
+  // Bracket
+  const [bracketTournId, setBracketTournId]         = useState<string | null>(null);
+  const [bracketData, setBracketData]               = useState<{ rounds: BracketRound[] | null } | null>(null);
+  const [bracketLoading, setBracketLoading]         = useState(false);
+  const [bracketRoundTab, setBracketRoundTab]       = useState(1);
+  const [generatingBracket, setGeneratingBracket]   = useState<string | null>(null);
+  const [scoringGame, setScoringGame]               = useState<{ game: BracketGame; group: BracketGroup; round: BracketRound } | null>(null);
+  const [gameScores, setGameScores]                 = useState<Record<string, string>>({});
+  const [submittingScores, setSubmittingScores]     = useState(false);
 
   // Forums state
   type PendingForum = { id: string; title: string; description: string | null; game_type: string | null; creator_username: string; created_at: string; auto_flagged: boolean; flag_category: string | null };
@@ -797,25 +815,32 @@ export default function AdminScreen() {
 
   async function loadManageTournaments() {
     setManageLoading(true);
-    const [{ data }, { data: regData }] = await Promise.all([
+    const [{ data }, { data: regData }, { data: bracketRows }] = await Promise.all([
       supabase
         .from("tournaments")
-        .select("id, title, game_type, status, proposed_date, is_official, is_individual, signup_qr_token, signup_qr_active, signup_qr_issued_at, max_players, created_at")
+        .select("id, title, game_type, status, proposed_date, is_official, is_individual, signup_qr_token, signup_qr_active, signup_qr_issued_at, max_players, ff_signup_time, ff_start_time, created_at")
         .order("created_at", { ascending: false }),
       supabase
         .from("tournament_registrations")
         .select("tournament_id")
         .eq("status", "accepted"),
+      supabase
+        .from("ff_bracket_rounds")
+        .select("tournament_id"),
     ]);
     const regCount: Record<string, number> = {};
     for (const r of regData ?? []) regCount[(r as any).tournament_id] = (regCount[(r as any).tournament_id] ?? 0) + 1;
+    const bracketSet = new Set((bracketRows ?? []).map((r: any) => r.tournament_id));
     setManageTournaments((data ?? []).map((t: any) => ({
       ...t,
-      is_individual: t.is_individual ?? false,
+      is_individual:   t.is_individual ?? false,
       signup_qr_token: t.signup_qr_token ?? null,
       signup_qr_active: t.signup_qr_active ?? false,
-      max_players: t.max_players ?? 20,
+      max_players:     t.max_players ?? 20,
+      ff_signup_time:  t.ff_signup_time ?? "7:30 PM",
+      ff_start_time:   t.ff_start_time  ?? "8:00 PM",
       registered_count: regCount[t.id] ?? 0,
+      has_bracket:     bracketSet.has(t.id),
     })));
     setManageLoading(false);
   }
@@ -887,6 +912,8 @@ export default function AdminScreen() {
       p_game_type:     editTournForm.game_type.trim() || null,
       p_proposed_date: proposedDate,
       p_max_players:   isNaN(maxP) ? editTournTarget.max_players : maxP,
+      p_signup_time:   editTournForm.signup_time.trim() || null,
+      p_start_time:    editTournForm.start_time.trim()  || null,
     });
     if (error) { setTournError(error.message); }
     else if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); }
@@ -894,10 +921,12 @@ export default function AdminScreen() {
       setManageTournaments(prev => prev.map(t =>
         t.id === editTournTarget.id ? {
           ...t,
-          title:         editTournForm.title.trim() || t.title,
-          game_type:     editTournForm.game_type.trim() || null,
-          proposed_date: proposedDate ?? t.proposed_date,
-          max_players:   isNaN(maxP) ? t.max_players : maxP,
+          title:          editTournForm.title.trim() || t.title,
+          game_type:      editTournForm.game_type.trim() || null,
+          proposed_date:  proposedDate ?? t.proposed_date,
+          max_players:    isNaN(maxP) ? t.max_players : maxP,
+          ff_signup_time: editTournForm.signup_time.trim() || t.ff_signup_time,
+          ff_start_time:  editTournForm.start_time.trim()  || t.ff_start_time,
         } : t
       ));
       setEditTournTarget(null);
@@ -919,6 +948,52 @@ export default function AdminScreen() {
       setDeleteTournTarget(null);
     }
     setDeletingTourn(false);
+  }
+
+  async function loadBracket(tournamentId: string) {
+    setBracketLoading(true);
+    const { data, error } = await supabase.rpc("rpc_ff_get_bracket", { p_tournament_id: tournamentId });
+    if (!error && data) {
+      setBracketData(data as any);
+      const rounds: BracketRound[] = (data as any)?.rounds ?? [];
+      const activeRound = rounds.find(r => r.status === "in_progress") ?? rounds[0];
+      if (activeRound) setBracketRoundTab(activeRound.round_number);
+    }
+    setBracketLoading(false);
+  }
+
+  async function handleGenerateBracket(tournamentId: string) {
+    setGeneratingBracket(tournamentId);
+    setTournError(null);
+    const { data, error } = await supabase.rpc("rpc_ff_generate_bracket", { p_tournament_id: tournamentId });
+    setGeneratingBracket(null);
+    if (error) { setTournError(error.message); return; }
+    if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); return; }
+    setManageTournaments(prev => prev.map(t => t.id === tournamentId ? { ...t, has_bracket: true, status: "active" } : t));
+    setBracketTournId(tournamentId);
+    loadBracket(tournamentId);
+  }
+
+  async function handleSubmitGameScores() {
+    if (!scoringGame) return;
+    setSubmittingScores(true);
+    const players = (scoringGame.group.slots ?? []).filter(s =>
+      scoringGame.game.game_number === 1 ? s.status === "active" : s.status === "active"
+    );
+    const scores = players.map(p => ({ user_id: p.user_id, score: parseInt(gameScores[p.user_id] ?? "0", 10) }));
+    const { data, error } = await supabase.rpc("rpc_ff_submit_game_scores", {
+      p_game_id: scoringGame.game.id,
+      p_scores:  scores,
+    });
+    setSubmittingScores(false);
+    if (error) { setTournError(error.message); return; }
+    if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); return; }
+    setScoringGame(null);
+    setGameScores({});
+    if (bracketTournId) loadBracket(bracketTournId);
+    if ((data as any)?.tournament_complete) {
+      setManageTournaments(prev => prev.map(t => t.id === bracketTournId ? { ...t, status: "completed" } : t));
+    }
   }
 
   async function handleRevokeQR(tournamentId: string) {
@@ -1402,6 +1477,8 @@ export default function AdminScreen() {
                                   ? new Date(t.proposed_date).toISOString().slice(0, 10)
                                   : "",
                                 max_players: String(t.max_players),
+                                signup_time: t.ff_signup_time ?? "7:30 PM",
+                                start_time:  t.ff_start_time  ?? "8:00 PM",
                               });
                               setEditTournTarget(t);
                             }}
@@ -1416,6 +1493,48 @@ export default function AdminScreen() {
                           </Pressable>
                         </View>
                         </View>
+
+                        {/* First Friday times display */}
+                        {t.is_individual && t.game_type === "Skee-Ball" && (
+                          <View style={styles.ffTimesRow}>
+                            <Ionicons name="time-outline" size={12} color="#555" />
+                            <Text style={styles.ffTimesText}>Sign-up {t.ff_signup_time ?? "7:30 PM"} · Starts {t.ff_start_time ?? "8:00 PM"}</Text>
+                          </View>
+                        )}
+
+                        {/* First Friday bracket section */}
+                        {t.is_individual && t.game_type === "Skee-Ball" && (
+                          <View style={styles.ffBracketSection}>
+                            <View style={styles.ffBracketHeader}>
+                              <Ionicons name="git-branch-outline" size={13} color="#a855f7" />
+                              <Text style={styles.ffBracketLabel}>Bracket</Text>
+                              <Text style={styles.ffBracketCount}>{t.registered_count}/{t.max_players} players</Text>
+                            </View>
+                            {!t.has_bracket && t.registered_count < 32 && (
+                              <Text style={styles.ffBracketHint}>Need {32 - t.registered_count} more players to generate bracket (set max players to 32)</Text>
+                            )}
+                            {!t.has_bracket && t.registered_count >= 32 && (
+                              <Pressable
+                                style={[styles.ffBracketGenBtn, generatingBracket === t.id && { opacity: 0.5 }]}
+                                onPress={() => handleGenerateBracket(t.id)}
+                                disabled={generatingBracket === t.id}
+                              >
+                                {generatingBracket === t.id
+                                  ? <ActivityIndicator size="small" color="#000" />
+                                  : <><Ionicons name="shuffle-outline" size={13} color="#000" /><Text style={styles.ffBracketGenBtnText}>Generate Bracket</Text></>}
+                              </Pressable>
+                            )}
+                            {t.has_bracket && (
+                              <Pressable
+                                style={styles.ffBracketOpenBtn}
+                                onPress={() => { setBracketTournId(t.id); loadBracket(t.id); }}
+                              >
+                                <Ionicons name="trophy-outline" size={13} color="#a855f7" />
+                                <Text style={styles.ffBracketOpenBtnText}>Manage Bracket</Text>
+                              </Pressable>
+                            )}
+                          </View>
+                        )}
 
                         {/* First Friday QR Section */}
                         {t.is_individual && t.game_type === "Skee-Ball" && (t.status === "upcoming" || t.status === "active") && (
@@ -1968,6 +2087,25 @@ export default function AdminScreen() {
               onChangeText={v => setEditTournForm(f => ({ ...f, max_players: v }))}
             />
 
+            {editTournTarget?.is_individual && editTournTarget?.game_type === "Skee-Ball" && (<>
+              <Text style={styles.editTournLabel}>Sign-up Opens (e.g. 7:30 PM)</Text>
+              <TextInput
+                style={styles.editTournInput}
+                placeholder="7:30 PM"
+                placeholderTextColor="#333"
+                value={editTournForm.signup_time}
+                onChangeText={v => setEditTournForm(f => ({ ...f, signup_time: v }))}
+              />
+              <Text style={styles.editTournLabel}>Tournament Starts (e.g. 8:00 PM)</Text>
+              <TextInput
+                style={styles.editTournInput}
+                placeholder="8:00 PM"
+                placeholderTextColor="#333"
+                value={editTournForm.start_time}
+                onChangeText={v => setEditTournForm(f => ({ ...f, start_time: v }))}
+              />
+            </>)}
+
             {tournError && (
               <View style={styles.errorBox}>
                 <Ionicons name="alert-circle-outline" size={14} color="#ef4444" />
@@ -2018,6 +2156,166 @@ export default function AdminScreen() {
                 {deletingTourn
                   ? <ActivityIndicator size="small" color="#fff" />
                   : <Text style={[styles.confirmActionText, { color: "#fff" }]}>Delete</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Bracket viewer modal ─────────────────────────────────────────── */}
+      <Modal visible={!!bracketTournId} transparent animationType="slide" onRequestClose={() => setBracketTournId(null)}>
+        <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setBracketTournId(null)} />
+          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderColor: "#1e1e1e", height: "90%" }}>
+            {/* Header */}
+            <View style={styles.bracketModalHeader}>
+              <Text style={styles.bracketModalTitle}>Bracket</Text>
+              <Pressable onPress={() => setBracketTournId(null)}>
+                <Ionicons name="close-circle" size={26} color="#444" />
+              </Pressable>
+            </View>
+
+            {/* Round tabs */}
+            {bracketData?.rounds && (
+              <View style={styles.bracketRoundTabs}>
+                {(bracketData.rounds as BracketRound[]).map(r => (
+                  <Pressable
+                    key={r.round_number}
+                    style={[styles.bracketRoundTab, bracketRoundTab === r.round_number && styles.bracketRoundTabActive]}
+                    onPress={() => setBracketRoundTab(r.round_number)}
+                  >
+                    <Text style={[styles.bracketRoundTabText, bracketRoundTab === r.round_number && { color: "#a855f7" }]}>
+                      {r.round_name}
+                    </Text>
+                    <View style={[styles.bracketRoundDot, {
+                      backgroundColor: r.status === "in_progress" ? "#f59e0b" : r.status === "completed" ? "#22c55e" : "#333",
+                    }]} />
+                  </Pressable>
+                ))}
+              </View>
+            )}
+
+            {bracketLoading ? (
+              <ActivityIndicator color="#a855f7" style={{ marginTop: 40 }} />
+            ) : (
+              <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
+                {(() => {
+                  const round = (bracketData?.rounds as BracketRound[] | null)?.find(r => r.round_number === bracketRoundTab);
+                  if (!round) return <Text style={{ color: "#444", textAlign: "center", marginTop: 40 }}>Round not yet started</Text>;
+                  if (!round.groups) return <Text style={{ color: "#444", textAlign: "center", marginTop: 40 }}>No groups yet</Text>;
+                  return round.groups.map(g => {
+                    const currentGame = (g.games ?? []).find(gm => gm.status === "pending") ?? (g.games ?? []).slice(-1)[0];
+                    const activePlayers = (g.slots ?? []).filter(s => s.status === "active");
+                    return (
+                      <View key={g.id} style={styles.bracketGroupCard}>
+                        <View style={styles.bracketGroupHeader}>
+                          <Text style={styles.bracketGroupTitle}>Group {g.group_number}</Text>
+                          <View style={[styles.bracketGroupStatus, {
+                            backgroundColor: g.status === "completed" ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)",
+                            borderColor: g.status === "completed" ? "rgba(34,197,94,0.3)" : "rgba(245,158,11,0.3)",
+                          }]}>
+                            <Text style={{ color: g.status === "completed" ? "#22c55e" : "#f59e0b", fontSize: 10, fontWeight: "800" }}>
+                              {g.status === "completed" ? "DONE" : g.status === "game2" ? "GAME 2" : "GAME 1"}
+                            </Text>
+                          </View>
+                        </View>
+                        {(g.slots ?? []).map(s => (
+                          <View key={s.user_id} style={styles.bracketSlotRow}>
+                            <Ionicons
+                              name={s.status === "eliminated" ? "close-circle" : s.status === "advanced" ? "checkmark-circle" : "ellipse"}
+                              size={14}
+                              color={s.status === "eliminated" ? "#ef4444" : s.status === "advanced" ? "#22c55e" : "#555"}
+                            />
+                            <Text style={[styles.bracketSlotName, s.status === "eliminated" && { color: "#333", textDecorationLine: "line-through" }]}>
+                              {s.username}
+                            </Text>
+                            {s.final_rank && <Text style={styles.bracketSlotRank}>#{s.final_rank}</Text>}
+                            {s.eliminated_game && <Text style={styles.bracketSlotElim}>out g{s.eliminated_game}</Text>}
+                          </View>
+                        ))}
+                        {/* Game results */}
+                        {(g.games ?? []).filter(gm => gm.status === "completed" && gm.scores).map(gm => (
+                          <View key={gm.id} style={styles.bracketGameResult}>
+                            <Text style={styles.bracketGameResultLabel}>Game {gm.game_number} scores:</Text>
+                            {(gm.scores ?? []).map(sc => (
+                              <Text key={sc.user_id} style={[styles.bracketGameScore, sc.is_eliminated && { color: "#ef4444" }]}>
+                                {sc.username}: {sc.score.toLocaleString()} pts{sc.is_eliminated ? " ✗" : ""}
+                              </Text>
+                            ))}
+                          </View>
+                        ))}
+                        {/* Enter scores button */}
+                        {g.status !== "completed" && currentGame && round.status !== "completed" && (
+                          <Pressable
+                            style={styles.bracketEnterScoresBtn}
+                            onPress={() => {
+                              const playersForGame = activePlayers;
+                              const init: Record<string, string> = {};
+                              playersForGame.forEach(p => { init[p.user_id] = ""; });
+                              setGameScores(init);
+                              setScoringGame({ game: currentGame, group: g, round });
+                            }}
+                          >
+                            <Ionicons name="create-outline" size={13} color="#a855f7" />
+                            <Text style={styles.bracketEnterScoresBtnText}>Enter Game {currentGame.game_number} Scores</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    );
+                  });
+                })()}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Score entry modal ────────────────────────────────────────────── */}
+      <Modal visible={!!scoringGame} transparent animationType="slide" onRequestClose={() => setScoringGame(null)}>
+        <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setScoringGame(null)} />
+          <View style={styles.scoreEntrySheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.scoreEntryTitle}>
+              {scoringGame?.round.round_name} · Group {scoringGame?.group.group_number} · Game {scoringGame?.game.game_number}
+            </Text>
+            <Text style={styles.scoreEntryHint}>
+              {scoringGame?.round.round_number === 4
+                ? "All 4 players compete — scores determine final rankings."
+                : `Enter each player's score. Lowest score is eliminated.`}
+            </Text>
+            {scoringGame && (scoringGame.group.slots ?? []).filter(s => s.status === "active").map(p => (
+              <View key={p.user_id} style={styles.scoreEntryRow}>
+                <Text style={styles.scoreEntryName}>{p.username}</Text>
+                <TextInput
+                  style={styles.scoreEntryInput}
+                  placeholder="0"
+                  placeholderTextColor="#333"
+                  keyboardType="number-pad"
+                  value={gameScores[p.user_id] ?? ""}
+                  onChangeText={v => setGameScores(prev => ({ ...prev, [p.user_id]: v }))}
+                />
+                <Text style={styles.scoreEntryPts}>pts</Text>
+              </View>
+            ))}
+            {tournError && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={14} color="#ef4444" />
+                <Text style={styles.errorBoxText}>{tournError}</Text>
+              </View>
+            )}
+            <View style={[styles.confirmBtns, { marginTop: 16 }]}>
+              <Pressable style={styles.confirmCancel} onPress={() => setScoringGame(null)}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.editTournSaveBtn, submittingScores && { opacity: 0.5 }]}
+                onPress={handleSubmitGameScores}
+                disabled={submittingScores}
+              >
+                {submittingScores
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <Text style={styles.editTournSaveText}>Submit Scores</Text>}
               </Pressable>
             </View>
           </View>
@@ -2790,4 +3088,125 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(239,68,68,0.2)",
   },
   errorBoxText: { color: "#ef4444", fontSize: 12, flex: 1 },
+
+  // ── First Friday times & bracket UI ─────────────────────────────────────────
+  ffTimesRow: {
+    flexDirection: "row", alignItems: "center", gap: 16,
+    paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: "rgba(6,182,212,0.06)",
+    borderRadius: 10, marginBottom: 8,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.12)",
+  },
+  ffTimesText: { color: "#06b6d4", fontSize: 12, fontWeight: "700" },
+
+  ffBracketSection: {
+    marginTop: 8, paddingHorizontal: 14, paddingVertical: 10,
+    backgroundColor: "rgba(168,85,247,0.06)",
+    borderRadius: 10, borderWidth: 1, borderColor: "rgba(168,85,247,0.12)",
+  },
+  ffBracketHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  ffBracketLabel: { color: "#a855f7", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  ffBracketCount: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  ffBracketHint:  { color: "#666", fontSize: 11, marginBottom: 8 },
+
+  ffBracketGenBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    backgroundColor: "#a855f7", borderRadius: 10,
+    paddingVertical: 9, paddingHorizontal: 16,
+  },
+  ffBracketGenBtnText: { color: "#fff", fontWeight: "900", fontSize: 13 },
+
+  ffBracketOpenBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    backgroundColor: "rgba(168,85,247,0.15)", borderRadius: 10,
+    paddingVertical: 9, paddingHorizontal: 16,
+    borderWidth: 1, borderColor: "rgba(168,85,247,0.3)",
+  },
+  ffBracketOpenBtnText: { color: "#a855f7", fontWeight: "900", fontSize: 13 },
+
+  // Bracket viewer modal
+  bracketModalHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 20, paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e",
+  },
+  bracketModalTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
+
+  bracketRoundTabs: { flexDirection: "row", paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+  bracketRoundTab: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    paddingHorizontal: 14, paddingVertical: 7,
+    borderRadius: 20, borderWidth: 1, borderColor: "#222",
+    backgroundColor: "#111",
+  },
+  bracketRoundTabActive: { backgroundColor: "#a855f7", borderColor: "#a855f7" },
+  bracketRoundTabText: { color: "#888", fontSize: 12, fontWeight: "700" },
+  bracketRoundDot: {
+    width: 8, height: 8, borderRadius: 4, backgroundColor: "#22c55e",
+  },
+
+  bracketGroupCard: {
+    marginHorizontal: 16, marginBottom: 14,
+    backgroundColor: "#111", borderRadius: 14,
+    borderWidth: 1, borderColor: "#1e1e1e",
+    overflow: "hidden",
+  },
+  bracketGroupHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 14, paddingVertical: 10,
+    backgroundColor: "rgba(168,85,247,0.08)",
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e",
+  },
+  bracketGroupTitle: { color: "#a855f7", fontSize: 13, fontWeight: "900" },
+  bracketGroupStatus: {
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: 6, borderWidth: 1,
+  },
+
+  bracketSlotRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingHorizontal: 14, paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#141414",
+  },
+  bracketSlotName: { flex: 1, color: "#ccc", fontSize: 13 },
+  bracketSlotRank: { color: "#f59e0b", fontSize: 12, fontWeight: "700", marginRight: 8 },
+  bracketSlotElim: { color: "#ef4444", fontSize: 11, fontStyle: "italic" },
+
+  bracketGameResult: {
+    paddingHorizontal: 14, paddingVertical: 8,
+    backgroundColor: "rgba(6,182,212,0.04)",
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a",
+  },
+  bracketGameResultLabel: { color: "#06b6d4", fontSize: 11, fontWeight: "700", marginBottom: 4 },
+  bracketGameScore: { color: "#888", fontSize: 12 },
+
+  bracketEnterScoresBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    margin: 14, marginTop: 8,
+    backgroundColor: "#06b6d4", borderRadius: 10,
+    paddingVertical: 10,
+  },
+  bracketEnterScoresBtnText: { color: "#000", fontWeight: "900", fontSize: 13 },
+
+  // Score entry sheet
+  scoreEntrySheet: {
+    backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40,
+    borderTopWidth: 1, borderColor: "#1e1e1e",
+  },
+  scoreEntryTitle: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 4 },
+  scoreEntryHint:  { color: "#555", fontSize: 12, marginBottom: 16 },
+  scoreEntryRow: {
+    flexDirection: "row", alignItems: "center",
+    marginBottom: 10, gap: 10,
+  },
+  scoreEntryName: { flex: 1, color: "#ccc", fontSize: 14 },
+  scoreEntryInput: {
+    width: 90, backgroundColor: "#0a0a0a", borderRadius: 10,
+    borderWidth: 1, borderColor: "#1e1e1e",
+    color: "#fff", fontSize: 15,
+    paddingHorizontal: 12, paddingVertical: 9,
+    textAlign: "center",
+  },
+  scoreEntryPts: { color: "#444", fontSize: 12, width: 24 },
 });

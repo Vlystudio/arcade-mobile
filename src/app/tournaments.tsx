@@ -32,6 +32,8 @@ type Tournament = {
   registered_count: number;
   signup_qr_active: boolean;
   max_players: number;
+  ff_signup_time: string | null;
+  ff_start_time: string | null;
   my_reg_status: "pending" | "accepted" | "denied" | null;
   placements: Placement[]; created_at: string;
 };
@@ -108,7 +110,7 @@ export default function TournamentsScreen() {
     if (!user) return;
     const [tourneysRes, myRegsRes, reqsRes] = await Promise.all([
       supabase.from("tournaments")
-        .select("id, title, description, game_type, proposed_date, max_teams, is_official, is_individual, signup_type, status, created_by, announcement, signup_qr_active, max_players, created_at")
+        .select("id, title, description, game_type, proposed_date, max_teams, is_official, is_individual, signup_type, status, created_by, announcement, signup_qr_active, max_players, ff_signup_time, ff_start_time, created_at")
         .order("proposed_date", { ascending: true, nullsFirst: false }),
       supabase.from("tournament_registrations").select("tournament_id, status").eq("user_id", user.id),
       supabase.from("tournament_requests").select("id, title, game_type, proposed_date, status, admin_note, created_at").eq("user_id", user.id).order("created_at", { ascending: false }),
@@ -151,6 +153,8 @@ export default function TournamentsScreen() {
       registered_count: regCount[t.id] ?? 0,
       signup_qr_active: t.signup_qr_active ?? false,
       max_players: t.max_players ?? 20,
+      ff_signup_time: t.ff_signup_time ?? null,
+      ff_start_time: t.ff_start_time ?? null,
       my_reg_status: myRegStatus[t.id] ?? null,
       placements: placementsMap[t.id] ?? [],
     }));
@@ -308,6 +312,25 @@ export default function TournamentsScreen() {
                       Next: {nextFF.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
                     </Text>
                   </View>
+
+                  {activeFF && (activeFF.ff_signup_time || activeFF.ff_start_time) && (
+                    <View style={s.ffTimesRow}>
+                      {activeFF.ff_signup_time && (
+                        <View style={s.ffTimeChip}>
+                          <Ionicons name="enter-outline" size={12} color="#06b6d4" />
+                          <Text style={s.ffTimeLabel}>Sign-up</Text>
+                          <Text style={s.ffTimeValue}>{activeFF.ff_signup_time}</Text>
+                        </View>
+                      )}
+                      {activeFF.ff_start_time && (
+                        <View style={s.ffTimeChip}>
+                          <Ionicons name="play-outline" size={12} color="#a855f7" />
+                          <Text style={[s.ffTimeLabel, { color: "#a855f7" }]}>Start</Text>
+                          <Text style={[s.ffTimeValue, { color: "#a855f7" }]}>{activeFF.ff_start_time}</Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
 
                   {activeFF && (
                     <View style={s.ffSignupRow}>
@@ -829,6 +852,11 @@ const s = StyleSheet.create({
   ffStatusChip: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1 },
   ffStatusDot: { width: 6, height: 6, borderRadius: 3 },
   ffStatusChipText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
+  ffTimesRow: { flexDirection: "row", gap: 10, marginBottom: 10, flexWrap: "wrap" },
+  ffTimeChip: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(6,182,212,0.07)", borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: "rgba(6,182,212,0.18)" },
+  ffTimeLabel: { color: "#06b6d4", fontSize: 11, fontWeight: "700" },
+  ffTimeValue: { color: "#06b6d4", fontSize: 12, fontWeight: "900" },
+
   ffResultsDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(6,182,212,0.15)", marginVertical: 14 },
   ffResultsLabel: { color: "#333", fontSize: 10, fontWeight: "800", letterSpacing: 1.2, marginBottom: 10 },
   ffResultRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 10 },
