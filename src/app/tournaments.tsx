@@ -22,6 +22,12 @@ import { supabase } from "../../lib/supabase";
 
 type Placement = { placement: number; username: string; user_id: string };
 
+type BracketSlot  = { user_id: string; username: string; seed: number; status: string; eliminated_game: number | null; final_rank: number | null };
+type BracketScore = { user_id: string; username: string; score: number; rank_in_game: number; is_eliminated: boolean };
+type BracketGame  = { id: string; game_number: number; status: string; scores: BracketScore[] | null };
+type BracketGroup = { id: string; group_number: number; status: string; slots: BracketSlot[] | null; games: BracketGame[] | null };
+type BracketRound = { id: string; round_number: number; round_name: string; status: string; groups: BracketGroup[] | null };
+
 type Tournament = {
   id: string; title: string; description: string | null;
   game_type: string | null; proposed_date: string | null;
@@ -48,7 +54,7 @@ type MyRequest = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const PLACEMENT_MEDALS = ["🥇", "🥈", "🥉"];
+const PLACEMENT_MEDALS = ["🥇", "🥈", "🥉", "4️⃣"];
 
 function getNextFirstFriday(): Date {
   const now = new Date();
@@ -95,6 +101,12 @@ export default function TournamentsScreen() {
   const [cancelTarget, setCancelTarget] = useState<Tournament | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [actioningRequest, setActioningRequest] = useState<string | null>(null);
+
+  // Bracket viewer
+  const [viewBracketId, setViewBracketId]   = useState<string | null>(null);
+  const [viewBracketData, setViewBracketData] = useState<{ rounds: BracketRound[] } | null>(null);
+  const [viewBracketLoading, setViewBracketLoading] = useState(false);
+  const [viewBracketTab, setViewBracketTab] = useState(1);
 
   // Request modal state
   const [requestVisible, setRequestVisible] = useState(false);
@@ -181,6 +193,21 @@ export default function TournamentsScreen() {
   }
 
   useFocusEffect(useCallback(() => { if (user) load(); }, [user]));
+
+  async function openBracket(tournId: string, defaultTab = 1) {
+    setViewBracketId(tournId);
+    setViewBracketTab(defaultTab);
+    setViewBracketLoading(true);
+    setViewBracketData(null);
+    const { data } = await supabase.rpc("rpc_ff_get_bracket", { p_tournament_id: tournId });
+    if (data) {
+      setViewBracketData(data as any);
+      const rounds: BracketRound[] = (data as any)?.rounds ?? [];
+      const activeRound = rounds.find(r => r.status === "in_progress") ?? rounds[rounds.length - 1];
+      if (activeRound) setViewBracketTab(activeRound.round_number);
+    }
+    setViewBracketLoading(false);
+  }
 
   async function handleRegister(id: string) {
     if (!user) return;
@@ -365,6 +392,14 @@ export default function TournamentsScreen() {
                     <Text style={s.ffInPersonText}>Sign up in person at the venue on the day of the event</Text>
                   </View>
 
+                  {activeFF && activeFF.status === "active" && (
+                    <Pressable style={s.ffViewBracketBtn} onPress={() => openBracket(activeFF.id)}>
+                      <View style={s.ffLiveDot} />
+                      <Text style={s.ffViewBracketText}>Live Bracket</Text>
+                      <Ionicons name="chevron-forward" size={14} color="#a855f7" />
+                    </Pressable>
+                  )}
+
                   {completedFF.length > 0 && (
                     <>
                       <View style={s.ffResultsDivider} />
@@ -377,12 +412,16 @@ export default function TournamentsScreen() {
                               : "—"}
                           </Text>
                           <View style={s.ffPodium}>
-                            {t.placements.slice(0, 3).map((p) => (
+                            {t.placements.slice(0, 4).map((p) => (
                               <Text key={p.placement} style={s.ffPodiumEntry}>
                                 {PLACEMENT_MEDALS[p.placement - 1] ?? `#${p.placement}`} {p.username}
                               </Text>
                             ))}
                           </View>
+                          <Pressable style={s.ffResultsViewBtn} onPress={() => openBracket(t.id, 4)}>
+                            <Text style={s.ffResultsViewBtnText}>Results</Text>
+                            <Ionicons name="chevron-forward" size={11} color="#555" />
+                          </Pressable>
                         </View>
                       ))}
                     </>
@@ -649,6 +688,128 @@ export default function TournamentsScreen() {
               </View>
               <View style={{ height: 20 }} />
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Bracket viewer */}
+      <Modal visible={viewBracketId !== null} transparent animationType="slide" onRequestClose={() => setViewBracketId(null)}>
+        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" }}>
+          <Pressable style={{ flex: 1 }} onPress={() => setViewBracketId(null)} />
+          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderColor: "#1e1e1e", height: "92%" }}>
+            {/* Header */}
+            <View style={s.bvHeader}>
+              <View>
+                <Text style={s.bvTitle}>Bracket</Text>
+                {viewBracketData?.rounds?.some(r => r.status === "in_progress") && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginTop: 2 }}>
+                    <View style={s.bvLiveDot} />
+                    <Text style={{ color: "#ef4444", fontSize: 11, fontWeight: "800" }}>LIVE</Text>
+                  </View>
+                )}
+              </View>
+              <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
+                <Pressable onPress={() => viewBracketId && openBracket(viewBracketId, viewBracketTab)} style={{ padding: 8 }}>
+                  <Ionicons name="refresh" size={18} color="#555" />
+                </Pressable>
+                <Pressable onPress={() => setViewBracketId(null)}>
+                  <Ionicons name="close-circle" size={26} color="#444" />
+                </Pressable>
+              </View>
+            </View>
+
+            {/* Round tabs */}
+            {viewBracketData?.rounds && (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ maxHeight: 44 }} contentContainerStyle={s.bvRoundTabs}>
+                {viewBracketData.rounds.map(r => (
+                  <Pressable
+                    key={r.round_number}
+                    style={[s.bvRoundTab, viewBracketTab === r.round_number && s.bvRoundTabActive]}
+                    onPress={() => setViewBracketTab(r.round_number)}
+                  >
+                    <Text style={[s.bvRoundTabText, viewBracketTab === r.round_number && { color: "#a855f7" }]}>{r.round_name}</Text>
+                    <View style={[s.bvRoundDot, {
+                      backgroundColor: r.status === "in_progress" ? "#f59e0b" : r.status === "completed" ? "#22c55e" : "#333",
+                    }]} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
+            {viewBracketLoading ? (
+              <ActivityIndicator color="#a855f7" style={{ marginTop: 40 }} />
+            ) : (
+              <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60 }} showsVerticalScrollIndicator={false}>
+
+                {/* Final standings banner */}
+                {(() => {
+                  const finalRound = viewBracketData?.rounds?.find(r => r.round_number === 4);
+                  if (finalRound?.status !== "completed") return null;
+                  const winners = [...((finalRound?.groups?.[0]?.slots ?? []) as BracketSlot[])]
+                    .filter(sl => sl.final_rank != null)
+                    .sort((a, b) => (a.final_rank ?? 0) - (b.final_rank ?? 0));
+                  if (winners.length === 0) return null;
+                  return (
+                    <View style={s.bvWinnersCard}>
+                      <Text style={s.bvWinnersTitle}>🏆 Final Standings</Text>
+                      {winners.map(w => (
+                        <View key={w.seed} style={s.bvWinnerRow}>
+                          <Text style={s.bvWinnerMedal}>
+                            {w.final_rank === 1 ? "🥇" : w.final_rank === 2 ? "🥈" : w.final_rank === 3 ? "🥉" : "4️⃣"}
+                          </Text>
+                          <Text style={[s.bvWinnerName, w.final_rank === 1 && { color: "#f59e0b" }]}>{w.username}</Text>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })()}
+
+                {/* Round groups */}
+                {(() => {
+                  const round = viewBracketData?.rounds?.find(r => r.round_number === viewBracketTab);
+                  if (!round) return <Text style={{ color: "#444", textAlign: "center", marginTop: 40, fontSize: 14 }}>Round not yet started</Text>;
+                  return (round.groups ?? []).map(g => (
+                    <View key={g.id} style={s.bvGroupCard}>
+                      <View style={s.bvGroupHeader}>
+                        <Text style={s.bvGroupTitle}>Group {g.group_number}</Text>
+                        <View style={[s.bvGroupBadge, {
+                          backgroundColor: g.status === "completed" ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)",
+                          borderColor: g.status === "completed" ? "rgba(34,197,94,0.3)" : "rgba(245,158,11,0.3)",
+                        }]}>
+                          <Text style={{ color: g.status === "completed" ? "#22c55e" : "#f59e0b", fontSize: 10, fontWeight: "800" }}>
+                            {g.status === "completed" ? "DONE" : g.status === "game2" ? "GAME 2" : "GAME 1"}
+                          </Text>
+                        </View>
+                      </View>
+                      {(g.slots ?? []).map(sl => (
+                        <View key={`${sl.user_id}_${sl.seed}`} style={s.bvSlotRow}>
+                          <Ionicons
+                            name={sl.status === "eliminated" ? "close-circle" : sl.status === "advanced" ? "checkmark-circle" : "ellipse"}
+                            size={14}
+                            color={sl.status === "eliminated" ? "#ef4444" : sl.status === "advanced" ? "#22c55e" : "#555"}
+                          />
+                          <Text style={[s.bvSlotName, sl.status === "eliminated" && { color: "#333", textDecorationLine: "line-through" }]}>
+                            {sl.username}
+                          </Text>
+                          {sl.final_rank != null && <Text style={s.bvSlotRank}>#{sl.final_rank}</Text>}
+                          {sl.eliminated_game != null && <Text style={s.bvSlotElim}>out g{sl.eliminated_game}</Text>}
+                        </View>
+                      ))}
+                      {(g.games ?? []).filter(gm => gm.status === "completed" && gm.scores).map(gm => (
+                        <View key={gm.id} style={s.bvGameResult}>
+                          <Text style={s.bvGameResultLabel}>Game {gm.game_number}</Text>
+                          {(gm.scores ?? []).map((sc, idx) => (
+                            <Text key={`${sc.user_id}_${idx}`} style={[s.bvGameScore, sc.is_eliminated && { color: "#ef4444" }]}>
+                              {sc.username}: {sc.score.toLocaleString()}{sc.is_eliminated ? "  ✗" : ""}
+                            </Text>
+                          ))}
+                        </View>
+                      ))}
+                    </View>
+                  ));
+                })()}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
@@ -944,4 +1105,37 @@ const s = StyleSheet.create({
   confirmKeepText: { color: "#888", fontWeight: "700", fontSize: 14 },
   confirmDelete: { flex: 1, backgroundColor: "rgba(239,68,68,0.12)", borderRadius: 14, padding: 14, alignItems: "center", borderWidth: 1, borderColor: "rgba(239,68,68,0.3)" },
   confirmDeleteText: { color: "#ef4444", fontWeight: "900", fontSize: 14 },
+
+  // FF card — live bracket & results buttons
+  ffViewBracketBtn: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12, backgroundColor: "rgba(168,85,247,0.08)", borderRadius: 12, paddingVertical: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: "rgba(168,85,247,0.2)" },
+  ffViewBracketText: { flex: 1, color: "#a855f7", fontSize: 13, fontWeight: "800" },
+  ffLiveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#ef4444" },
+  ffResultsViewBtn: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "#0d0d0d", borderRadius: 8, borderWidth: 1, borderColor: "#1e1e1e", marginTop: 6 },
+  ffResultsViewBtnText: { color: "#555", fontSize: 11, fontWeight: "700" },
+
+  // Bracket viewer modal
+  bvHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 16 },
+  bvTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
+  bvLiveDot: { width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#ef4444" },
+  bvRoundTabs: { flexDirection: "row", paddingHorizontal: 16, gap: 6, paddingBottom: 4 },
+  bvRoundTab: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: "#0f0f0f", borderWidth: 1, borderColor: "#1a1a1a" },
+  bvRoundTabActive: { backgroundColor: "rgba(168,85,247,0.12)", borderColor: "rgba(168,85,247,0.3)" },
+  bvRoundTabText: { color: "#444", fontSize: 11, fontWeight: "700" },
+  bvRoundDot: { width: 6, height: 6, borderRadius: 3 },
+  bvWinnersCard: { backgroundColor: "rgba(168,85,247,0.08)", borderRadius: 16, borderWidth: 1, borderColor: "rgba(168,85,247,0.2)", padding: 18, marginBottom: 20 },
+  bvWinnersTitle: { color: "#fff", fontSize: 18, fontWeight: "900", textAlign: "center", marginBottom: 14 },
+  bvWinnerRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 7, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "rgba(168,85,247,0.1)" },
+  bvWinnerMedal: { fontSize: 24, width: 36, textAlign: "center" },
+  bvWinnerName: { color: "#fff", fontSize: 15, fontWeight: "700", flex: 1 },
+  bvGroupCard: { backgroundColor: "#0d0d0d", borderRadius: 16, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 12, overflow: "hidden" },
+  bvGroupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#111", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
+  bvGroupTitle: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  bvGroupBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+  bvSlotRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#141414" },
+  bvSlotName: { flex: 1, color: "#ccc", fontSize: 13, fontWeight: "600" },
+  bvSlotRank: { color: "#a855f7", fontSize: 11, fontWeight: "800" },
+  bvSlotElim: { color: "#333", fontSize: 10, fontWeight: "700" },
+  bvGameResult: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: "rgba(0,0,0,0.2)", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#141414" },
+  bvGameResultLabel: { color: "#a855f7", fontSize: 10, fontWeight: "800", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.6 },
+  bvGameScore: { color: "#666", fontSize: 12, marginVertical: 1 },
 });

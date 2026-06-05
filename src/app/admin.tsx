@@ -249,6 +249,7 @@ export default function AdminScreen() {
   const [bracketRoundTab, setBracketRoundTab]       = useState(1);
   const [generatingBracket, setGeneratingBracket]   = useState<string | null>(null);
   const [scoringGame, setScoringGame]               = useState<{ game: BracketGame; group: BracketGroup; round: BracketRound; isEditing: boolean } | null>(null);
+  const [bracketWinners, setBracketWinners]         = useState<BracketSlot[] | null>(null);
   const [gameScores, setGameScores]                 = useState<Record<string, string>>({});
   const [submittingScores, setSubmittingScores]     = useState(false);
 
@@ -950,16 +951,17 @@ export default function AdminScreen() {
     setDeletingTourn(false);
   }
 
-  async function loadBracket(tournamentId: string) {
+  async function loadBracket(tournamentId: string): Promise<any> {
     setBracketLoading(true);
     const { data, error } = await supabase.rpc("rpc_ff_get_bracket", { p_tournament_id: tournamentId });
     if (!error && data) {
       setBracketData(data as any);
       const rounds: BracketRound[] = (data as any)?.rounds ?? [];
-      const activeRound = rounds.find(r => r.status === "in_progress") ?? rounds[0];
+      const activeRound = rounds.find(r => r.status === "in_progress") ?? rounds[rounds.length - 1];
       if (activeRound) setBracketRoundTab(activeRound.round_number);
     }
     setBracketLoading(false);
+    return data;
   }
 
   async function handleGenerateBracket(tournamentId: string) {
@@ -992,9 +994,15 @@ export default function AdminScreen() {
     if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); return; }
     setScoringGame(null);
     setGameScores({});
-    if (bracketTournId) loadBracket(bracketTournId);
+    let freshData: any = null;
+    if (bracketTournId) freshData = await loadBracket(bracketTournId);
     if ((data as any)?.tournament_complete) {
       setManageTournaments(prev => prev.map(t => t.id === bracketTournId ? { ...t, status: "completed" } : t));
+      const finalRound = (freshData?.rounds as BracketRound[])?.find((r: BracketRound) => r.round_number === 4);
+      const winners = [...((finalRound?.groups?.[0]?.slots as BracketSlot[]) ?? [])]
+        .filter(sl => sl.final_rank != null)
+        .sort((a, b) => (a.final_rank ?? 0) - (b.final_rank ?? 0));
+      if (winners.length > 0) setBracketWinners(winners);
     }
   }
 
@@ -2359,6 +2367,30 @@ export default function AdminScreen() {
                   : <Text style={styles.editTournSaveText}>Submit Scores</Text>}
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Tournament complete — top 4 announcement */}
+      <Modal visible={bracketWinners !== null} transparent animationType="fade" onRequestClose={() => setBracketWinners(null)}>
+        <View style={styles.confirmBg}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setBracketWinners(null)} />
+          <View style={[styles.confirmSheet, { alignItems: "center", paddingTop: 28 }]}>
+            <Text style={{ fontSize: 48, marginBottom: 8 }}>🏆</Text>
+            <Text style={[styles.confirmTitle, { fontSize: 22, marginBottom: 4 }]}>Tournament Complete!</Text>
+            <Text style={[styles.confirmBody, { marginBottom: 20 }]}>Final standings for this event</Text>
+            {(bracketWinners ?? []).map(w => (
+              <View key={w.seed} style={{ flexDirection: "row", alignItems: "center", gap: 14, width: "100%", paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" }}>
+                <Text style={{ fontSize: 28, width: 40, textAlign: "center" }}>
+                  {w.final_rank === 1 ? "🥇" : w.final_rank === 2 ? "🥈" : w.final_rank === 3 ? "🥉" : "4️⃣"}
+                </Text>
+                <Text style={{ color: "#fff", fontSize: 17, fontWeight: "700", flex: 1 }}>{w.username}</Text>
+                <Text style={{ color: "#555", fontSize: 13 }}>#{w.final_rank}</Text>
+              </View>
+            ))}
+            <Pressable style={[styles.editTournSaveBtn, { marginTop: 20, width: "100%" }]} onPress={() => setBracketWinners(null)}>
+              <Text style={styles.editTournSaveText}>Done</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
