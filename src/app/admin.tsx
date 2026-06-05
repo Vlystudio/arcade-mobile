@@ -259,6 +259,14 @@ export default function AdminScreen() {
   const [guestList, setGuestList]           = useState<{ id: string; guest_name: string }[]>([]);
   const [guestListLoading, setGuestListLoading] = useState(false);
 
+  // Player list management (all tournaments)
+  type RegPlayer = { id: string; user_id: string | null; guest_name: string | null; username: string; status: string };
+  const [playerListTarget, setPlayerListTarget] = useState<ManageTournament | null>(null);
+  const [playerList, setPlayerList]             = useState<RegPlayer[]>([]);
+  const [playerListLoading, setPlayerListLoading] = useState(false);
+  const [removingPlayer, setRemovingPlayer]     = useState<string | null>(null);
+  const [playerListError, setPlayerListError]   = useState<string | null>(null);
+
   // Forums state
   type PendingForum = { id: string; title: string; description: string | null; game_type: string | null; creator_username: string; created_at: string; auto_flagged: boolean; flag_category: string | null };
   const [pendingForums, setPendingForums] = useState<PendingForum[]>([]);
@@ -1046,6 +1054,42 @@ export default function AdminScreen() {
     await loadManageTournaments();
   }
 
+  async function openPlayerManager(t: ManageTournament) {
+    setPlayerListTarget(t);
+    setPlayerListError(null);
+    setPlayerList([]);
+    setPlayerListLoading(true);
+    const { data, error } = await supabase
+      .from("tournament_registrations")
+      .select("id, user_id, guest_name, status, profiles(username)")
+      .eq("tournament_id", t.id)
+      .order("created_at", { ascending: true });
+    if (error) { setPlayerListError(error.message); }
+    else {
+      setPlayerList((data ?? []).map((r: any) => ({
+        id: r.id,
+        user_id: r.user_id ?? null,
+        guest_name: r.guest_name ?? null,
+        username: r.profiles?.username ?? r.guest_name ?? "Unknown",
+        status: r.status,
+      })));
+    }
+    setPlayerListLoading(false);
+  }
+
+  async function handleRemovePlayer(regId: string) {
+    setRemovingPlayer(regId);
+    setPlayerListError(null);
+    const { data } = await supabase.rpc("rpc_admin_remove_tournament_player", { p_reg_id: regId });
+    if ((data as any)?.error) {
+      setPlayerListError((data as any).message ?? (data as any).error);
+    } else {
+      setPlayerList(prev => prev.filter(p => p.id !== regId));
+      await loadManageTournaments();
+    }
+    setRemovingPlayer(null);
+  }
+
   async function handleRevokeQR(tournamentId: string) {
     setTournError(null);
     setQrRevoking(tournamentId);
@@ -1543,6 +1587,18 @@ export default function AdminScreen() {
                           </Pressable>
                         </View>
                         </View>
+
+                        {/* Player roster button — all tournaments */}
+                        <Pressable
+                          style={styles.manageTournPlayersBtn}
+                          onPress={() => openPlayerManager(t)}
+                        >
+                          <Ionicons name="people-outline" size={13} color="#06b6d4" />
+                          <Text style={styles.manageTournPlayersBtnText}>
+                            Players ({t.registered_count})
+                          </Text>
+                          <Ionicons name="chevron-forward" size={13} color="#06b6d4" />
+                        </Pressable>
 
                         {/* First Friday times display */}
                         {t.is_individual && t.game_type === "Skee-Ball" && (
@@ -2509,6 +2565,65 @@ export default function AdminScreen() {
         </Pressable>
       </Modal>
 
+      {/* Player list manager modal */}
+      <Modal visible={playerListTarget !== null} transparent animationType="slide" onRequestClose={() => setPlayerListTarget(null)}>
+        <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setPlayerListTarget(null)} />
+          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1e1e1e", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24, maxHeight: "70%" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <Text style={{ color: "#fff", fontSize: 18, fontWeight: "900" }}>Registered Players</Text>
+              <Pressable onPress={() => setPlayerListTarget(null)}>
+                <Ionicons name="close" size={22} color="#555" />
+              </Pressable>
+            </View>
+            <Text style={{ color: "#555", fontSize: 13, marginBottom: 16 }} numberOfLines={1}>
+              {playerListTarget?.title}
+            </Text>
+
+            {playerListError && (
+              <Text style={{ color: "#ef4444", fontSize: 13, marginBottom: 12 }}>{playerListError}</Text>
+            )}
+
+            {playerListLoading ? (
+              <ActivityIndicator color="#06b6d4" style={{ marginVertical: 24 }} />
+            ) : playerList.length === 0 ? (
+              <Text style={{ color: "#444", fontSize: 14, textAlign: "center", paddingVertical: 24 }}>No players registered yet.</Text>
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {playerList.map(p => (
+                  <View key={p.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
+                    <Ionicons
+                      name={p.guest_name ? "person-outline" : "person"}
+                      size={14}
+                      color={p.guest_name ? "#22c55e" : "#06b6d4"}
+                    />
+                    <Text style={{ flex: 1, color: "#ccc", fontSize: 14, fontWeight: "700", marginLeft: 8 }}>
+                      {p.username}
+                      {p.guest_name ? <Text style={{ color: "#22c55e", fontWeight: "400" }}> (guest)</Text> : null}
+                    </Text>
+                    <View style={{ backgroundColor: p.status === "accepted" ? "rgba(34,197,94,0.12)" : "rgba(85,85,85,0.12)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, marginRight: 8 }}>
+                      <Text style={{ color: p.status === "accepted" ? "#22c55e" : "#555", fontSize: 11, fontWeight: "700" }}>
+                        {p.status}
+                      </Text>
+                    </View>
+                    <Pressable
+                      onPress={() => handleRemovePlayer(p.id)}
+                      disabled={removingPlayer === p.id}
+                      hitSlop={8}
+                    >
+                      {removingPlayer === p.id
+                        ? <ActivityIndicator size="small" color="#ef4444" />
+                        : <Ionicons name="close-circle" size={20} color="#ef4444" />
+                      }
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Guest player manager modal */}
       <Modal visible={guestTargetId !== null} transparent animationType="slide" onRequestClose={() => setGuestTargetId(null)}>
         <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
@@ -3289,6 +3404,9 @@ const styles = StyleSheet.create({
   ffBracketHint:  { color: "#666", fontSize: 11, marginBottom: 8 },
   ffAddGuestBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(34,197,94,0.07)", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: "rgba(34,197,94,0.2)", marginBottom: 8 },
   ffAddGuestBtnText: { color: "#22c55e", fontSize: 12, fontWeight: "700" },
+
+  manageTournPlayersBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(6,182,212,0.07)", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: "rgba(6,182,212,0.2)", marginTop: 10, marginBottom: 2 },
+  manageTournPlayersBtnText: { flex: 1, color: "#06b6d4", fontSize: 12, fontWeight: "700" },
 
   ffBracketGenBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,

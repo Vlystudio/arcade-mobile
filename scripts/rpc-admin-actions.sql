@@ -257,6 +257,51 @@ BEGIN
 END;
 $$;
 
+-- ── Remove a player from any tournament ─────────────────────
+CREATE OR REPLACE FUNCTION public.rpc_admin_remove_tournament_player(
+  p_reg_id uuid
+)
+RETURNS json
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_tourn_id  uuid;
+  v_user_id   uuid;
+  v_guest_name text;
+  v_label     text;
+BEGIN
+  PERFORM public.require_mfa();
+
+  IF NOT public.is_admin() THEN
+    RETURN json_build_object('error', 'unauthorized', 'message', 'Admin only.');
+  END IF;
+
+  SELECT tournament_id, user_id, guest_name
+    INTO v_tourn_id, v_user_id, v_guest_name
+    FROM tournament_registrations
+   WHERE id = p_reg_id;
+
+  IF NOT FOUND THEN
+    RETURN json_build_object('error', 'not_found');
+  END IF;
+
+  DELETE FROM tournament_registrations WHERE id = p_reg_id;
+
+  v_label := COALESCE(v_guest_name,
+               (SELECT username FROM profiles WHERE id = v_user_id),
+               v_user_id::text,
+               'unknown');
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'remove_tournament_player', 'tournament', v_tourn_id::text,
+          jsonb_build_object('reg_id', p_reg_id, 'player', v_label));
+
+  RETURN json_build_object('ok', true);
+END;
+$$;
+
 -- ── Create First Friday tournament ───────────────────────────
 CREATE OR REPLACE FUNCTION public.rpc_admin_create_first_friday(
   p_date  timestamptz,
@@ -295,18 +340,20 @@ END;
 $$;
 
 -- Grant execute to authenticated users (is_admin() + require_mfa() check is inside each function)
-REVOKE ALL ON FUNCTION public.rpc_admin_review_score(uuid, text)         FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.rpc_admin_approve_tournament(uuid)          FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.rpc_admin_deny_tournament(uuid, text)       FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.rpc_admin_set_tournament_status(uuid, text) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.rpc_admin_save_placements(uuid, jsonb)      FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.rpc_admin_delete_team(uuid)                 FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.rpc_admin_review_score(uuid, text)              FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.rpc_admin_approve_tournament(uuid)               FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.rpc_admin_deny_tournament(uuid, text)            FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.rpc_admin_set_tournament_status(uuid, text)      FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.rpc_admin_save_placements(uuid, jsonb)           FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.rpc_admin_delete_team(uuid)                      FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.rpc_admin_remove_tournament_player(uuid)         FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.rpc_admin_create_first_friday(timestamptz, text) FROM PUBLIC;
 
-GRANT EXECUTE ON FUNCTION public.rpc_admin_review_score(uuid, text)         TO authenticated;
-GRANT EXECUTE ON FUNCTION public.rpc_admin_approve_tournament(uuid)          TO authenticated;
-GRANT EXECUTE ON FUNCTION public.rpc_admin_deny_tournament(uuid, text)       TO authenticated;
-GRANT EXECUTE ON FUNCTION public.rpc_admin_set_tournament_status(uuid, text) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.rpc_admin_save_placements(uuid, jsonb)      TO authenticated;
-GRANT EXECUTE ON FUNCTION public.rpc_admin_delete_team(uuid)                 TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_admin_review_score(uuid, text)              TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_admin_approve_tournament(uuid)               TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_admin_deny_tournament(uuid, text)            TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_admin_set_tournament_status(uuid, text)      TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_admin_save_placements(uuid, jsonb)           TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_admin_delete_team(uuid)                      TO authenticated;
+GRANT EXECUTE ON FUNCTION public.rpc_admin_remove_tournament_player(uuid)         TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_admin_create_first_friday(timestamptz, text) TO authenticated;
