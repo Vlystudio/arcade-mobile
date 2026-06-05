@@ -4,15 +4,57 @@ React Native (Expo SDK 55) arcade venue companion app backed by Supabase (Postgr
 
 ## Features
 
+### Social & Community
 | Screen | What it does |
 |--------|-------------|
-| **Feed** | Social posts, score highlights, likes, following/followers |
-| **Games** | Leaderboard, QR lane check-in, score submission with photo proof, Trivia Night |
-| **Teams** | Create/join teams, team chat |
-| **Tournaments** | Request, manage & join tournaments; owner controls; podium tracking |
-| **Food** | In-app menu with cart and order flow |
-| **Profile** | Stats, tournament history, follow graph |
-| **Admin** | Score review queue, health dashboard, tournament management |
+| **Feed** | Social posts with photos, score highlights, likes, comments, follow/unfollow |
+| **Chat** | Direct messaging between users (Realtime) |
+| **Forums** | Community forum threads with admin moderation |
+
+### Games & Competition
+| Screen | What it does |
+|--------|-------------|
+| **Games** | Multi-game leaderboard, QR lane check-in, score submission with photo proof |
+| **Leaderboard** | Global score rankings across all game types |
+| **Skee-Ball Tracker** | Live 3-player session tracker — per-ball scoring across 6 lanes |
+| **Lane Scores** | Per-lane score history and player stats |
+| **Pool** | Table occupancy tracking, game type selection (8-ball, 9-ball, cutthroat, straight), player roster per table |
+| **Trivia Night** | Event sign-up, team formation for Trivia Night events |
+| **Demo Mode** | Guided walkthrough of app features for new visitors |
+
+### Teams & Leagues
+| Screen | What it does |
+|--------|-------------|
+| **Teams** | Create/join teams, team chat (Realtime), weekly schedule, captain announcements, team photos |
+| **Leagues** | Season standings, match schedule, win/loss records per team |
+
+### Tournaments
+| Screen | What it does |
+|--------|-------------|
+| **Tournaments** | Request, manage & join tournaments; bracket management; podium placements; owner controls |
+| **First Friday Series** | Dedicated screen for the recurring First Friday Skee-Ball tournament — Hall of Champions (win count across all events), per-event history, bracket viewer, guest player support (admin can add players by name without an account) |
+
+### Food & Ordering
+| Screen | What it does |
+|--------|-------------|
+| **Food Menu** | Location-aware menu browsing by category (accessible without login) |
+| **Cart & Checkout** | Cart management, tax calculation, Square-hosted checkout (no account required) |
+
+### Profile & Account
+| Screen | What it does |
+|--------|-------------|
+| **Profile** | Stats, avatar, bio, tournament history, follow graph, privacy toggle |
+| **MFA Setup / Verify** | TOTP-based two-factor authentication (required for admin actions) |
+| **Delete Account** | Full account deletion — clears storage, posts, follows, and auth record |
+| **Privacy & Terms** | In-app privacy policy and terms of service |
+| **Support Chat** | In-app support messaging |
+| **Feedback** | User feedback submission |
+
+### Staff & Administration
+| Screen | What it does |
+|--------|-------------|
+| **Admin** | Score review queue, tournament management (including FF guest players), team deletion, audit log viewer, health dashboard |
+| **Owner Dashboard** | Business analytics — user growth, active players, score volume, game-type breakdown, top players |
 
 ---
 
