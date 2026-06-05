@@ -1686,7 +1686,7 @@ export default function AdminScreen() {
                 };
                 const color = cfg[u.role]?.color ?? "#444";
                 const availableRoles = userRole === "architect"
-                  ? ["user", "admin", "owner", "architect"]
+                  ? ["user", "admin", "owner"]
                   : ["user", "admin"];
                 return (
                   <View key={u.id} style={styles.userCard}>
