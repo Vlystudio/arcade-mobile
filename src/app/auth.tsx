@@ -31,6 +31,16 @@ export default function AuthScreen() {
             <Text style={styles.registerBtnText}>Create Account</Text>
             <Ionicons name="person-add-outline" size={18} color="#fff" />
           </Pressable>
+
+          <View style={styles.divider} />
+
+          <Pressable
+            style={({ pressed }) => [styles.foodBtn, pressed && { opacity: 0.85 }]}
+            onPress={() => router.push("/food" as any)}
+          >
+            <Ionicons name="restaurant-outline" size={18} color="#06b6d4" />
+            <Text style={styles.foodBtnText}>Order Food</Text>
+          </Pressable>
         </View>
       </View>
     </SafeAreaView>
@@ -64,4 +74,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e",
   },
   registerBtnText: { color: "#fff", fontWeight: "800", fontSize: 17 },
+
+  divider: { height: 1, backgroundColor: "#1a1a1a", marginVertical: 4 },
+  foodBtn: {
+    borderRadius: 18, paddingVertical: 16,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    borderWidth: 1, borderColor: "#06b6d4",
+  },
+  foodBtnText: { color: "#06b6d4", fontWeight: "800", fontSize: 17 },
 });
