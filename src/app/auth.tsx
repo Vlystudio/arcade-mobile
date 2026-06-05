@@ -41,6 +41,14 @@ export default function AuthScreen() {
             <Ionicons name="restaurant-outline" size={18} color="#06b6d4" />
             <Text style={styles.foodBtnText}>Order Food</Text>
           </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [styles.karaokeBtn, pressed && { opacity: 0.85 }]}
+            onPress={() => router.push("/karaoke" as any)}
+          >
+            <Ionicons name="mic-outline" size={18} color="#a855f7" />
+            <Text style={styles.karaokeBtnText}>Karaoke Queue</Text>
+          </Pressable>
         </View>
       </View>
     </SafeAreaView>
@@ -82,4 +90,11 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#06b6d4",
   },
   foodBtnText: { color: "#06b6d4", fontWeight: "800", fontSize: 17 },
+
+  karaokeBtn: {
+    borderRadius: 18, paddingVertical: 16,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
+    borderWidth: 1, borderColor: "#a855f7",
+  },
+  karaokeBtnText: { color: "#a855f7", fontWeight: "800", fontSize: 17 },
 });

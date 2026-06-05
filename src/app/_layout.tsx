@@ -82,6 +82,8 @@ export default function RootLayout() {
           <Stack.Screen name="support-chat" options={{ headerShown: false }} />
           <Stack.Screen name="ff-signup" options={{ headerShown: false }} />
           <Stack.Screen name="ff-tournament" options={{ headerShown: false }} />
+          <Stack.Screen name="karaoke" options={{ headerShown: false }} />
+          <Stack.Screen name="karaoke-display" options={{ headerShown: false }} />
         </Stack>
         </View>
       </ThemeProvider>

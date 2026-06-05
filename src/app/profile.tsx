@@ -536,7 +536,8 @@ export default function ProfileScreen() {
           {/* Actions */}
           <Text style={styles.sectionLabel}>Quick Actions</Text>
           <View style={styles.actionsCard}>
-            <ActionRow icon="people-circle-outline" label="Friends" onPress={() => router.push("/friends" as any)} />
+            <ActionRow icon="mic-outline" label="Karaoke Queue" onPress={() => router.push("/karaoke" as any)} />
+            <ActionRow icon="people-circle-outline" label="Friends" onPress={() => router.push("/friends" as any)} divider />
             <ActionRow icon="chatbubbles-outline" label="Messages" onPress={() => router.push("/chat" as any)} divider />
             <ActionRow icon="people-outline" label="Manage Teams" onPress={() => router.push("/teams")} divider />
             <ActionRow icon="podium-outline" label="Leaderboard" onPress={() => router.push("/leaderboard")} divider />
