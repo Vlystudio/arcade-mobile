@@ -980,7 +980,7 @@ export default function AdminScreen() {
     const players = (scoringGame.group.slots ?? []).filter(s =>
       scoringGame.game.game_number === 1 ? s.status === "active" : s.status === "active"
     );
-    const scores = players.map(p => ({ user_id: p.user_id, score: parseInt(gameScores[p.user_id] ?? "0", 10) }));
+    const scores = players.map(p => ({ user_id: p.user_id, score: parseInt(gameScores[String(p.seed)] ?? "0", 10) }));
     const { data, error } = await supabase.rpc("rpc_ff_submit_game_scores", {
       p_game_id: scoringGame.game.id,
       p_scores:  scores,
@@ -2253,7 +2253,7 @@ export default function AdminScreen() {
                             onPress={() => {
                               const playersForGame = activePlayers;
                               const init: Record<string, string> = {};
-                              playersForGame.forEach(p => { init[p.user_id] = ""; });
+                              playersForGame.forEach(p => { init[String(p.seed)] = ""; });
                               setGameScores(init);
                               setScoringGame({ game: currentGame, group: g, round });
                             }}
@@ -2296,8 +2296,8 @@ export default function AdminScreen() {
                   placeholder="0"
                   placeholderTextColor="#333"
                   keyboardType="number-pad"
-                  value={gameScores[p.user_id] ?? ""}
-                  onChangeText={v => setGameScores(prev => ({ ...prev, [p.user_id]: v }))}
+                  value={gameScores[String(p.seed)] ?? ""}
+                  onChangeText={v => setGameScores(prev => ({ ...prev, [String(p.seed)]: v }))}
                 />
                 <Text style={styles.scoreEntryPts}>pts</Text>
               </View>
