@@ -25,11 +25,22 @@ export default function ResetPasswordScreen() {
   const [done, setDone]                 = useState(false);
 
   useEffect(() => {
-    // Supabase fires PASSWORD_RECOVERY when the reset link is clicked
+    // On web, exchange PKCE code if present (sent when using PKCE flow)
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get("code");
+      if (code) {
+        supabase.auth.exchangeCodeForSession(code).catch(() => {
+          setError("This reset link is invalid or has expired.");
+        });
+      }
+    }
+
+    // Supabase fires PASSWORD_RECOVERY after code exchange or hash-based redirect
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") setReady(true);
     });
-    // Also check if already in a recovery session
+    // Fallback: session already active
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) setReady(true);
     });

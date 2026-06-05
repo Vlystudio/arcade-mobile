@@ -97,7 +97,7 @@ export default function SignupScreen() {
       password,
       options: {
         data: { username: uname, full_name: uname },
-        emailRedirectTo: getEmailRedirectTo(),
+        emailRedirectTo: getEmailRedirectTo("auth-callback"),
       },
     });
 
