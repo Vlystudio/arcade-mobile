@@ -93,6 +93,7 @@ export default function TeamDetailScreen() {
   const [bannedUsers, setBannedUsers] = useState<BannedUser[]>([]);
   const [kickingId, setKickingId] = useState<string | null>(null);
   const [banningId, setBanningId] = useState<string | null>(null);
+  const [memberActionTarget, setMemberActionTarget] = useState<{ userId: string; username: string } | null>(null);
 
   // Slot preferences
   const [slotPref1, setSlotPref1] = useState<string | null>(null);
@@ -324,52 +325,26 @@ export default function TeamDetailScreen() {
     setAnnounceVisible(false);
   }
 
-  async function handleKick(memberId: string, username: string) {
-    Alert.alert(
-      `Kick ${username}?`,
-      "They'll be removed from the team but can request to rejoin.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Kick",
-          style: "destructive",
-          onPress: async () => {
-            setKickingId(memberId);
-            const { data } = await supabase.rpc("rpc_team_kick", { p_team_id: teamId, p_member_id: memberId });
-            setKickingId(null);
-            if ((data as any)?.error) {
-              Alert.alert("Error", (data as any).error);
-            } else {
-              loadData();
-            }
-          },
-        },
-      ]
-    );
+  async function handleKick(memberId: string) {
+    setKickingId(memberId);
+    const { data } = await supabase.rpc("rpc_team_kick", { p_team_id: teamId, p_member_id: memberId });
+    setKickingId(null);
+    if ((data as any)?.error) {
+      Alert.alert("Error", (data as any).error);
+    } else {
+      loadData();
+    }
   }
 
-  async function handleBan(memberId: string, username: string) {
-    Alert.alert(
-      `Ban ${username}?`,
-      `${username} will be removed and permanently blocked from searching, viewing, or joining this team.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Ban",
-          style: "destructive",
-          onPress: async () => {
-            setBanningId(memberId);
-            const { data } = await supabase.rpc("rpc_team_ban", { p_team_id: teamId, p_member_id: memberId });
-            setBanningId(null);
-            if ((data as any)?.error) {
-              Alert.alert("Error", (data as any).error);
-            } else {
-              loadData();
-            }
-          },
-        },
-      ]
-    );
+  async function handleBan(memberId: string) {
+    setBanningId(memberId);
+    const { data } = await supabase.rpc("rpc_team_ban", { p_team_id: teamId, p_member_id: memberId });
+    setBanningId(null);
+    if ((data as any)?.error) {
+      Alert.alert("Error", (data as any).error);
+    } else {
+      loadData();
+    }
   }
 
   async function handleUnban(userId: string, username: string) {
@@ -623,15 +598,7 @@ export default function TeamDetailScreen() {
             player={p}
             rank={i + 1}
             captainMode={isCaptain && p.user_id !== user?.id}
-            onActionPress={() => Alert.alert(
-              p.username,
-              "Manage this member",
-              [
-                { text: "Kick from team", style: "destructive", onPress: () => handleKick(p.user_id, p.username) },
-                { text: "Ban from team", style: "destructive", onPress: () => handleBan(p.user_id, p.username) },
-                { text: "Cancel", style: "cancel" },
-              ]
-            )}
+            onActionPress={() => setMemberActionTarget({ userId: p.user_id, username: p.username })}
           />
         ))}
 
@@ -788,6 +755,53 @@ export default function TeamDetailScreen() {
             </Pressable>
           </Pressable>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Member action sheet (kick / ban) */}
+      <Modal visible={!!memberActionTarget} transparent animationType="slide" onRequestClose={() => setMemberActionTarget(null)}>
+        <Pressable style={styles.modalBg} onPress={() => setMemberActionTarget(null)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>{memberActionTarget?.username}</Text>
+            <Text style={styles.modalSub}>Choose an action for this member</Text>
+
+            <Pressable
+              style={styles.kickActionBtn}
+              disabled={kickingId === memberActionTarget?.userId}
+              onPress={() => {
+                const target = memberActionTarget;
+                setMemberActionTarget(null);
+                if (target) handleKick(target.userId);
+              }}
+            >
+              <Ionicons name="exit-outline" size={20} color="#f59e0b" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.kickActionText}>Kick from team</Text>
+                <Text style={styles.kickActionSub}>Removed but can request to rejoin</Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              style={styles.banActionBtn}
+              disabled={banningId === memberActionTarget?.userId}
+              onPress={() => {
+                const target = memberActionTarget;
+                setMemberActionTarget(null);
+                if (target) handleBan(target.userId);
+              }}
+            >
+              <Ionicons name="ban-outline" size={20} color="#ef4444" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.banActionText}>Ban from team</Text>
+                <Text style={styles.banActionSub}>Blocked from searching or joining</Text>
+              </View>
+            </Pressable>
+
+            <Pressable style={styles.memberActionCancel} onPress={() => setMemberActionTarget(null)}>
+              <Text style={styles.memberActionCancelText}>Cancel</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
       </Modal>
     </SafeAreaView>
   );
@@ -1130,4 +1144,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   annPostBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
+
+  // Member action sheet (kick / ban)
+  kickActionBtn: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: "rgba(245,158,11,0.08)", borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.2)", marginBottom: 10,
+  },
+  kickActionText: { color: "#f59e0b", fontSize: 15, fontWeight: "800" },
+  kickActionSub: { color: "#555", fontSize: 12, marginTop: 2 },
+  banActionBtn: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: "rgba(239,68,68,0.2)", marginBottom: 10,
+  },
+  banActionText: { color: "#ef4444", fontSize: 15, fontWeight: "800" },
+  banActionSub: { color: "#555", fontSize: 12, marginTop: 2 },
+  memberActionCancel: {
+    backgroundColor: "#0d0d0d", borderRadius: 16, paddingVertical: 15,
+    alignItems: "center", marginTop: 4,
+  },
+  memberActionCancelText: { color: "#555", fontWeight: "700", fontSize: 15 },
 });
