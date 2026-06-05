@@ -65,6 +65,7 @@ export async function checkRateLimit(req: any, res: any): Promise<boolean> {
     if (IS_PROD) {
       res.statusCode = 503;
       res.setHeader("Content-Type", "application/json");
+      res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Retry-After", "60");
       res.end(JSON.stringify({
         error: "Service temporarily unavailable. Please try again later.",
@@ -81,6 +82,7 @@ export async function checkRateLimit(req: any, res: any): Promise<boolean> {
     if (!success) {
       res.statusCode = 429;
       res.setHeader("Content-Type", "application/json");
+      res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Retry-After", String(Math.ceil((reset - Date.now()) / 1000)));
       res.setHeader("X-RateLimit-Limit", String(limit));
       res.setHeader("X-RateLimit-Remaining", "0");
@@ -97,6 +99,7 @@ export async function checkRateLimit(req: any, res: any): Promise<boolean> {
       // Prod: fail closed on Redis error
       res.statusCode = 503;
       res.setHeader("Content-Type", "application/json");
+      res.setHeader("Access-Control-Allow-Origin", "*");
       res.end(JSON.stringify({ error: "Service temporarily unavailable. Please try again later." }));
       return false;
     }
