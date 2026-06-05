@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
+import { router } from "expo-router";
 import { createElement, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { supabase } from "../../lib/supabase";
@@ -260,6 +261,14 @@ export default function KaraokeDisplayWeb() {
 
       {/* ── Right: Queue sidebar ───────────────────── */}
       <View style={s.sidebar}>
+        <Pressable
+          style={s.backBtn}
+          onPress={() => router.canGoBack() ? router.back() : router.replace("/karaoke" as any)}
+        >
+          <Ionicons name="chevron-back" size={16} color="#555" />
+          <Text style={s.backBtnText}>Back</Text>
+        </Pressable>
+
         <View style={s.sidebarHeader}>
           <Ionicons name="list" size={16} color="#a855f7" />
           <Text style={s.sidebarTitle}>Up Next</Text>
@@ -361,6 +370,8 @@ const s = StyleSheet.create({
 
   // ── Sidebar ──────────────────────────────────────────────
   sidebar: { width: 280, backgroundColor: "#080808", borderLeftWidth: 1, borderLeftColor: "#111", padding: 20 },
+  backBtn: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 16 },
+  backBtnText: { color: "#555", fontSize: 13, fontWeight: "600" },
   sidebarHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 },
   sidebarTitle: { color: "#fff", fontSize: 16, fontWeight: "900", flex: 1 },
   skipBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(239,68,68,0.12)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(239,68,68,0.25)" },

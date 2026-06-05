@@ -55,5 +55,28 @@ export default async function handler(req: any, res: any) {
     }))
     .filter((i: any) => i.videoId);
 
-  return sendJson(res, 200, { items });
+  // Filter out videos that block embedding (saves wasted queue slots)
+  let embeddableIds = new Set<string>(items.map((i: any) => i.videoId));
+  if (items.length > 0) {
+    try {
+      const ids = items.map((i: any) => i.videoId).join(",");
+      const statusUrl = new URL("https://www.googleapis.com/youtube/v3/videos");
+      statusUrl.searchParams.set("part", "status");
+      statusUrl.searchParams.set("id", ids);
+      statusUrl.searchParams.set("key", apiKey);
+      const statusResp = await fetch(statusUrl.toString());
+      if (statusResp.ok) {
+        const statusData = await statusResp.json();
+        embeddableIds = new Set(
+          (statusData.items ?? [])
+            .filter((v: any) => v.status?.embeddable !== false)
+            .map((v: any) => v.id as string)
+        );
+      }
+    } catch (_) {
+      // On failure keep all results rather than showing empty list
+    }
+  }
+
+  return sendJson(res, 200, { items: items.filter((i: any) => embeddableIds.has(i.videoId)) });
 }
