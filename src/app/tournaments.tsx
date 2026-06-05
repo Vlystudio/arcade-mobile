@@ -164,7 +164,7 @@ export default function TournamentsScreen() {
       is_owner: t.created_by === user.id,
       registered_count: regCount[t.id] ?? 0,
       signup_qr_active: t.signup_qr_active ?? false,
-      max_players: t.max_players ?? 20,
+      max_players: t.max_players ?? 32,
       ff_signup_time: t.ff_signup_time ?? null,
       ff_start_time: t.ff_start_time ?? null,
       my_reg_status: myRegStatus[t.id] ?? null,
@@ -391,6 +391,12 @@ export default function TournamentsScreen() {
                     <Ionicons name="location-outline" size={13} color="#06b6d4" />
                     <Text style={s.ffInPersonText}>Sign up in person at the venue on the day of the event</Text>
                   </View>
+
+                  <Pressable style={s.ffViewSeriesBtn} onPress={() => router.push("/ff-tournament" as any)}>
+                    <Ionicons name="trophy-outline" size={14} color="#06b6d4" />
+                    <Text style={s.ffViewSeriesText}>View Series & Hall of Champions</Text>
+                    <Ionicons name="chevron-forward" size={14} color="#06b6d4" />
+                  </Pressable>
 
                   {activeFF && activeFF.status === "active" && (
                     <Pressable style={s.ffViewBracketBtn} onPress={() => openBracket(activeFF.id)}>
@@ -1018,6 +1024,8 @@ const s = StyleSheet.create({
   ffTimeLabel: { color: "#06b6d4", fontSize: 11, fontWeight: "700" },
   ffTimeValue: { color: "#06b6d4", fontSize: 12, fontWeight: "900" },
 
+  ffViewSeriesBtn: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12, backgroundColor: "rgba(6,182,212,0.06)", borderRadius: 12, paddingVertical: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: "rgba(6,182,212,0.18)" },
+  ffViewSeriesText: { flex: 1, color: "#06b6d4", fontSize: 13, fontWeight: "700" },
   ffResultsDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(6,182,212,0.15)", marginVertical: 14 },
   ffResultsLabel: { color: "#333", fontSize: 10, fontWeight: "800", letterSpacing: 1.2, marginBottom: 10 },
   ffResultRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 10 },

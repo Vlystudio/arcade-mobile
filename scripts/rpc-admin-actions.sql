@@ -278,11 +278,11 @@ BEGIN
 
   INSERT INTO tournaments (
     title, game_type, proposed_date,
-    is_official, is_individual, signup_type, status
+    is_official, is_individual, signup_type, status, max_players
   ) VALUES (
     'First Friday Skee-Ball — ' || p_label,
     'Skee-Ball', p_date,
-    true, true, 'in_person', 'upcoming'
+    true, true, 'in_person', 'upcoming', 32
   )
   RETURNING id INTO v_id;
 

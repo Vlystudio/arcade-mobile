@@ -228,7 +228,7 @@ export default function AdminScreen() {
   const [statusActioning, setStatusActioning] = useState<string | null>(null);
   const [firstFridayCreating, setFirstFridayCreating] = useState(false);
   const [editTournTarget, setEditTournTarget] = useState<ManageTournament | null>(null);
-  const [editTournForm, setEditTournForm] = useState({ title: "", game_type: "", proposed_date: "", max_players: "20", signup_time: "", start_time: "" });
+  const [editTournForm, setEditTournForm] = useState({ title: "", game_type: "", proposed_date: "", max_players: "32", signup_time: "", start_time: "" });
   const [editingTourn, setEditingTourn] = useState(false);
   const [deleteTournTarget, setDeleteTournTarget] = useState<ManageTournament | null>(null);
   const [deletingTourn, setDeletingTourn] = useState(false);
@@ -252,6 +252,12 @@ export default function AdminScreen() {
   const [bracketWinners, setBracketWinners]         = useState<BracketSlot[] | null>(null);
   const [gameScores, setGameScores]                 = useState<Record<string, string>>({});
   const [submittingScores, setSubmittingScores]     = useState(false);
+  // Guest player management
+  const [guestTargetId, setGuestTargetId]   = useState<string | null>(null);
+  const [guestName, setGuestName]           = useState("");
+  const [addingGuest, setAddingGuest]       = useState(false);
+  const [guestList, setGuestList]           = useState<{ id: string; guest_name: string }[]>([]);
+  const [guestListLoading, setGuestListLoading] = useState(false);
 
   // Forums state
   type PendingForum = { id: string; title: string; description: string | null; game_type: string | null; creator_username: string; created_at: string; auto_flagged: boolean; flag_category: string | null };
@@ -837,7 +843,7 @@ export default function AdminScreen() {
       is_individual:   t.is_individual ?? false,
       signup_qr_token: t.signup_qr_token ?? null,
       signup_qr_active: t.signup_qr_active ?? false,
-      max_players:     t.max_players ?? 20,
+      max_players:     t.max_players ?? 32,
       ff_signup_time:  t.ff_signup_time ?? "7:30 PM",
       ff_start_time:   t.ff_start_time  ?? "8:00 PM",
       registered_count: regCount[t.id] ?? 0,
@@ -1004,6 +1010,40 @@ export default function AdminScreen() {
         .sort((a, b) => (a.final_rank ?? 0) - (b.final_rank ?? 0));
       if (winners.length > 0) setBracketWinners(winners);
     }
+  }
+
+  async function openGuestManager(tournamentId: string) {
+    setGuestTargetId(tournamentId);
+    setGuestName("");
+    setGuestListLoading(true);
+    const { data } = await supabase.rpc("rpc_ff_get_guest_players", { p_tournament_id: tournamentId });
+    setGuestList((data as any)?.guests ?? []);
+    setGuestListLoading(false);
+  }
+
+  async function handleAddGuest() {
+    if (!guestTargetId || !guestName.trim()) return;
+    setAddingGuest(true);
+    const { data, error } = await supabase.rpc("rpc_admin_add_ff_guest", {
+      p_tournament_id: guestTargetId,
+      p_guest_name: guestName.trim(),
+    });
+    setAddingGuest(false);
+    if (error || (data as any)?.error) {
+      setTournError((data as any)?.error ?? error?.message ?? "Failed to add guest");
+      return;
+    }
+    setGuestName("");
+    const { data: gl } = await supabase.rpc("rpc_ff_get_guest_players", { p_tournament_id: guestTargetId });
+    setGuestList((gl as any)?.guests ?? []);
+    await loadManageTournaments();
+  }
+
+  async function handleRemoveGuest(regId: string) {
+    if (!guestTargetId) return;
+    await supabase.rpc("rpc_admin_remove_ff_guest", { p_reg_id: regId });
+    setGuestList(prev => prev.filter(g => g.id !== regId));
+    await loadManageTournaments();
   }
 
   async function handleRevokeQR(tournamentId: string) {
@@ -1520,6 +1560,15 @@ export default function AdminScreen() {
                               <Text style={styles.ffBracketLabel}>Bracket</Text>
                               <Text style={styles.ffBracketCount}>{t.registered_count}/{t.max_players} players</Text>
                             </View>
+                            {!t.has_bracket && (
+                              <Pressable
+                                style={styles.ffAddGuestBtn}
+                                onPress={() => openGuestManager(t.id)}
+                              >
+                                <Ionicons name="person-add-outline" size={13} color="#22c55e" />
+                                <Text style={styles.ffAddGuestBtnText}>Add Guest Player</Text>
+                              </Pressable>
+                            )}
                             {!t.has_bracket && t.registered_count < 32 && (
                               <Text style={styles.ffBracketHint}>Need {32 - t.registered_count} more players to generate bracket (set max players to 32)</Text>
                             )}
@@ -2459,6 +2508,62 @@ export default function AdminScreen() {
           </View>
         </Pressable>
       </Modal>
+
+      {/* Guest player manager modal */}
+      <Modal visible={guestTargetId !== null} transparent animationType="slide" onRequestClose={() => setGuestTargetId(null)}>
+        <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setGuestTargetId(null)} />
+          <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <View style={{ backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1e1e1e", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <Text style={{ color: "#fff", fontSize: 18, fontWeight: "900" }}>Add Guest Players</Text>
+                <Pressable onPress={() => setGuestTargetId(null)}>
+                  <Ionicons name="close" size={22} color="#555" />
+                </Pressable>
+              </View>
+              <Text style={{ color: "#555", fontSize: 13, marginBottom: 20 }}>Players without accounts can join by name only.</Text>
+
+              {/* Current guest list */}
+              {guestListLoading ? (
+                <ActivityIndicator color="#22c55e" style={{ marginBottom: 16 }} />
+              ) : guestList.length > 0 ? (
+                <View style={{ marginBottom: 16 }}>
+                  {guestList.map(g => (
+                    <View key={g.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
+                      <Ionicons name="person-outline" size={14} color="#22c55e" />
+                      <Text style={{ flex: 1, color: "#ccc", fontSize: 14, fontWeight: "700", marginLeft: 8 }}>{g.guest_name}</Text>
+                      <Pressable onPress={() => handleRemoveGuest(g.id)} hitSlop={8}>
+                        <Ionicons name="close-circle" size={18} color="#333" />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              {/* Add new guest */}
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <TextInput
+                  style={[styles.textInput, { flex: 1, backgroundColor: "#0a0a0a" }]}
+                  placeholder="Guest name"
+                  placeholderTextColor="#333"
+                  value={guestName}
+                  onChangeText={setGuestName}
+                  maxLength={40}
+                  returnKeyType="done"
+                  onSubmitEditing={handleAddGuest}
+                />
+                <Pressable
+                  style={[styles.confirmActionBtn, { backgroundColor: "#22c55e", paddingHorizontal: 18, opacity: (!guestName.trim() || addingGuest) ? 0.5 : 1 }]}
+                  onPress={handleAddGuest}
+                  disabled={!guestName.trim() || addingGuest}
+                >
+                  {addingGuest ? <ActivityIndicator size="small" color="#000" /> : <Text style={[styles.confirmActionText, { color: "#000" }]}>Add</Text>}
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
     </SafeAreaView>
     <BottomTabBar />
     </View>
@@ -3141,6 +3246,7 @@ const styles = StyleSheet.create({
   },
   editTournTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
   editTournSub:   { color: "#555", fontSize: 13, marginBottom: 20 },
+  textInput: { backgroundColor: "#111", borderRadius: 12, borderWidth: 1, borderColor: "#1e1e1e", color: "#fff", fontSize: 15, paddingHorizontal: 14, paddingVertical: 12 },
   editTournLabel: { color: "#888", fontSize: 12, fontWeight: "700", marginBottom: 6, marginTop: 12 },
   editTournInput: {
     backgroundColor: "#0a0a0a", borderRadius: 12,
@@ -3181,6 +3287,8 @@ const styles = StyleSheet.create({
   ffBracketLabel: { color: "#a855f7", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
   ffBracketCount: { color: "#fff", fontSize: 13, fontWeight: "700" },
   ffBracketHint:  { color: "#666", fontSize: 11, marginBottom: 8 },
+  ffAddGuestBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(34,197,94,0.07)", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: "rgba(34,197,94,0.2)", marginBottom: 8 },
+  ffAddGuestBtnText: { color: "#22c55e", fontSize: 12, fontWeight: "700" },
 
   ffBracketGenBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
