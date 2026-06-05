@@ -2306,12 +2306,14 @@ export default function AdminScreen() {
             </Text>
             <Text style={styles.scoreEntryHint}>
               {scoringGame?.isEditing
-                ? "Correcting scores — previous results for this game will be recalculated."
+                ? "Correcting scores — previous results will be recalculated."
                 : scoringGame?.round.round_number === 4
-                  ? "Final 4 — scores determine 1st through 4th place."
-                  : scoringGame?.game.game_number === 2
-                    ? "3 players compete. Lowest score is eliminated. 2 advance."
-                    : "4 players compete. Lowest score is eliminated. 3 remain for Game 2."}
+                  ? "Final 4 — 1 game. Scores determine 1st through 4th place."
+                  : scoringGame?.round.round_number === 1
+                    ? scoringGame?.game.game_number === 2
+                      ? "3 players · Game 2. Lowest score eliminated. Top 2 advance."
+                      : "4 players · Game 1. Lowest score eliminated. 3 remain for Game 2."
+                    : "4 players · 1 game. Bottom 2 scores eliminated. Top 2 advance."}
             </Text>
             {scoringGame && (() => {
               const allSlots = scoringGame.group.slots ?? [];
