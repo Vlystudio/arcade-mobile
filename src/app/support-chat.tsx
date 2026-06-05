@@ -20,7 +20,6 @@ const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
 type SupportMessage = {
   id: string;
-  sender_id: string;
   content: string;
   is_admin_msg: boolean;
   created_at: string;
@@ -73,7 +72,7 @@ export default function SupportChatScreen() {
         setTicketId(ticket.id);
         const { data: msgs } = await supabase
           .from("support_messages")
-          .select("id, sender_id, content, is_admin_msg, created_at")
+          .select("id, content, is_admin_msg, created_at")
           .eq("ticket_id", ticket.id)
           .order("created_at", { ascending: true });
         if (mounted) setMessages(msgs ?? []);
@@ -101,7 +100,13 @@ export default function SupportChatScreen() {
           filter: `ticket_id=eq.${ticketId}`,
         },
         (payload) => {
-          const msg = payload.new as SupportMessage;
+          const raw = payload.new as any;
+          const msg: SupportMessage = {
+            id:           raw.id,
+            content:      raw.content,
+            is_admin_msg: raw.is_admin_msg,
+            created_at:   raw.created_at,
+          };
           setMessages(prev => {
             if (prev.some(m => m.id === msg.id)) return prev;
             return [...prev, msg];
@@ -157,7 +162,7 @@ export default function SupportChatScreen() {
     if (!ticketId) {
       const { data: msgs } = await supabase
         .from("support_messages")
-        .select("id, sender_id, content, is_admin_msg, created_at")
+        .select("id, content, is_admin_msg, created_at")
         .eq("ticket_id", result.ticket_id)
         .order("created_at", { ascending: true });
       setMessages(msgs ?? []);
@@ -221,7 +226,7 @@ export default function SupportChatScreen() {
             </View>
           }
           renderItem={({ item, index }) => {
-            const isMe = item.sender_id === user?.id;
+            const isMe = !item.is_admin_msg;
             const prevMsg = messages[index - 1];
             const showDate = !prevMsg || formatDate(item.created_at) !== formatDate(prevMsg.created_at);
 
@@ -239,7 +244,7 @@ export default function SupportChatScreen() {
                     </View>
                   )}
                   <View style={[s.bubble, isMe ? s.bubbleMe : s.bubbleThem]}>
-                    {!isMe && <Text style={s.adminLabel}>Support Team</Text>}
+                    {!isMe && <Text style={s.adminLabel}>ArcadeTracker Support</Text>}
                     <Text style={[s.bubbleText, isMe ? s.bubbleTextMe : s.bubbleTextThem]}>
                       {item.content}
                     </Text>
