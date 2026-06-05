@@ -9,12 +9,15 @@ function joinUrl(baseUrl: string, path: string) {
 }
 
 export function getEmailRedirectTo(path = "") {
-  if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.origin) {
-    return joinUrl(window.location.origin, path);
-  }
-
+  // Prefer the explicit site URL so the canonical www. domain is always used.
+  // Falling back to window.location.origin would send users to the non-www
+  // variant if they happened to navigate there, which has no SSL cert.
   if (configuredSiteUrl) {
     return joinUrl(configuredSiteUrl, path);
+  }
+
+  if (Platform.OS === "web" && typeof window !== "undefined" && window.location?.origin) {
+    return joinUrl(window.location.origin, path);
   }
 
   return undefined;
