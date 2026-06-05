@@ -26,9 +26,9 @@ export default function TermsScreen() {
         </Section>
 
         <Section title="2. Age Requirement">
-          {"ArcadeTracker is operated in connection with a 21+ licensed venue. You must be at " +
-           "least 21 years of age to create an account or use the App. By creating an account " +
-           "you represent and warrant that you are 21 years of age or older.\n\n" +
+          {"ArcadeTracker is intended for users aged 21 and older. You must be at least 21 years " +
+           "of age to create an account or use the App. By creating an account you represent and " +
+           "warrant that you are 21 years of age or older.\n\n" +
            "If we discover that an account was created by someone under 21, the account will be " +
            "immediately and permanently deleted without notice."}
         </Section>
@@ -43,8 +43,8 @@ export default function TermsScreen() {
         </Section>
 
         <Section title="4. Community Standards">
-          {"ArcadeTracker is a community platform for a licensed 21+ bar and entertainment venue. " +
-           "All content you post publicly — including profile photos, bio text, posts, team names, " +
+          {"ArcadeTracker is a community platform. All content you post publicly — including " +
+           "profile photos, bio text, posts, team names, " +
            "score submissions, and chat messages visible to other users — must comply with the " +
            "following standards.\n\n" +
            "PROHIBITED CONTENT\n\n" +
