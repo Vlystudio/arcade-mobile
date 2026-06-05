@@ -2324,7 +2324,7 @@ export default function AdminScreen() {
                 : allSlots.filter(s => s.status === "active");
               return slotsForModal;
             })().map(p => (
-              <View key={p.user_id} style={styles.scoreEntryRow}>
+              <View key={String(p.seed)} style={styles.scoreEntryRow}>
                 <Text style={styles.scoreEntryName}>{p.username}</Text>
                 <TextInput
                   style={styles.scoreEntryInput}
