@@ -109,7 +109,7 @@ type ManageTournament = {
 };
 
 type BracketSlot  = { user_id: string; username: string; seed: number; status: string; eliminated_game: number | null; final_rank: number | null };
-type BracketScore = { user_id: string; username: string; score: number; rank_in_game: number; rank_points: number | null; is_eliminated: boolean };
+type BracketScore = { user_id: string; username: string; score: number; rank_in_game: number; rank_points: number | null; is_eliminated: boolean; player_seed: number | null };
 type BracketGame  = { id: string; game_number: number; status: string; scores: BracketScore[] | null };
 type BracketGroup = { id: string; group_number: number; status: string; slots: BracketSlot[] | null; games: BracketGame[] | null };
 type BracketRound = { id: string; round_number: number; round_name: string; status: string; groups: BracketGroup[] | null };
@@ -982,7 +982,7 @@ export default function AdminScreen() {
         ? (scoringGame.group.slots ?? [])
         : (scoringGame.group.slots ?? []).filter(s => s.eliminated_game !== 1)
       : (scoringGame.group.slots ?? []).filter(s => s.status === "active");
-    const scores = players.map(p => ({ user_id: p.user_id, score: parseInt(gameScores[String(p.seed)] ?? "0", 10) }));
+    const scores = players.map(p => ({ user_id: p.user_id, seed: p.seed, score: parseInt(gameScores[String(p.seed)] ?? "0", 10) }));
     const { data, error } = await supabase.rpc("rpc_ff_submit_game_scores", {
       p_game_id: scoringGame.game.id,
       p_scores:  scores,
@@ -2245,9 +2245,11 @@ export default function AdminScreen() {
                                   const slots = g.slots ?? [];
                                   const init: Record<string, string> = {};
                                   (gm.scores ?? []).forEach(sc => {
-                                    const slot = gm.game_number === 1
-                                      ? slots.find(s => s.user_id === sc.user_id)
-                                      : slots.find(s => s.user_id === sc.user_id && s.eliminated_game !== 1);
+                                    const slot = sc.player_seed != null
+                                      ? slots.find(s => s.user_id === sc.user_id && s.seed === sc.player_seed)
+                                      : (gm.game_number === 1
+                                          ? slots.find(s => s.user_id === sc.user_id)
+                                          : slots.find(s => s.user_id === sc.user_id && s.eliminated_game !== 1));
                                     if (slot) init[String(slot.seed)] = String(sc.score);
                                   });
                                   setGameScores(init);
