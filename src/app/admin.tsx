@@ -389,11 +389,7 @@ export default function AdminScreen() {
   async function loadUsers() {
     setUsersLoading(true);
     setUsersError(null);
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, username, avatar_url, role")
-      .order("username", { ascending: true })
-      .limit(200);
+    const { data, error } = await supabase.rpc("rpc_admin_get_users");
     if (error) { setUsersError(error.message); setUsersLoading(false); return; }
     setUsersData((data ?? []) as any[]);
     setUsersLoading(false);
@@ -1664,7 +1660,7 @@ export default function AdminScreen() {
           {usersError && <ErrorBanner message={usersError} />}
           <TextInput
             style={styles.userSearchInput}
-            placeholder="Search by username…"
+            placeholder="Search by username or email…"
             placeholderTextColor="#444"
             value={userSearch}
             onChangeText={setUserSearch}
@@ -1675,8 +1671,13 @@ export default function AdminScreen() {
             <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
           ) : (
             usersData
-              .filter((u) => !userSearch || u.username?.toLowerCase().includes(userSearch.toLowerCase()))
+              .filter((u) => {
+                if (!userSearch) return true;
+                const q = userSearch.toLowerCase();
+                return u.username?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q);
+              })
               .map((u) => {
+                const displayName = u.username ?? u.email ?? "Unknown";
                 const cfg: Record<string, { color: string }> = {
                   architect: { color: "#a855f7" },
                   owner:     { color: "#f59e0b" },
@@ -1689,9 +1690,12 @@ export default function AdminScreen() {
                   : ["user", "admin"];
                 return (
                   <View key={u.id} style={styles.userCard}>
-                    <Avatar uri={u.avatar_url} name={u.username} size={42} radius={13} />
+                    <Avatar uri={u.avatar_url} name={displayName} size={42} radius={13} />
                     <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.userCardName}>{u.username ?? "Unknown"}</Text>
+                      <Text style={styles.userCardName}>{displayName}</Text>
+                      {!u.username && u.email && (
+                        <Text style={styles.userCardEmail}>{u.email}</Text>
+                      )}
                       <View style={[styles.userRolePill, { borderColor: color + "44", backgroundColor: color + "12" }]}>
                         {u.role !== "user" && <Ionicons name="checkmark-circle" size={11} color={color} />}
                         <Text style={[styles.userRolePillText, { color }]}>{u.role}</Text>
@@ -2566,7 +2570,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#111", borderRadius: 16, padding: 14,
     marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
   },
-  userCardName: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 4 },
+  userCardName: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 2 },
+  userCardEmail: { color: "#555", fontSize: 11, marginBottom: 4 },
   userRolePill: {
     flexDirection: "row", alignItems: "center", gap: 4,
     borderRadius: 8, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 3,
