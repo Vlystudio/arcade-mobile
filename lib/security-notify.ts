@@ -1,6 +1,5 @@
 import { supabase } from "./supabase";
-
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
+import { API_BASE } from "./api-base";
 
 export async function sendSecurityAlert(
   event: "password_changed" | "mfa_added" | "mfa_removed"

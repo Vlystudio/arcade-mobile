@@ -19,7 +19,7 @@ import { Avatar } from "../components/avatar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 
-const MOD_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
+import { API_BASE as MOD_BASE } from "../../lib/api-base";
 const POST_LIMIT = 280;
 
 type ForumPost = {

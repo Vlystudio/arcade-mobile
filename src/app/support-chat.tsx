@@ -16,7 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
 
-const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
+import { API_BASE } from "../../lib/api-base";
 
 type SupportMessage = {
   id: string;

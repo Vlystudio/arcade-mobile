@@ -30,8 +30,9 @@ import {
   type KeyPair,
 } from "../../lib/crypto";
 
+import { API_BASE as MOD_BASE } from "../../lib/api-base";
+
 const MAX_BYTES = 5 * 1024 * 1024;
-const MOD_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
 
 type RawMessage = {
   id: string;
