@@ -48,6 +48,22 @@ export default function ResetPasswordScreen() {
 
     setLoading(true);
     try {
+      // Try the direct Supabase client path first — works for most accounts.
+      const { error: directErr } = await supabase.auth.updateUser({ password });
+      if (!directErr) {
+        sendSecurityAlert("password_changed");
+        setDone(true);
+        setLoading(false);
+        return;
+      }
+
+      // AAL2 accounts (MFA enrolled) need a server-side admin update.
+      if (!directErr.message.toLowerCase().includes("aal2")) {
+        setError(directErr.message);
+        setLoading(false);
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       const resp = await fetch(`${API_BASE}/api/password-reset`, {
         method: "POST",
@@ -57,9 +73,11 @@ export default function ResetPasswordScreen() {
         },
         body: JSON.stringify({ password }),
       });
-      const result = await resp.json();
+      const text = await resp.text();
+      let result: Record<string, string> = {};
+      try { result = JSON.parse(text); } catch { /* non-JSON error body */ }
       if (!resp.ok || result.error) {
-        setError(result.error ?? "Failed to update password.");
+        setError(result.error ?? `Failed to update password (${resp.status}).`);
       } else {
         sendSecurityAlert("password_changed");
         setDone(true);
