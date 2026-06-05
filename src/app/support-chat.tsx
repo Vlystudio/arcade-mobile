@@ -140,8 +140,8 @@ export default function SupportChatScreen() {
     // Set ticket ID so realtime subscription activates
     if (!ticketId) setTicketId(result.ticket_id);
 
-    // Notify on first message of the session
-    if (!emailSent) {
+    // Notify only when no admin is online, and only once per session
+    if (!emailSent && !result.admin_online) {
       setEmailSent(true);
       try {
         const { data: { session: s } } = await supabase.auth.getSession();
