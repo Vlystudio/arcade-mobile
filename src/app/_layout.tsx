@@ -20,7 +20,10 @@ import { LocationProvider } from "../context/location-context";
 
 export default function RootLayout() {
   const { width } = useWindowDimensions();
-  const isWideWeb = Platform.OS === "web" && width >= 700;
+  // Defer isWideWeb until after hydration to avoid SSR/client mismatch (#418)
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => { setMounted(true); }, []);
+  const isWideWeb = mounted && Platform.OS === "web" && width >= 700;
 
   return (
     <SafeAreaProvider style={isWideWeb ? { backgroundColor: "#050505" } : undefined}>
