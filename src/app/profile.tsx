@@ -24,6 +24,7 @@ import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { moderateImage } from "../../lib/moderate-image";
 import { moderateText } from "../../lib/moderate-text";
+import { sendSecurityAlert } from "../../lib/security-notify";
 
 type GameOption = { id: string; name: string; type: string; count: number };
 type TournPlacement = { tournament_id: string; title: string; placement: number; proposed_date: string | null };
@@ -258,6 +259,7 @@ export default function ProfileScreen() {
             const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId });
             setDisablingMfa(false);
             if (error) { Alert.alert("Error", error.message); return; }
+            sendSecurityAlert("mfa_removed");
             setMfaEnabled(false);
             setMfaFactorId(null);
           },

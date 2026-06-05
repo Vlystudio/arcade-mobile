@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
+import { sendSecurityAlert } from "../../lib/security-notify";
 
 export default function ResetPasswordScreen() {
   const [ready, setReady]               = useState(false);
@@ -60,6 +61,7 @@ export default function ResetPasswordScreen() {
     if (updateError) {
       setError(updateError.message);
     } else {
+      sendSecurityAlert("password_changed");
       setDone(true);
     }
   }

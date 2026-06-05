@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
+import { sendSecurityAlert } from "../../lib/security-notify";
 
 export default function MfaSetupScreen() {
   const [factorId, setFactorId] = useState<string | null>(null);
@@ -68,6 +69,7 @@ export default function MfaSetupScreen() {
       setError("Incorrect code — try again.");
       setCode("");
     } else {
+      sendSecurityAlert("mfa_added");
       setDone(true);
     }
   }
