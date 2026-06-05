@@ -92,6 +92,12 @@ type ManageTournament = {
   status: string;
   proposed_date: string | null;
   is_official: boolean;
+  is_individual: boolean;
+  signup_qr_token: string | null;
+  signup_qr_active: boolean;
+  signup_qr_issued_at: string | null;
+  max_players: number;
+  registered_count: number;
   created_at: string;
 };
 
@@ -215,6 +221,8 @@ export default function AdminScreen() {
   const [resultsWarnings, setResultsWarnings] = useState<string[]>([]);
   const [teamsError, setTeamsError] = useState<string | null>(null);
   const [tournError, setTournError] = useState<string | null>(null);
+  const [qrGenerating, setQrGenerating] = useState<string | null>(null);
+  const [qrRevoking, setQrRevoking] = useState<string | null>(null);
 
   // Forums state
   type PendingForum = { id: string; title: string; description: string | null; game_type: string | null; creator_username: string; created_at: string; auto_flagged: boolean; flag_category: string | null };
@@ -678,11 +686,26 @@ export default function AdminScreen() {
 
   async function loadManageTournaments() {
     setManageLoading(true);
-    const { data } = await supabase
-      .from("tournaments")
-      .select("id, title, game_type, status, proposed_date, is_official, created_at")
-      .order("created_at", { ascending: false });
-    setManageTournaments(data ?? []);
+    const [{ data }, { data: regData }] = await Promise.all([
+      supabase
+        .from("tournaments")
+        .select("id, title, game_type, status, proposed_date, is_official, is_individual, signup_qr_token, signup_qr_active, signup_qr_issued_at, max_players, created_at")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("tournament_registrations")
+        .select("tournament_id")
+        .eq("status", "accepted"),
+    ]);
+    const regCount: Record<string, number> = {};
+    for (const r of regData ?? []) regCount[(r as any).tournament_id] = (regCount[(r as any).tournament_id] ?? 0) + 1;
+    setManageTournaments((data ?? []).map((t: any) => ({
+      ...t,
+      is_individual: t.is_individual ?? false,
+      signup_qr_token: t.signup_qr_token ?? null,
+      signup_qr_active: t.signup_qr_active ?? false,
+      max_players: t.max_players ?? 20,
+      registered_count: regCount[t.id] ?? 0,
+    })));
     setManageLoading(false);
   }
 
@@ -720,6 +743,38 @@ export default function AdminScreen() {
     if (error) { setTournError(error.message); return; }
     if ((data as any)?.error) { setTournError((data as any).message ?? (data as any).error); return; }
     await loadManageTournaments();
+  }
+
+  async function handleGenerateQR(tournamentId: string) {
+    setTournError(null);
+    setQrGenerating(tournamentId);
+    const { data, error } = await supabase.rpc("rpc_admin_generate_ff_signup_qr", {
+      p_tournament_id: tournamentId,
+    });
+    setQrGenerating(null);
+    if (error) { setTournError(error.message); return; }
+    const result = data as any;
+    if (result?.error) { setTournError(result.message ?? result.error); return; }
+    setManageTournaments((prev) => prev.map((t) =>
+      t.id === tournamentId
+        ? { ...t, signup_qr_active: true, signup_qr_token: result.token, signup_qr_issued_at: new Date().toISOString() }
+        : t
+    ));
+  }
+
+  async function handleRevokeQR(tournamentId: string) {
+    setTournError(null);
+    setQrRevoking(tournamentId);
+    const { data, error } = await supabase.rpc("rpc_admin_revoke_ff_signup_qr", {
+      p_tournament_id: tournamentId,
+    });
+    setQrRevoking(null);
+    if (error) { setTournError(error.message); return; }
+    const result = data as any;
+    if (result?.error) { setTournError(result.message ?? result.error); return; }
+    setManageTournaments((prev) => prev.map((t) =>
+      t.id === tournamentId ? { ...t, signup_qr_active: false } : t
+    ));
   }
 
   async function handleSaveResults() {
@@ -1116,6 +1171,7 @@ export default function AdminScreen() {
                     const acting = statusActioning === t.id;
                     return (
                       <View key={t.id} style={styles.manageTournCard}>
+                        <View style={styles.manageTournInnerRow}>
                         <View style={{ flex: 1 }}>
                           <View style={styles.manageTournTopRow}>
                             <Text style={styles.manageTournTitle} numberOfLines={1}>{t.title}</Text>
@@ -1133,7 +1189,7 @@ export default function AdminScreen() {
                           )}
                         </View>
                         <View style={styles.manageTournActions}>
-                          {t.status === "upcoming" && (
+                          {t.status === "upcoming" && !t.is_individual && (
                             <Pressable style={[styles.manageTournBtn, acting && { opacity: 0.5 }]} onPress={() => handleMarkStatus(t.id, "active")} disabled={acting}>
                               <Text style={styles.manageTournBtnText}>Activate</Text>
                             </Pressable>
@@ -1158,6 +1214,65 @@ export default function AdminScreen() {
                             </View>
                           )}
                         </View>
+                        </View>
+
+                        {/* First Friday QR Section */}
+                        {t.is_individual && t.game_type === "Skee-Ball" && (t.status === "upcoming" || t.status === "active") && (
+                          <View style={styles.ffQrSection}>
+                            <View style={styles.ffQrHeaderRow}>
+                              <Ionicons name="qr-code-outline" size={13} color="#06b6d4" />
+                              <Text style={styles.ffQrLabel}>Sign-up QR</Text>
+                              <Text style={styles.ffQrCount}>{t.registered_count}/{t.max_players} players</Text>
+                              <View style={[
+                                styles.ffQrStatusChip,
+                                t.signup_qr_active
+                                  ? { backgroundColor: "rgba(34,197,94,0.08)", borderColor: "rgba(34,197,94,0.25)" }
+                                  : { backgroundColor: "rgba(85,85,85,0.08)", borderColor: "rgba(85,85,85,0.2)" },
+                              ]}>
+                                <View style={[styles.ffQrDot, { backgroundColor: t.signup_qr_active ? "#22c55e" : "#333" }]} />
+                                <Text style={[styles.ffQrStatusText, { color: t.signup_qr_active ? "#22c55e" : "#444" }]}>
+                                  {t.signup_qr_active ? "OPEN" : "LOCKED"}
+                                </Text>
+                              </View>
+                            </View>
+
+                            {t.signup_qr_active && t.signup_qr_token && (
+                              <View style={styles.ffQrImageWrap}>
+                                <Image
+                                  source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent("arcadetracker://ff-signup?token=" + t.signup_qr_token)}&bgcolor=111111&color=ffffff&qzone=2` }}
+                                  style={styles.ffQrImage}
+                                  contentFit="contain"
+                                />
+                                <Text style={styles.ffQrHint}>Players scan this QR to register</Text>
+                              </View>
+                            )}
+
+                            <View style={styles.ffQrBtnRow}>
+                              <Pressable
+                                style={[styles.ffGenerateBtn, (qrGenerating === t.id || qrRevoking === t.id) && { opacity: 0.5 }]}
+                                onPress={() => handleGenerateQR(t.id)}
+                                disabled={qrGenerating === t.id || qrRevoking === t.id}
+                              >
+                                {qrGenerating === t.id
+                                  ? <ActivityIndicator size="small" color="#000" />
+                                  : <><Ionicons name="qr-code" size={13} color="#000" /><Text style={styles.ffGenerateBtnText}>Generate QR</Text></>
+                                }
+                              </Pressable>
+                              {t.signup_qr_active && (
+                                <Pressable
+                                  style={[styles.ffRevokeBtn, (qrGenerating === t.id || qrRevoking === t.id) && { opacity: 0.5 }]}
+                                  onPress={() => handleRevokeQR(t.id)}
+                                  disabled={qrGenerating === t.id || qrRevoking === t.id}
+                                >
+                                  {qrRevoking === t.id
+                                    ? <ActivityIndicator size="small" color="#ef4444" />
+                                    : <Text style={styles.ffRevokeBtnText}>Lock QR</Text>
+                                  }
+                                </Pressable>
+                              )}
+                            </View>
+                          </View>
+                        )}
                       </View>
                     );
                   })
@@ -1986,7 +2101,8 @@ const styles = StyleSheet.create({
   manageHeaderTitle: { color: "#fff", fontSize: 15, fontWeight: "800" },
   firstFridayBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#06b6d4", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
   firstFridayBtnText: { color: "#000", fontWeight: "800", fontSize: 12 },
-  manageTournCard: { backgroundColor: "#111", borderRadius: 16, borderWidth: 1, borderColor: "#1e1e1e", padding: 14, marginBottom: 10, flexDirection: "row", alignItems: "center", gap: 10 },
+  manageTournCard: { backgroundColor: "#111", borderRadius: 16, borderWidth: 1, borderColor: "#1e1e1e", padding: 14, marginBottom: 10 },
+  manageTournInnerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   manageTournTopRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4, flexShrink: 1 },
   manageTournTitle: { color: "#fff", fontSize: 14, fontWeight: "800", flex: 1 },
   manageTournStatus: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1 },
@@ -1999,6 +2115,23 @@ const styles = StyleSheet.create({
   manageTournResultsText: { color: "#f59e0b", fontSize: 12, fontWeight: "700" },
   manageTournCompletedTag: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, backgroundColor: "#1a1a1a" },
   manageTournCompletedText: { color: "#444", fontSize: 11, fontWeight: "700" },
+
+  // First Friday QR section
+  ffQrSection: { marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1e1e1e", paddingTop: 12 },
+  ffQrHeaderRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
+  ffQrLabel: { color: "#555", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, flex: 1 },
+  ffQrCount: { color: "#444", fontSize: 12, fontWeight: "600" },
+  ffQrStatusChip: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1 },
+  ffQrDot: { width: 6, height: 6, borderRadius: 3 },
+  ffQrStatusText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
+  ffQrImageWrap: { alignItems: "center", marginBottom: 12 },
+  ffQrImage: { width: 180, height: 180, borderRadius: 12 },
+  ffQrHint: { color: "#444", fontSize: 11, marginTop: 6 },
+  ffQrBtnRow: { flexDirection: "row", gap: 8 },
+  ffGenerateBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#06b6d4", borderRadius: 12, paddingVertical: 10 },
+  ffGenerateBtnText: { color: "#000", fontWeight: "800", fontSize: 13 },
+  ffRevokeBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: "rgba(239,68,68,0.3)", backgroundColor: "rgba(239,68,68,0.06)" },
+  ffRevokeBtnText: { color: "#ef4444", fontWeight: "800", fontSize: 13 },
 
   // Results modal
   modalBg:     { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },

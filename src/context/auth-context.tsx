@@ -41,7 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setSession(null);
     sessionRef.current = null;
-    AsyncStorage.multiRemove([BG_TIME_KEY]).catch(() => {});
+    AsyncStorage.removeItem(BG_TIME_KEY).catch(() => {});
     supabase.auth.signOut().catch(() => {});
   }, []);
 

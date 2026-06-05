@@ -30,6 +30,8 @@ type Tournament = {
   created_by: string | null; is_owner: boolean;
   announcement: string | null;
   registered_count: number;
+  signup_qr_active: boolean;
+  max_players: number;
   my_reg_status: "pending" | "accepted" | "denied" | null;
   placements: Placement[]; created_at: string;
 };
@@ -106,7 +108,7 @@ export default function TournamentsScreen() {
     if (!user) return;
     const [tourneysRes, myRegsRes, reqsRes] = await Promise.all([
       supabase.from("tournaments")
-        .select("id, title, description, game_type, proposed_date, max_teams, is_official, is_individual, signup_type, status, created_by, announcement, created_at")
+        .select("id, title, description, game_type, proposed_date, max_teams, is_official, is_individual, signup_type, status, created_by, announcement, signup_qr_active, max_players, created_at")
         .order("proposed_date", { ascending: true, nullsFirst: false }),
       supabase.from("tournament_registrations").select("tournament_id, status").eq("user_id", user.id),
       supabase.from("tournament_requests").select("id, title, game_type, proposed_date, status, admin_note, created_at").eq("user_id", user.id).order("created_at", { ascending: false }),
@@ -147,6 +149,8 @@ export default function TournamentsScreen() {
       announcement: t.announcement ?? null,
       is_owner: t.created_by === user.id,
       registered_count: regCount[t.id] ?? 0,
+      signup_qr_active: t.signup_qr_active ?? false,
+      max_players: t.max_players ?? 20,
       my_reg_status: myRegStatus[t.id] ?? null,
       placements: placementsMap[t.id] ?? [],
     }));
@@ -281,6 +285,8 @@ export default function TournamentsScreen() {
               const nextFF = getNextFirstFriday();
               const ffTourneys = tournaments.filter((t) => t.is_individual && t.game_type === "Skee-Ball");
               const completedFF = ffTourneys.filter((t) => t.status === "completed").slice(0, 3);
+              const activeFF = ffTourneys.find((t) => t.status === "upcoming" || t.status === "active");
+              const isFull = activeFF ? activeFF.registered_count >= activeFF.max_players : false;
               return (
                 <View style={s.ffCard}>
                   <View style={s.ffTopRow}>
@@ -302,6 +308,34 @@ export default function TournamentsScreen() {
                       Next: {nextFF.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
                     </Text>
                   </View>
+
+                  {activeFF && (
+                    <View style={s.ffSignupRow}>
+                      <View style={s.ffPlayersChip}>
+                        <Ionicons name="people-outline" size={12} color="#555" />
+                        <Text style={s.ffPlayersText}>{activeFF.registered_count}/{activeFF.max_players} players</Text>
+                      </View>
+                      <View style={[
+                        s.ffStatusChip,
+                        isFull
+                          ? { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.2)" }
+                          : activeFF.signup_qr_active
+                            ? { backgroundColor: "rgba(34,197,94,0.08)", borderColor: "rgba(34,197,94,0.2)" }
+                            : { backgroundColor: "rgba(85,85,85,0.08)", borderColor: "rgba(85,85,85,0.2)" },
+                      ]}>
+                        <View style={[
+                          s.ffStatusDot,
+                          { backgroundColor: isFull ? "#ef4444" : activeFF.signup_qr_active ? "#22c55e" : "#444" },
+                        ]} />
+                        <Text style={[
+                          s.ffStatusChipText,
+                          { color: isFull ? "#ef4444" : activeFF.signup_qr_active ? "#22c55e" : "#444" },
+                        ]}>
+                          {isFull ? "FULL" : activeFF.signup_qr_active ? "SIGN-UP OPEN" : "SIGN-UP CLOSED"}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
 
                   <View style={s.ffInPersonRow}>
                     <Ionicons name="location-outline" size={13} color="#06b6d4" />
@@ -789,6 +823,12 @@ const s = StyleSheet.create({
   ffDateText: { color: "#888", fontSize: 13, fontWeight: "600" },
   ffInPersonRow: { flexDirection: "row", alignItems: "center", gap: 7 },
   ffInPersonText: { color: "#06b6d4", fontSize: 12, fontWeight: "600", flex: 1 },
+  ffSignupRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" },
+  ffPlayersChip: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#0d0d0d", borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: "#1a1a1a" },
+  ffPlayersText: { color: "#555", fontSize: 12, fontWeight: "600" },
+  ffStatusChip: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1 },
+  ffStatusDot: { width: 6, height: 6, borderRadius: 3 },
+  ffStatusChipText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
   ffResultsDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(6,182,212,0.15)", marginVertical: 14 },
   ffResultsLabel: { color: "#333", fontSize: 10, fontWeight: "800", letterSpacing: 1.2, marginBottom: 10 },
   ffResultRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 10 },
