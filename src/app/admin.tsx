@@ -23,7 +23,7 @@ import { supabase } from "../../lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke";
 type SupportTicket = { id: string; user_id: string; status: string; created_at: string; username: string; avatar_url: string | null };
 type SupportMsg    = { id: string; sender_id: string; content: string; is_admin_msg: boolean; created_at: string };
 type ReviewTab = "pending" | "approved" | "denied";
@@ -125,6 +125,7 @@ const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
   { key: "tournaments", label: "Tourneys",    icon: "trophy-outline" },
   { key: "forums",      label: "Forums",      icon: "chatbubbles-outline" },
   { key: "support",     label: "Support",     icon: "headset-outline" },
+  { key: "karaoke",     label: "Karaoke",     icon: "mic-outline" },
   { key: "users",       label: "Users",       icon: "person-outline" },
 ];
 
@@ -259,6 +260,16 @@ export default function AdminScreen() {
   const [guestList, setGuestList]           = useState<{ id: string; guest_name: string }[]>([]);
   const [guestListLoading, setGuestListLoading] = useState(false);
 
+  // Karaoke queue management
+  type KaraokeItem = { id: string; video_id: string; title: string; channel: string; thumbnail_url: string | null; requester_name: string; status: string; created_at: string };
+  const [karaokeQueue, setKaraokeQueue]         = useState<KaraokeItem[]>([]);
+  const [karaokeHistory, setKaraokeHistory]     = useState<KaraokeItem[]>([]);
+  const [karaokeLoading, setKaraokeLoading]     = useState(false);
+  const [karaokeActioning, setKaraokeActioning] = useState<string | null>(null);
+  const [clearingHistory, setClearingHistory]   = useState(false);
+  const [showHistory, setShowHistory]           = useState(false);
+  const [karaokeError, setKaraokeError]         = useState<string | null>(null);
+
   // Player list management (all tournaments)
   type RegPlayer = { id: string; user_id: string | null; guest_name: string | null; username: string; status: string };
   const [playerListTarget, setPlayerListTarget] = useState<ManageTournament | null>(null);
@@ -306,6 +317,7 @@ export default function AdminScreen() {
     if (mainTab === "users") loadUsers();
     if (mainTab === "forums") loadPendingForums(forumsTab);
     if (mainTab === "support") { loadSupportTickets(); setUnreadSupport(0); }
+    if (mainTab === "karaoke") loadKaraokeQueue();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
@@ -338,6 +350,16 @@ export default function AdminScreen() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [isAdmin, mainTab, selectedTicket]);
+
+  // Realtime: live karaoke queue updates while on the karaoke tab
+  useEffect(() => {
+    if (!isAdmin || mainTab !== "karaoke") return;
+    const ch = supabase
+      .channel("admin-karaoke-watch")
+      .on("postgres_changes", { event: "*", schema: "public", table: "karaoke_queue" }, loadKaraokeQueue)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [isAdmin, mainTab]);
 
   async function checkAdminAndLoad() {
     const { data } = await supabase.from("profiles").select("role").eq("id", user!.id).single();
@@ -1090,6 +1112,53 @@ export default function AdminScreen() {
     setRemovingPlayer(null);
   }
 
+  // ── Karaoke ────────────────────────────────────────────────────────────────
+
+  async function loadKaraokeQueue() {
+    setKaraokeLoading(true);
+    setKaraokeError(null);
+    const [{ data: active }, { data: hist }] = await Promise.all([
+      supabase
+        .from("karaoke_queue")
+        .select("id, video_id, title, channel, thumbnail_url, requester_name, status, created_at")
+        .in("status", ["playing", "queued"])
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("karaoke_queue")
+        .select("id, video_id, title, channel, thumbnail_url, requester_name, status, created_at")
+        .in("status", ["played", "skipped"])
+        .order("created_at", { ascending: false })
+        .limit(20),
+    ]);
+    setKaraokeQueue(active ?? []);
+    setKaraokeHistory(hist ?? []);
+    setKaraokeLoading(false);
+  }
+
+  async function handleKaraokeSkip(songId: string) {
+    setKaraokeActioning(songId);
+    const { data } = await supabase.rpc("rpc_karaoke_skip", { p_song_id: songId });
+    if ((data as any)?.error) setKaraokeError((data as any).error);
+    await loadKaraokeQueue();
+    setKaraokeActioning(null);
+  }
+
+  async function handleKaraokeRemove(songId: string) {
+    setKaraokeActioning(songId);
+    const { data } = await supabase.rpc("rpc_karaoke_remove", { p_song_id: songId });
+    if ((data as any)?.error) setKaraokeError((data as any).error);
+    await loadKaraokeQueue();
+    setKaraokeActioning(null);
+  }
+
+  async function handleKaraokeClearHistory() {
+    setClearingHistory(true);
+    await supabase.rpc("rpc_karaoke_clear_history");
+    await loadKaraokeQueue();
+    setShowHistory(false);
+    setClearingHistory(false);
+  }
+
   async function handleRevokeQR(tournamentId: string) {
     setTournError(null);
     setQrRevoking(tournamentId);
@@ -1154,6 +1223,7 @@ export default function AdminScreen() {
               : mainTab === "tournaments" ? "Tournament requests"
               : mainTab === "forums" ? "Forum approvals"
               : mainTab === "support" ? "Support inbox"
+              : mainTab === "karaoke" ? "Monitor & moderate the queue"
               : "Business health"}
           </Text>
         </View>
@@ -2055,6 +2125,156 @@ export default function AdminScreen() {
             )}
           </ScrollView>
         </>
+      )}
+
+      {/* ── Karaoke ── */}
+      {mainTab === "karaoke" && (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={loadKaraokeQueue} tintColor="#a855f7" />}
+        >
+          {/* Toolbar */}
+          <View style={styles.karaokeToolbar}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.karaokeQueueCount}>
+                {karaokeQueue.filter(q => q.status === "queued").length} queued
+                {karaokeQueue.some(q => q.status === "playing") ? "  ·  1 playing" : ""}
+              </Text>
+            </View>
+            <Pressable
+              style={[styles.karaokeHistoryBtn, clearingHistory && { opacity: 0.5 }]}
+              onPress={handleKaraokeClearHistory}
+              disabled={clearingHistory}
+            >
+              {clearingHistory
+                ? <ActivityIndicator size="small" color="#555" />
+                : <><Ionicons name="trash-outline" size={13} color="#555" /><Text style={styles.karaokeHistoryBtnText}>Clear History</Text></>
+              }
+            </Pressable>
+          </View>
+
+          {!!karaokeError && (
+            <View style={styles.inlineError}>
+              <Text style={styles.inlineErrorText}>{karaokeError}</Text>
+            </View>
+          )}
+
+          {karaokeLoading ? (
+            <ActivityIndicator color="#a855f7" style={{ marginTop: 40 }} />
+          ) : karaokeQueue.length === 0 ? (
+            <EmptyState title="Queue is empty" sub="No songs playing or queued right now." icon="mic-outline" color="#a855f7" />
+          ) : (
+            <>
+              {/* Now Playing */}
+              {karaokeQueue.filter(q => q.status === "playing").map(song => (
+                <View key={song.id} style={styles.karaokeNowCard}>
+                  <View style={styles.karaokeNowBadge}>
+                    <Ionicons name="musical-notes" size={11} color="#000" />
+                    <Text style={styles.karaokeNowBadgeText}>NOW PLAYING</Text>
+                  </View>
+                  <View style={styles.karaokeNowRow}>
+                    {song.thumbnail_url
+                      ? <Image source={{ uri: song.thumbnail_url }} style={styles.karaokeNowThumb} contentFit="cover" />
+                      : <View style={[styles.karaokeNowThumb, styles.karaokeThumbPlaceholder]}><Ionicons name="musical-note" size={20} color="#333" /></View>
+                    }
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.karaokeNowTitle} numberOfLines={2}>{song.title}</Text>
+                      {!!song.channel && <Text style={styles.karaokeNowChannel}>{song.channel}</Text>}
+                      <Text style={styles.karaokeNowRequester}>By {song.requester_name}</Text>
+                      <Pressable
+                        style={styles.karaokeYtLink}
+                        onPress={() => { if (typeof window !== "undefined") window.open(`https://youtube.com/watch?v=${song.video_id}`, "_blank"); }}
+                      >
+                        <Ionicons name="logo-youtube" size={12} color="#ef4444" />
+                        <Text style={styles.karaokeYtLinkText}>Preview on YouTube</Text>
+                      </Pressable>
+                    </View>
+                    <Pressable
+                      style={[styles.karaokeSkipBtn, karaokeActioning === song.id && { opacity: 0.5 }]}
+                      onPress={() => handleKaraokeSkip(song.id)}
+                      disabled={karaokeActioning === song.id}
+                    >
+                      {karaokeActioning === song.id
+                        ? <ActivityIndicator size="small" color="#fff" />
+                        : <><Ionicons name="play-skip-forward" size={14} color="#fff" /><Text style={styles.karaokeSkipBtnText}>Skip</Text></>
+                      }
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+
+              {/* Queued songs */}
+              {karaokeQueue.filter(q => q.status === "queued").length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>Up Next</Text>
+                  {karaokeQueue.filter(q => q.status === "queued").map((song, idx) => (
+                    <View key={song.id} style={styles.karaokeQueueItem}>
+                      <Text style={styles.karaokeQueuePos}>{idx + 1}</Text>
+                      {song.thumbnail_url
+                        ? <Image source={{ uri: song.thumbnail_url }} style={styles.karaokeQueueThumb} contentFit="cover" />
+                        : <View style={[styles.karaokeQueueThumb, styles.karaokeThumbPlaceholder]}><Ionicons name="musical-note" size={13} color="#333" /></View>
+                      }
+                      <View style={styles.karaokeQueueInfo}>
+                        <Text style={styles.karaokeQueueTitle} numberOfLines={1}>{song.title}</Text>
+                        <Text style={styles.karaokeQueueMeta} numberOfLines={1}>
+                          {song.channel ? `${song.channel} · ` : ""}By {song.requester_name}
+                        </Text>
+                        <Pressable
+                          style={styles.karaokeYtLink}
+                          onPress={() => { if (typeof window !== "undefined") window.open(`https://youtube.com/watch?v=${song.video_id}`, "_blank"); }}
+                        >
+                          <Ionicons name="logo-youtube" size={11} color="#ef4444" />
+                          <Text style={styles.karaokeYtLinkText}>Preview</Text>
+                        </Pressable>
+                      </View>
+                      <Pressable
+                        style={[styles.karaokeRemoveBtn, karaokeActioning === song.id && { opacity: 0.5 }]}
+                        onPress={() => handleKaraokeRemove(song.id)}
+                        disabled={karaokeActioning === song.id}
+                        hitSlop={8}
+                      >
+                        {karaokeActioning === song.id
+                          ? <ActivityIndicator size="small" color="#ef4444" />
+                          : <Ionicons name="close-circle" size={20} color="#ef4444" />
+                        }
+                      </Pressable>
+                    </View>
+                  ))}
+                </>
+              )}
+            </>
+          )}
+
+          {/* History toggle */}
+          <Pressable style={styles.karaokeHistoryToggle} onPress={() => setShowHistory(v => !v)}>
+            <Ionicons name={showHistory ? "chevron-up" : "chevron-down"} size={14} color="#555" />
+            <Text style={styles.karaokeHistoryToggleText}>
+              {showHistory ? "Hide" : "Show"} history ({karaokeHistory.length})
+            </Text>
+          </Pressable>
+
+          {showHistory && karaokeHistory.map(song => (
+            <View key={song.id} style={[styles.karaokeQueueItem, { opacity: 0.5 }]}>
+              <Ionicons
+                name={song.status === "skipped" ? "ban-outline" : "checkmark-circle-outline"}
+                size={16}
+                color={song.status === "skipped" ? "#ef4444" : "#22c55e"}
+                style={{ marginRight: 4 }}
+              />
+              {song.thumbnail_url
+                ? <Image source={{ uri: song.thumbnail_url }} style={styles.karaokeQueueThumb} contentFit="cover" />
+                : <View style={[styles.karaokeQueueThumb, styles.karaokeThumbPlaceholder]}><Ionicons name="musical-note" size={13} color="#333" /></View>
+              }
+              <View style={styles.karaokeQueueInfo}>
+                <Text style={styles.karaokeQueueTitle} numberOfLines={1}>{song.title}</Text>
+                <Text style={styles.karaokeQueueMeta} numberOfLines={1}>
+                  By {song.requester_name} · {song.status === "skipped" ? "skipped" : "played"}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </ScrollView>
       )}
 
       {/* Post results modal */}
@@ -3508,4 +3728,35 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   scoreEntryPts: { color: "#444", fontSize: 12, width: 24 },
+
+  // ── Karaoke ──────────────────────────────────────────────────────────────
+  karaokeToolbar: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
+  karaokeQueueCount: { color: "#555", fontSize: 13, fontWeight: "700" },
+  karaokeHistoryBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#1e1e1e" },
+  karaokeHistoryBtnText: { color: "#555", fontSize: 12, fontWeight: "700" },
+
+  karaokeNowCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(168,85,247,0.3)", marginBottom: 20 },
+  karaokeNowBadge: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#a855f7", borderRadius: 7, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start", marginBottom: 12 },
+  karaokeNowBadgeText: { color: "#000", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+  karaokeNowRow: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
+  karaokeNowThumb: { width: 68, height: 50, borderRadius: 8 },
+  karaokeThumbPlaceholder: { backgroundColor: "#1a1a1a", alignItems: "center", justifyContent: "center" },
+  karaokeNowTitle: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 3 },
+  karaokeNowChannel: { color: "#555", fontSize: 12, marginBottom: 2 },
+  karaokeNowRequester: { color: "#a855f7", fontSize: 12, fontWeight: "700", marginBottom: 6 },
+  karaokeYtLink: { flexDirection: "row", alignItems: "center", gap: 4 },
+  karaokeYtLinkText: { color: "#ef4444", fontSize: 11, fontWeight: "700" },
+  karaokeSkipBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#ef4444", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, alignSelf: "flex-start" },
+  karaokeSkipBtnText: { color: "#fff", fontSize: 12, fontWeight: "900" },
+
+  karaokeQueueItem: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#111", borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e" },
+  karaokeQueuePos: { color: "#555", fontSize: 12, fontWeight: "900", minWidth: 18, textAlign: "center" },
+  karaokeQueueThumb: { width: 48, height: 34, borderRadius: 6 },
+  karaokeQueueInfo: { flex: 1 },
+  karaokeQueueTitle: { color: "#fff", fontSize: 13, fontWeight: "700", marginBottom: 2 },
+  karaokeQueueMeta: { color: "#555", fontSize: 11, marginBottom: 4 },
+  karaokeRemoveBtn: { padding: 2 },
+
+  karaokeHistoryToggle: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", marginTop: 8 },
+  karaokeHistoryToggleText: { color: "#555", fontSize: 13, fontWeight: "700" },
 });
