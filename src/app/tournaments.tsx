@@ -171,7 +171,7 @@ export default function TournamentsScreen() {
       setJoinRequests([]);
     }
 
-    setMyRequests(reqsRes.data ?? []);
+    setMyRequests((reqsRes.data ?? []).filter((r: any) => r.status === "pending"));
     setLoading(false);
     setRefreshing(false);
   }
