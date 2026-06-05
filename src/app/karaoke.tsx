@@ -17,13 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/auth-context";
 import { supabase } from "../../lib/supabase";
-
-const API_BASE = (() => {
-  if (process.env.EXPO_PUBLIC_API_BASE_URL)
-    return (process.env.EXPO_PUBLIC_API_BASE_URL as string).replace(/\/$/, "");
-  if (typeof window !== "undefined") return window.location.origin;
-  return "";
-})();
+import { API_BASE } from "../../lib/api-base";
 
 type QueueItem = {
   id: string;
