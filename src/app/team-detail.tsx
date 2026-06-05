@@ -852,7 +852,7 @@ function PlayerRow({ player, rank, captainMode, onActionPress }: {
 
       {captainMode && (
         <Pressable style={styles.memberActionBtn} onPress={onActionPress} hitSlop={8}>
-          <Ionicons name="ellipsis-horizontal" size={16} color="#444" />
+          <Ionicons name="ellipsis-horizontal" size={16} color="#888" />
         </Pressable>
       )}
     </View>
@@ -1089,6 +1089,8 @@ const styles = StyleSheet.create({
     width: 32, height: 32, borderRadius: 10,
     alignItems: "center", justifyContent: "center",
     marginLeft: 4,
+    backgroundColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#2a2a2a",
   },
 
   // Banned gate screen
