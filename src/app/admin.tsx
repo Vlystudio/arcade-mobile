@@ -1,10 +1,12 @@
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -21,7 +23,9 @@ import { supabase } from "../../lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support";
+type SupportTicket = { id: string; user_id: string; status: string; created_at: string; username: string; avatar_url: string | null };
+type SupportMsg    = { id: string; sender_id: string; content: string; is_admin_msg: boolean; created_at: string };
 type ReviewTab = "pending" | "approved" | "denied";
 
 type ReviewScore = {
@@ -111,6 +115,7 @@ const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
   { key: "scheduler",  label: "Schedule",    icon: "calendar-outline" },
   { key: "tournaments", label: "Tourneys",    icon: "trophy-outline" },
   { key: "forums",      label: "Forums",      icon: "chatbubbles-outline" },
+  { key: "support",     label: "Support",     icon: "headset-outline" },
   { key: "users",       label: "Users",       icon: "person-outline" },
 ];
 
@@ -240,6 +245,18 @@ export default function AdminScreen() {
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [reassignTarget, setReassignTarget] = useState<SchedulerTeam | null>(null);
 
+  // Support inbox state
+  const [supportTickets, setSupportTickets]   = useState<SupportTicket[]>([]);
+  const [supportLoading, setSupportLoading]   = useState(false);
+  const [selectedTicket, setSelectedTicket]   = useState<SupportTicket | null>(null);
+  const [ticketMessages, setTicketMessages]   = useState<SupportMsg[]>([]);
+  const [msgsLoading, setMsgsLoading]         = useState(false);
+  const [supportReply, setSupportReply]       = useState("");
+  const [supportReplying, setSupportReplying] = useState(false);
+  const [resolving, setResolving]             = useState(false);
+  const [unreadSupport, setUnreadSupport]     = useState(0);
+  const supportScrollRef = useRef<ScrollView>(null);
+
   useEffect(() => { if (user) checkAdminAndLoad(); }, [user]);
   useEffect(() => { if (isAdmin) loadReviews(reviewTab); }, [reviewTab, isAdmin]);
   useEffect(() => {
@@ -250,6 +267,7 @@ export default function AdminScreen() {
     if (mainTab === "scheduler" && schedTeams.length === 0) loadSchedulerTeams();
     if (mainTab === "users") loadUsers();
     if (mainTab === "forums") loadPendingForums(forumsTab);
+    if (mainTab === "support") { loadSupportTickets(); setUnreadSupport(0); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
@@ -262,6 +280,27 @@ export default function AdminScreen() {
     else loadTournRequests(tournTab as "pending" | "approved" | "denied");
   }, [tournTab]);
 
+  // Realtime: badge for new user support messages
+  useEffect(() => {
+    if (!isAdmin) return;
+    const ch = supabase
+      .channel("admin-support-watch")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "support_messages" },
+        (payload) => {
+          const msg = payload.new as SupportMsg;
+          if (msg.is_admin_msg) return;
+          if (mainTab === "support" && selectedTicket?.id === (payload.new as any).ticket_id) {
+            setTicketMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg]);
+            setTimeout(() => supportScrollRef.current?.scrollToEnd({ animated: true }), 100);
+          } else {
+            setUnreadSupport(n => n + 1);
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [isAdmin, mainTab, selectedTicket]);
+
   async function checkAdminAndLoad() {
     const { data } = await supabase.from("profiles").select("role").eq("id", user!.id).single();
     const role = data?.role ?? "user";
@@ -269,6 +308,77 @@ export default function AdminScreen() {
     setIsAdmin(true);
     setUserRole(role);
     setChecking(false);
+  }
+
+  async function loadSupportTickets() {
+    setSupportLoading(true);
+    setSelectedTicket(null);
+    setTicketMessages([]);
+    const { data: tickets } = await supabase
+      .from("support_tickets")
+      .select("id, user_id, status, created_at")
+      .eq("status", "open")
+      .order("created_at", { ascending: false });
+    if (tickets?.length) {
+      const userIds = [...new Set(tickets.map(t => t.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles").select("id, username, avatar_url").in("id", userIds);
+      const pMap: Record<string, { username: string; avatar_url: string | null }> = {};
+      profiles?.forEach(p => { pMap[p.id] = p; });
+      setSupportTickets(tickets.map(t => ({
+        ...t,
+        username: pMap[t.user_id]?.username ?? "Unknown",
+        avatar_url: pMap[t.user_id]?.avatar_url ?? null,
+      })));
+    } else {
+      setSupportTickets([]);
+    }
+    setSupportLoading(false);
+  }
+
+  async function openTicket(ticket: SupportTicket) {
+    setSelectedTicket(ticket);
+    setMsgsLoading(true);
+    const { data } = await supabase
+      .from("support_messages")
+      .select("id, sender_id, content, is_admin_msg, created_at")
+      .eq("ticket_id", ticket.id)
+      .order("created_at", { ascending: true });
+    setTicketMessages(data ?? []);
+    setMsgsLoading(false);
+    setTimeout(() => supportScrollRef.current?.scrollToEnd({ animated: false }), 150);
+  }
+
+  async function handleAdminReply() {
+    const trimmed = supportReply.trim();
+    if (!trimmed || !selectedTicket || supportReplying) return;
+    setSupportReplying(true);
+    setSupportReply("");
+    const { data, error } = await supabase.rpc("rpc_admin_reply_support", {
+      p_ticket_id: selectedTicket.id,
+      p_content:   trimmed,
+    });
+    if (error || (data as any)?.error) {
+      setSupportReply(trimmed);
+    } else {
+      const { data: msgs } = await supabase
+        .from("support_messages")
+        .select("id, sender_id, content, is_admin_msg, created_at")
+        .eq("ticket_id", selectedTicket.id)
+        .order("created_at", { ascending: true });
+      setTicketMessages(msgs ?? []);
+      setTimeout(() => supportScrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+    setSupportReplying(false);
+  }
+
+  async function handleResolveTicket() {
+    if (!selectedTicket || resolving) return;
+    setResolving(true);
+    await supabase.rpc("rpc_resolve_support_ticket", { p_ticket_id: selectedTicket.id });
+    setResolving(false);
+    setSelectedTicket(null);
+    loadSupportTickets();
   }
 
   async function loadUsers() {
@@ -825,12 +935,18 @@ export default function AdminScreen() {
               : mainTab === "scheduler" ? "Assign teams to time slots"
               : mainTab === "tournaments" ? "Tournament requests"
               : mainTab === "forums" ? "Forum approvals"
+              : mainTab === "support" ? "Support inbox"
               : "Business health"}
           </Text>
         </View>
         {mainTab === "reviews" && reviewTab === "pending" && scores.length > 0 && (
           <View style={styles.countBadge}>
             <Text style={styles.countBadgeText}>{scores.length}</Text>
+          </View>
+        )}
+        {mainTab !== "support" && unreadSupport > 0 && (
+          <View style={[styles.countBadge, { backgroundColor: "#06b6d4" }]}>
+            <Text style={styles.countBadgeText}>{unreadSupport}</Text>
           </View>
         )}
       </View>
@@ -841,9 +957,14 @@ export default function AdminScreen() {
           <Pressable
             key={key}
             style={[styles.mainTabItem, mainTab === key && styles.mainTabItemActive]}
-            onPress={() => setMainTab(key)}
+            onPress={() => setMainTab(key as MainTab)}
           >
-            <Ionicons name={icon as any} size={16} color={mainTab === key ? "#f59e0b" : "#444"} />
+            <View>
+              <Ionicons name={icon as any} size={16} color={mainTab === key ? "#f59e0b" : "#444"} />
+              {key === "support" && unreadSupport > 0 && mainTab !== "support" && (
+                <View style={styles.tabUnreadDot} />
+              )}
+            </View>
             <Text style={[styles.mainTabLabel, mainTab === key && styles.mainTabLabelActive]}>{label}</Text>
           </Pressable>
         ))}
@@ -1362,6 +1483,101 @@ export default function AdminScreen() {
           </ScrollView>
           )}
         </>
+      )}
+
+      {/* ── Support Inbox ── */}
+      {mainTab === "support" && (
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined} keyboardVerticalOffset={0}>
+          {selectedTicket ? (
+            <View style={{ flex: 1 }}>
+              {/* Conversation header */}
+              <View style={styles.suppConvHeader}>
+                <Pressable style={styles.suppBackBtn} onPress={() => { setSelectedTicket(null); setTicketMessages([]); }}>
+                  <Ionicons name="arrow-back" size={18} color="#fff" />
+                </Pressable>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.suppConvUser}>{selectedTicket.username}</Text>
+                  <Text style={styles.suppConvSub}>Open ticket · {new Date(selectedTicket.created_at).toLocaleDateString([], { month: "short", day: "numeric" })}</Text>
+                </View>
+                <Pressable
+                  style={[styles.suppResolveBtn, resolving && { opacity: 0.5 }]}
+                  onPress={handleResolveTicket}
+                  disabled={resolving}
+                >
+                  <Text style={styles.suppResolveBtnText}>Resolve</Text>
+                </Pressable>
+              </View>
+
+              {/* Messages */}
+              <ScrollView
+                ref={supportScrollRef}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.suppMsgList}
+              >
+                {msgsLoading ? (
+                  <ActivityIndicator color="#06b6d4" style={{ marginTop: 40 }} />
+                ) : ticketMessages.map(msg => (
+                  <View key={msg.id} style={[styles.suppMsgRow, msg.is_admin_msg ? styles.suppMsgRowAdmin : styles.suppMsgRowUser]}>
+                    <View style={[styles.suppBubble, msg.is_admin_msg ? styles.suppBubbleAdmin : styles.suppBubbleUser]}>
+                      {msg.is_admin_msg && <Text style={styles.suppAdminLabel}>Support Team</Text>}
+                      <Text style={[styles.suppBubbleText, msg.is_admin_msg ? styles.suppBubbleTextAdmin : styles.suppBubbleTextUser]}>
+                        {msg.content}
+                      </Text>
+                      <Text style={[styles.suppBubbleTime, msg.is_admin_msg ? styles.suppTimeAdmin : styles.suppTimeUser]}>
+                        {new Date(msg.created_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </ScrollView>
+
+              {/* Reply input */}
+              <View style={styles.suppReplyRow}>
+                <TextInput
+                  style={styles.suppReplyInput}
+                  placeholder="Reply…"
+                  placeholderTextColor="#333"
+                  value={supportReply}
+                  onChangeText={setSupportReply}
+                  multiline
+                  maxLength={4000}
+                  returnKeyType="default"
+                />
+                <Pressable
+                  style={[styles.suppSendBtn, (!supportReply.trim() || supportReplying) && styles.suppSendBtnOff]}
+                  onPress={handleAdminReply}
+                  disabled={!supportReply.trim() || supportReplying}
+                >
+                  {supportReplying
+                    ? <ActivityIndicator size="small" color="#000" />
+                    : <Ionicons name="send" size={16} color="#000" />
+                  }
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+              {supportLoading ? (
+                <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
+              ) : supportTickets.length === 0 ? (
+                <EmptyState title="No open tickets" sub="All support requests have been resolved." icon="checkmark-circle-outline" color="#22c55e" />
+              ) : supportTickets.map(ticket => (
+                <Pressable key={ticket.id} style={styles.suppTicketCard} onPress={() => openTicket(ticket)}>
+                  <View style={styles.suppTicketAvatar}>
+                    <Ionicons name="person-outline" size={18} color="#06b6d4" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.suppTicketUser}>{ticket.username}</Text>
+                    <Text style={styles.suppTicketTime}>
+                      {new Date(ticket.created_at).toLocaleDateString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color="#333" />
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
+        </KeyboardAvoidingView>
       )}
 
       {/* ── Users ── */}
@@ -2266,4 +2482,73 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(245,158,11,0.3)",
   },
   modFlagText: { color: "#f59e0b", fontSize: 11, fontWeight: "700" },
+
+  // Support inbox
+  tabUnreadDot: {
+    position: "absolute", top: -2, right: -4,
+    width: 7, height: 7, borderRadius: 3.5, backgroundColor: "#06b6d4",
+  },
+  suppTicketCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "#111", borderRadius: 16, padding: 14,
+    marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  suppTicketAvatar: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: "rgba(6,182,212,0.1)", borderWidth: 1,
+    borderColor: "rgba(6,182,212,0.2)", alignItems: "center", justifyContent: "center",
+  },
+  suppTicketUser: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 2 },
+  suppTicketTime: { color: "#444", fontSize: 12 },
+
+  suppConvHeader: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  suppBackBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: "#111", alignItems: "center", justifyContent: "center",
+  },
+  suppConvUser: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  suppConvSub:  { color: "#444", fontSize: 11, marginTop: 1 },
+  suppResolveBtn: {
+    backgroundColor: "rgba(34,197,94,0.12)", borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1, borderColor: "rgba(34,197,94,0.3)",
+  },
+  suppResolveBtnText: { color: "#22c55e", fontSize: 12, fontWeight: "800" },
+
+  suppMsgList: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 12 },
+  suppMsgRow:      { marginBottom: 8, maxWidth: "80%" },
+  suppMsgRowUser:  { alignSelf: "flex-start" },
+  suppMsgRowAdmin: { alignSelf: "flex-end" },
+  suppBubble: { borderRadius: 18, paddingHorizontal: 14, paddingVertical: 10 },
+  suppBubbleUser:  { backgroundColor: "#1a1a1a", borderBottomLeftRadius: 4 },
+  suppBubbleAdmin: { backgroundColor: "#06b6d4", borderBottomRightRadius: 4 },
+  suppAdminLabel: { color: "rgba(0,0,0,0.6)", fontSize: 10, fontWeight: "800", marginBottom: 3 },
+  suppBubbleText: { fontSize: 14, lineHeight: 20 },
+  suppBubbleTextUser:  { color: "#e0e0e0" },
+  suppBubbleTextAdmin: { color: "#000" },
+  suppBubbleTime: { fontSize: 10, marginTop: 4 },
+  suppTimeUser:  { color: "#444" },
+  suppTimeAdmin: { color: "rgba(0,0,0,0.45)", textAlign: "right" },
+
+  suppReplyRow: {
+    flexDirection: "row", alignItems: "flex-end", gap: 10,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a",
+    backgroundColor: "#000",
+  },
+  suppReplyInput: {
+    flex: 1, backgroundColor: "#111", borderRadius: 20,
+    borderWidth: 1, borderColor: "#1e1e1e",
+    color: "#fff", fontSize: 14, paddingHorizontal: 14,
+    paddingVertical: Platform.OS === "ios" ? 10 : 7, maxHeight: 100,
+  },
+  suppSendBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center",
+  },
+  suppSendBtnOff: { backgroundColor: "#0a4a55", opacity: 0.5 },
 });

@@ -135,13 +135,17 @@ export default function SupportChatScreen() {
     // Set ticket ID so realtime subscription activates
     if (!ticketId) setTicketId(result.ticket_id);
 
-    // If no staff is online, send email notification
-    if (!result.admin_online && !emailSent) {
+    // Notify on first message of the session
+    if (!emailSent) {
       setEmailSent(true);
       try {
+        const { data: { session: s } } = await supabase.auth.getSession();
         await fetch(`${API_BASE}/api/support-notify`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${s?.access_token ?? ""}`,
+          },
           body: JSON.stringify({ ticketId: result.ticket_id }),
         });
       } catch {

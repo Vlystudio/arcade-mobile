@@ -7,8 +7,8 @@ const supabase = createClient(
 );
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const SUPPORT_FROM   = process.env.SUPPORT_FROM_EMAIL  ?? "noreply@arcadetracker.app";
-const SUPPORT_TO     = process.env.SUPPORT_NOTIFY_EMAIL ?? "support@arcadetracker.app";
+const SUPPORT_FROM   = process.env.SUPPORT_FROM_EMAIL  ?? "ArcadeTracker <noreply@vlystudios.com>";
+const SUPPORT_TO     = process.env.SUPPORT_NOTIFY_EMAIL ?? "valeyardvisuals@vlystudios.com";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
