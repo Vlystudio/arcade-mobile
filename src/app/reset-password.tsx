@@ -15,6 +15,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { sendSecurityAlert } from "../../lib/security-notify";
 
+const API_BASE = process.env.EXPO_PUBLIC_API_BASE_URL ?? "";
+
 export default function ResetPasswordScreen() {
   const [ready, setReady]               = useState(false);
   const [password, setPassword]         = useState("");
@@ -55,15 +57,27 @@ export default function ResetPasswordScreen() {
     if (password !== confirm)  { setError("Passwords don't match."); return; }
 
     setLoading(true);
-    const { error: updateError } = await supabase.auth.updateUser({ password });
-    setLoading(false);
-
-    if (updateError) {
-      setError(updateError.message);
-    } else {
-      sendSecurityAlert("password_changed");
-      setDone(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const resp = await fetch(`${API_BASE}/api/password-reset`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.access_token ?? ""}`,
+        },
+        body: JSON.stringify({ password }),
+      });
+      const result = await resp.json();
+      if (!resp.ok || result.error) {
+        setError(result.error ?? "Failed to update password.");
+      } else {
+        sendSecurityAlert("password_changed");
+        setDone(true);
+      }
+    } catch {
+      setError("Network error — please try again.");
     }
+    setLoading(false);
   }
 
   if (done) {
