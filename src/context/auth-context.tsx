@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { Session, User } from "@supabase/supabase-js";
+import { router } from "expo-router";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 import { supabase } from "../../lib/supabase";
@@ -82,10 +83,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       sessionRef.current = session;
+      if (event === "PASSWORD_RECOVERY") {
+        // Redirect to the reset-password screen regardless of where the link landed
+        setTimeout(() => router.replace("/reset-password" as any), 0);
+      }
     });
 
     const interval = setInterval(verifySession, 60_000);
