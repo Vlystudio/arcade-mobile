@@ -15,23 +15,12 @@ export default function AuthCallbackScreen() {
   const [status, setStatus] = useState<"loading" | "error">("loading");
 
   useEffect(() => {
-    // On web, exchange PKCE code if present in URL
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get("code");
-      if (code) {
-        supabase.auth.exchangeCodeForSession(code).catch(() => {
-          setStatus("error");
-        });
-      }
-    }
-
-    // Listen for session (fires after code exchange or hash-based auto-detection)
+    // The Supabase client auto-exchanges ?code= on load — just listen for result.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) router.replace("/");
     });
 
-    // Also check if session already exists (race-free fallback)
+    // Fallback: session already active before listener was set up
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) router.replace("/");
     });

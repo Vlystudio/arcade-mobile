@@ -28,22 +28,12 @@ export default function ResetPasswordScreen() {
   const [done, setDone]                 = useState(false);
 
   useEffect(() => {
-    // On web, exchange PKCE code if present (sent when using PKCE flow)
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      const code = url.searchParams.get("code");
-      if (code) {
-        supabase.auth.exchangeCodeForSession(code).catch(() => {
-          setError("This reset link is invalid or has expired.");
-        });
-      }
-    }
-
-    // Supabase fires PASSWORD_RECOVERY after code exchange or hash-based redirect
+    // The Supabase client (detectSessionInUrl: true) auto-exchanges the ?code=
+    // param on load. We just listen for the result — no manual exchange needed.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") setReady(true);
     });
-    // Fallback: session already active
+    // Fallback: client already exchanged the code before listener was set up
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) setReady(true);
     });
