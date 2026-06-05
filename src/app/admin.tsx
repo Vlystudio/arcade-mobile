@@ -248,7 +248,7 @@ export default function AdminScreen() {
   const [bracketLoading, setBracketLoading]         = useState(false);
   const [bracketRoundTab, setBracketRoundTab]       = useState(1);
   const [generatingBracket, setGeneratingBracket]   = useState<string | null>(null);
-  const [scoringGame, setScoringGame]               = useState<{ game: BracketGame; group: BracketGroup; round: BracketRound } | null>(null);
+  const [scoringGame, setScoringGame]               = useState<{ game: BracketGame; group: BracketGroup; round: BracketRound; isEditing: boolean } | null>(null);
   const [gameScores, setGameScores]                 = useState<Record<string, string>>({});
   const [submittingScores, setSubmittingScores]     = useState(false);
 
@@ -977,9 +977,11 @@ export default function AdminScreen() {
   async function handleSubmitGameScores() {
     if (!scoringGame) return;
     setSubmittingScores(true);
-    const players = (scoringGame.group.slots ?? []).filter(s =>
-      scoringGame.game.game_number === 1 ? s.status === "active" : s.status === "active"
-    );
+    const players = scoringGame.isEditing
+      ? scoringGame.game.game_number === 1
+        ? (scoringGame.group.slots ?? [])
+        : (scoringGame.group.slots ?? []).filter(s => s.eliminated_game !== 1)
+      : (scoringGame.group.slots ?? []).filter(s => s.status === "active");
     const scores = players.map(p => ({ user_id: p.user_id, score: parseInt(gameScores[String(p.seed)] ?? "0", 10) }));
     const { data, error } = await supabase.rpc("rpc_ff_submit_game_scores", {
       p_game_id: scoringGame.game.id,
@@ -2236,7 +2238,28 @@ export default function AdminScreen() {
                         {/* Game results */}
                         {(g.games ?? []).filter(gm => gm.status === "completed" && gm.scores).map(gm => (
                           <View key={gm.id} style={styles.bracketGameResult}>
-                            <Text style={styles.bracketGameResultLabel}>Game {gm.game_number} results:</Text>
+                            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                              <Text style={styles.bracketGameResultLabel}>Game {gm.game_number} results:</Text>
+                              <Pressable
+                                onPress={() => {
+                                  const slots = g.slots ?? [];
+                                  const init: Record<string, string> = {};
+                                  (gm.scores ?? []).forEach(sc => {
+                                    const slot = gm.game_number === 1
+                                      ? slots.find(s => s.user_id === sc.user_id)
+                                      : slots.find(s => s.user_id === sc.user_id && s.eliminated_game !== 1);
+                                    if (slot) init[String(slot.seed)] = String(sc.score);
+                                  });
+                                  setGameScores(init);
+                                  setTournError(null);
+                                  setScoringGame({ game: gm, group: g, round, isEditing: true });
+                                }}
+                                style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 3, backgroundColor: "rgba(245,158,11,0.08)", borderRadius: 8, borderWidth: 1, borderColor: "rgba(245,158,11,0.2)" }}
+                              >
+                                <Ionicons name="pencil-outline" size={11} color="#f59e0b" />
+                                <Text style={{ color: "#f59e0b", fontSize: 10, fontWeight: "800" }}>Edit</Text>
+                              </Pressable>
+                            </View>
                             {(gm.scores ?? []).map(sc => (
                               <Text key={sc.user_id} style={[styles.bracketGameScore, sc.is_eliminated && { color: "#ef4444" }]}>
                                 {sc.username}: {sc.score.toLocaleString()}
@@ -2251,11 +2274,11 @@ export default function AdminScreen() {
                           <Pressable
                             style={styles.bracketEnterScoresBtn}
                             onPress={() => {
-                              const playersForGame = activePlayers;
                               const init: Record<string, string> = {};
-                              playersForGame.forEach(p => { init[String(p.seed)] = ""; });
+                              activePlayers.forEach(p => { init[String(p.seed)] = ""; });
                               setGameScores(init);
-                              setScoringGame({ game: currentGame, group: g, round });
+                              setTournError(null);
+                              setScoringGame({ game: currentGame, group: g, round, isEditing: false });
                             }}
                           >
                             <Ionicons name="create-outline" size={13} color="#a855f7" />
@@ -2279,16 +2302,26 @@ export default function AdminScreen() {
           <View style={styles.scoreEntrySheet}>
             <View style={styles.modalHandle} />
             <Text style={styles.scoreEntryTitle}>
-              {scoringGame?.round.round_name} · Group {scoringGame?.group.group_number} · Game {scoringGame?.game.game_number}
+              {scoringGame?.isEditing ? "Edit " : ""}{scoringGame?.round.round_name} · Group {scoringGame?.group.group_number} · Game {scoringGame?.game.game_number}
             </Text>
             <Text style={styles.scoreEntryHint}>
-              {scoringGame?.round.round_number === 4
-                ? "Final 4 — scores determine 1st through 4th place."
-                : scoringGame?.game.game_number === 2
-                  ? "Scores convert to rank points added to Game 1 totals. Lowest combined rank points is eliminated."
-                  : "Scores convert to rank points (1st=4, 2nd=3, 3rd=2, 4th=1). Lowest rank points is eliminated."}
+              {scoringGame?.isEditing
+                ? "Correcting scores — previous results for this game will be recalculated."
+                : scoringGame?.round.round_number === 4
+                  ? "Final 4 — scores determine 1st through 4th place."
+                  : scoringGame?.game.game_number === 2
+                    ? "Scores convert to rank points added to Game 1 totals. Lowest combined rank points is eliminated."
+                    : "Scores convert to rank points (1st=4, 2nd=3, 3rd=2, 4th=1). Lowest rank points is eliminated."}
             </Text>
-            {scoringGame && (scoringGame.group.slots ?? []).filter(s => s.status === "active").map(p => (
+            {scoringGame && (() => {
+              const allSlots = scoringGame.group.slots ?? [];
+              const slotsForModal = scoringGame.isEditing
+                ? scoringGame.game.game_number === 1
+                  ? allSlots
+                  : allSlots.filter(s => s.eliminated_game !== 1)
+                : allSlots.filter(s => s.status === "active");
+              return slotsForModal;
+            })().map(p => (
               <View key={p.user_id} style={styles.scoreEntryRow}>
                 <Text style={styles.scoreEntryName}>{p.username}</Text>
                 <TextInput
