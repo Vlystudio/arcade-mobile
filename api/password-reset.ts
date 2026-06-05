@@ -26,30 +26,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
 
-  const token = (req.headers.authorization ?? "").replace("Bearer ", "").trim();
-  if (!token) return res.status(401).json({ error: "unauthorized" });
+  try {
+    const token = (req.headers.authorization ?? "").replace("Bearer ", "").trim();
+    if (!token) return res.status(401).json({ error: "unauthorized" });
 
-  // Verify the token is valid
-  const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
-  if (authErr || !user) return res.status(401).json({ error: "unauthorized" });
+    const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !user) return res.status(401).json({ error: "unauthorized" });
 
-  // Only allow calls from a recovery session (AMR method = "otp" = email link click)
-  const claims = decodeJwt(token);
-  const amr = (claims.amr ?? []) as { method: string; timestamp: number }[];
-  const isRecoverySession = amr.some(a => a.method === "otp");
-  if (!isRecoverySession) {
-    return res.status(403).json({ error: "not_a_recovery_session" });
+    // Only allow calls from a recovery session (AMR method = "otp" = email link click)
+    const claims = decodeJwt(token);
+    const amr = (claims.amr ?? []) as { method: string; timestamp: number }[];
+    const isRecoverySession = amr.some(a => a.method === "otp");
+    if (!isRecoverySession) {
+      return res.status(403).json({ error: "not_a_recovery_session" });
+    }
+
+    const { password } = req.body ?? {};
+    if (!password || typeof password !== "string" || password.length < 6) {
+      return res.status(400).json({ error: "password_too_short" });
+    }
+
+    const { error: updateErr } = await supabase.auth.admin.updateUserById(user.id, { password });
+    if (updateErr) return res.status(400).json({ error: updateErr.message });
+
+    return res.status(200).json({ ok: true });
+  } catch (err) {
+    console.error("[password-reset]", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    return res.status(500).json({ error: `server_error: ${msg}` });
   }
-
-  const { password } = req.body ?? {};
-  if (!password || typeof password !== "string" || password.length < 6) {
-    return res.status(400).json({ error: "password_too_short" });
-  }
-
-  // Admin update bypasses AAL2 requirement — safe here because we verified
-  // this is a legitimate email recovery session (OTP amr claim)
-  const { error: updateErr } = await supabase.auth.admin.updateUserById(user.id, { password });
-  if (updateErr) return res.status(400).json({ error: updateErr.message });
-
-  return res.status(200).json({ ok: true });
 }
