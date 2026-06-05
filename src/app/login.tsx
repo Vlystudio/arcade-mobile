@@ -19,6 +19,24 @@ import { supabase } from "../../lib/supabase";
 import { useAuth } from "../context/auth-context";
 import { CURRENT_TOS_VERSION } from "./terms";
 
+const TOS_SECTIONS = [
+  { title: "1. Agreement to Terms", body: "By downloading, installing, or using ArcadeTracker you agree to be bound by these Terms of Service and all applicable laws. If you do not agree to all of these terms, do not use the App." },
+  { title: "2. Age Requirement", body: "ArcadeTracker is operated in connection with a 21+ licensed venue. You must be at least 21 years of age to create an account or use the App. By creating an account you represent and warrant that you are 21 years of age or older.\n\nIf we discover that an account was created by someone under 21, the account will be immediately and permanently deleted without notice." },
+  { title: "3. Your Account", body: "• You are solely responsible for maintaining the confidentiality of your login credentials and for all activity that occurs under your account.\n• Do not share your account with any other person.\n• You must notify us immediately if you suspect any unauthorized use of your account.\n• You may not create more than one account. Duplicate accounts will be terminated.\n• Impersonating another user, staff member, or venue employee is strictly prohibited." },
+  { title: "4. Community Standards", body: "All content you post publicly — including profile photos, bio text, posts, team names, score submissions, and messages visible to other users — must comply with the following standards.\n\nPROHIBITED CONTENT\n\n• Nudity, sexually explicit or suggestive content, or pornography of any kind.\n• Profanity, obscene language, or sexually explicit text directed at or visible to other users.\n• Racist, white-supremacist, antisemitic, or other hate-based content targeting any race, ethnicity, or national origin.\n• Homophobic, transphobic, or any content that demeans or dehumanizes individuals based on sexual orientation or gender identity.\n• Hate speech: any content that promotes violence or hatred against individuals or groups based on religion, disability, sex, or any other protected characteristic.\n• Gore, graphic violence, dismemberment, or images of serious injury or death.\n• Images of blood or violent photographs of any kind.\n• Harassment, threats, or targeted intimidation of any user or staff member.\n• Content that glorifies or promotes drug use, illegal firearms, or criminal activity.\n• Spam, phishing links, scam content, or unsolicited commercial promotions.\n• Content that violates any third party's intellectual property rights.\n\nContent moderation is performed by both automated systems and human review. Prohibited content will be removed without notice." },
+  { title: "5. Private Messages", body: "ArcadeTracker's direct messaging feature uses end-to-end encryption. This means private messages between users are encrypted on your device before transmission and can only be decrypted by the intended recipient. ArcadeTracker staff cannot read the content of private messages.\n\nWhile we cannot monitor private messages, we strongly discourage the sharing of any prohibited content in private messages. Sharing such content through private messaging violates these Terms of Service and may result in account suspension if reported and verified." },
+  { title: "6. User Content License", body: "You retain ownership of all content you create and post on ArcadeTracker. By posting content, you grant ArcadeTracker a non-exclusive, royalty-free, worldwide license to host, store, display, reproduce, and distribute that content solely for the purpose of operating and improving the App.\n\nThis license ends when you delete your content or your account. You are responsible for ensuring you have all necessary rights to any content you upload." },
+  { title: "7. Score Integrity", body: "Scores submitted on ArcadeTracker are subject to review by venue staff and platform administrators. By submitting a score, you represent that:\n\n• The score was achieved legitimately by you on the indicated machine.\n• Any photo or video evidence submitted is authentic and unedited.\n• The score was not achieved through any exploit, cheat, or external assistance.\n\nScores found to be falsified or submitted with fabricated evidence will be removed. Repeated violations will result in account suspension or permanent ban. All administrative decisions regarding score integrity are final." },
+  { title: "8. Enforcement & Account Suspension", body: "Violations of these Terms of Service are subject to enforcement action, which may include any of the following at our sole discretion:\n\n• A formal warning issued to your account.\n• Temporary suspension (ranging from 24 hours to 30 days depending on severity).\n• Permanent deletion of your account and all associated data.\n\nSevere violations — including posting child sexual abuse material (CSAM), issuing credible threats of violence, or engaging in targeted harassment campaigns — will result in immediate permanent account deletion and may be reported to law enforcement.\n\nWe reserve the right to suspend or terminate any account at our sole discretion for any violation of these terms, or for conduct that we determine to be harmful to our community." },
+  { title: "9. Intellectual Property", body: "All rights, title, and interest in the ArcadeTracker platform — including its design, software, brand, logos, and features — are owned by or licensed to ArcadeTracker. These terms do not grant you any right to use our trademarks, logos, or brand features without prior written consent." },
+  { title: "10. Disclaimer of Warranties", body: "THE APP IS PROVIDED \"AS IS\" AND \"AS AVAILABLE\" WITHOUT WARRANTIES OF ANY KIND. WE DISCLAIM ALL WARRANTIES INCLUDING IMPLIED WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. WE DO NOT WARRANT THAT THE APP WILL BE UNINTERRUPTED OR ERROR-FREE." },
+  { title: "11. Limitation of Liability", body: "TO THE FULLEST EXTENT PERMITTED BY APPLICABLE LAW, ARCADETRACKER SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING OUT OF OR IN CONNECTION WITH YOUR USE OF THE APP.\n\nIN NO EVENT SHALL OUR TOTAL LIABILITY TO YOU EXCEED THE GREATER OF $50 OR THE AMOUNT YOU PAID US IN THE PRECEDING 12 MONTHS." },
+  { title: "12. Indemnification", body: "You agree to indemnify, defend, and hold harmless ArcadeTracker and its affiliates, officers, directors, employees, and agents from and against any claims, liabilities, damages, losses, and expenses arising out of or in any way connected with your use of the App, your content, or your violation of these Terms." },
+  { title: "13. Governing Law", body: "These Terms are governed by the laws of the state in which ArcadeTracker's principal place of business is located, without regard to its conflict of law provisions. Any disputes arising under these Terms shall be resolved in the courts of that jurisdiction." },
+  { title: "14. Changes to These Terms", body: "We may update these Terms at any time. When we make material changes, we will notify you through the App and require you to affirmatively accept the updated Terms before continuing to use the service." },
+  { title: "15. Contact Us", body: "Questions about these Terms of Service? Contact us at:\n\nsupport@arcadetracker.app\n\nOr use the Support Chat feature available from your Profile." },
+];
+
 export default function LoginScreen() {
   const { setRememberMe } = useAuth();
 
@@ -30,10 +48,10 @@ export default function LoginScreen() {
   const [rememberMe, setRememberMeLocal] = useState(false);
 
   // ToS acceptance modal
-  const [showTosModal, setShowTosModal]   = useState(false);
-  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
-  const [tosAgreed, setTosAgreed]         = useState(false);
-  const [acceptingTos, setAcceptingTos]   = useState(false);
+  const [showTosModal, setShowTosModal]     = useState(false);
+  const [pendingUserId, setPendingUserId]   = useState<string | null>(null);
+  const [tosScrolled, setTosScrolled]       = useState(false);
+  const [acceptingTos, setAcceptingTos]     = useState(false);
 
   // Forgot username sheet
   const [showForgotUsername, setShowForgotUsername]   = useState(false);
@@ -94,6 +112,7 @@ export default function LoginScreen() {
       if (profile?.tos_accepted_version !== CURRENT_TOS_VERSION) {
         // Must accept updated ToS before proceeding
         setPendingUserId(userId);
+        setTosScrolled(false);
         setLoading(false);
         setShowTosModal(true);
         return;
@@ -114,12 +133,20 @@ export default function LoginScreen() {
   }
 
   async function handleAcceptTos() {
-    if (!tosAgreed || !pendingUserId) return;
+    if (!tosScrolled || !pendingUserId) return;
     setAcceptingTos(true);
     await supabase.rpc("rpc_accept_tos", { p_version: CURRENT_TOS_VERSION });
     setAcceptingTos(false);
     setShowTosModal(false);
     completeLogin(pendingUserId);
+  }
+
+  function handleTosScroll(e: { nativeEvent: { layoutMeasurement: { height: number }; contentOffset: { y: number }; contentSize: { height: number } } }) {
+    if (tosScrolled) return;
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    if (layoutMeasurement.height + contentOffset.y >= contentSize.height - 60) {
+      setTosScrolled(true);
+    }
   }
 
   async function handleLookupUsername() {
@@ -269,80 +296,83 @@ export default function LoginScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* ── ToS Acceptance Modal ─────────────────────────────────── */}
-      <Modal visible={showTosModal} transparent animationType="slide" onRequestClose={() => {}}>
-        <View style={styles.modalBg}>
-          <View style={[styles.sheet, { maxHeight: "85%" }]}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetIconRow}>
-              <View style={[styles.sheetIcon, { backgroundColor: "rgba(6,182,212,0.08)" }]}>
-                <Ionicons name="document-text-outline" size={22} color="#06b6d4" />
-              </View>
+      {/* ── ToS Acceptance Modal (full-screen, scroll-to-unlock) ── */}
+      <Modal visible={showTosModal} transparent={false} animationType="slide" onRequestClose={() => {}}>
+        <SafeAreaView style={styles.tosModalRoot} edges={["top", "bottom"]}>
+          {/* Header */}
+          <View style={styles.tosModalHeader}>
+            <View style={styles.tosModalIconWrap}>
+              <Ionicons name="document-text-outline" size={20} color="#06b6d4" />
             </View>
-            <Text style={styles.sheetTitle}>Updated Terms of Service</Text>
-            <Text style={styles.sheetSub}>
-              We've updated our Terms of Service. Please review and accept to continue.
-            </Text>
-            <ScrollView style={styles.tosScroll} showsVerticalScrollIndicator>
-              <Text style={styles.tosPreviewText}>
-                {[
-                  "ArcadeTracker is a 21+ platform. By using this app you confirm you are 21 or older.",
-                  "",
-                  "CONTENT STANDARDS: You may not post nudity, sexually explicit content, profanity, racist content, homophobic or transphobic content, hate speech, gore, blood, or violent images on any public area of the app.",
-                  "",
-                  "PRIVATE MESSAGES: Direct messages are end-to-end encrypted. We cannot read them, but prohibited content is still against these Terms.",
-                  "",
-                  "ENFORCEMENT: Violations may result in temporary suspension (24 hours to 30 days) or permanent account deletion depending on severity.",
-                  "",
-                  "SCORE INTEGRITY: All submitted scores are subject to admin review. Falsified scores result in removal and potential ban.",
-                  "",
-                  "By accepting, you agree to the full Terms of Service (version 2026-06) and confirm you are 21 years of age or older.",
-                ].join("\n")}
-              </Text>
-            </ScrollView>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.tosModalTitle}>Terms of Service</Text>
+              <Text style={styles.tosModalVersion}>Version {CURRENT_TOS_VERSION} — required to continue</Text>
+            </View>
+          </View>
 
-            <Pressable
-              style={styles.checkRow}
-              onPress={() => setTosAgreed(!tosAgreed)}
-            >
-              <View style={[styles.checkbox, tosAgreed && styles.checkboxActive]}>
-                {tosAgreed && <Ionicons name="checkmark" size={12} color="#000" />}
+          {/* Scroll hint */}
+          {!tosScrolled && (
+            <View style={styles.tosScrollHint}>
+              <Ionicons name="arrow-down-circle-outline" size={15} color="#f59e0b" />
+              <Text style={styles.tosScrollHintText}>Read all the way to the bottom to continue</Text>
+            </View>
+          )}
+
+          {/* Full ToS text */}
+          <ScrollView
+            style={styles.tosModalScroll}
+            contentContainerStyle={styles.tosModalScrollContent}
+            showsVerticalScrollIndicator
+            onScroll={handleTosScroll}
+            scrollEventThrottle={100}
+          >
+            <Text style={styles.tosUpdated}>Last updated: June 2026 · Version {CURRENT_TOS_VERSION}</Text>
+
+            {TOS_SECTIONS.map(({ title, body }) => (
+              <View key={title} style={styles.tosSection}>
+                <Text style={styles.tosSectionTitle}>{title}</Text>
+                <Text style={styles.tosSectionBody}>{body}</Text>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.checkLabel}>
-                  I am 21 or older and agree to the{" "}
-                  <Text
-                    style={{ color: "#06b6d4", fontWeight: "700" }}
-                    onPress={() => router.push("/terms" as any)}
-                  >
-                    Terms of Service
-                  </Text>
-                </Text>
+            ))}
+
+            {/* Spacer so the last section isn't hidden behind the button bar */}
+            <View style={{ height: 24 }} />
+          </ScrollView>
+
+          {/* Bottom action bar */}
+          <View style={styles.tosModalFooter}>
+            {tosScrolled ? (
+              <Pressable
+                style={[styles.tosAcceptBtn, acceptingTos && styles.tosAcceptBtnLoading]}
+                onPress={handleAcceptTos}
+                disabled={acceptingTos}
+              >
+                {acceptingTos
+                  ? <ActivityIndicator color="#000" size="small" />
+                  : <>
+                      <Ionicons name="checkmark-circle-outline" size={20} color="#000" />
+                      <Text style={styles.tosAcceptBtnText}>I agree — I am 21 or older</Text>
+                    </>
+                }
+              </Pressable>
+            ) : (
+              <View style={styles.tosLockedBtn}>
+                <Ionicons name="lock-closed-outline" size={16} color="#444" />
+                <Text style={styles.tosLockedBtnText}>Scroll to read all terms</Text>
               </View>
-            </Pressable>
-
+            )}
             <Pressable
-              style={[styles.sheetBtn, (!tosAgreed || acceptingTos) && styles.sheetBtnDisabled]}
-              onPress={handleAcceptTos}
-              disabled={!tosAgreed || acceptingTos}
-            >
-              {acceptingTos
-                ? <ActivityIndicator color="#000" size="small" />
-                : <Text style={styles.sheetBtnText}>Accept and Continue</Text>
-              }
-            </Pressable>
-
-            <Pressable
-              style={styles.sheetCancel}
+              style={styles.tosDeclineBtn}
               onPress={() => {
                 setShowTosModal(false);
+                setTosScrolled(false);
                 supabase.auth.signOut().catch(() => {});
               }}
             >
-              <Text style={styles.sheetCancelText}>Decline and Sign Out</Text>
+              <Text style={styles.tosDeclineBtnText}>Decline and Sign Out</Text>
             </Pressable>
           </View>
-        </View>
+        </SafeAreaView>
       </Modal>
 
       {/* ── Forgot Username Sheet ─────────────────────────────────── */}
@@ -570,15 +600,57 @@ const styles = StyleSheet.create({
   sheetTitle: { color: "#fff", fontSize: 20, fontWeight: "900", textAlign: "center" },
   sheetSub:   { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
 
-  tosScroll: { maxHeight: 220, backgroundColor: "#0a0a0a", borderRadius: 12, padding: 14 },
-  tosPreviewText: { color: "#666", fontSize: 13, lineHeight: 20 },
+  // Full-screen ToS modal
+  tosModalRoot: { flex: 1, backgroundColor: "#000" },
+  tosModalHeader: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 18, paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  tosModalIconWrap: {
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: "rgba(6,182,212,0.1)", borderWidth: 1,
+    borderColor: "rgba(6,182,212,0.2)", alignItems: "center", justifyContent: "center",
+  },
+  tosModalTitle:   { color: "#fff", fontSize: 15, fontWeight: "800" },
+  tosModalVersion: { color: "#444", fontSize: 11, marginTop: 2 },
 
-  checkRow: {
-    flexDirection: "row", alignItems: "flex-start", gap: 10,
-    backgroundColor: "#0a0a0a", borderRadius: 12, padding: 14,
+  tosScrollHint: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "rgba(245,158,11,0.08)", borderBottomWidth: 1,
+    borderBottomColor: "rgba(245,158,11,0.2)", paddingHorizontal: 18, paddingVertical: 8,
+  },
+  tosScrollHintText: { color: "#f59e0b", fontSize: 12, fontWeight: "600" },
+
+  tosModalScroll: { flex: 1 },
+  tosModalScrollContent: { paddingHorizontal: 22, paddingTop: 18, paddingBottom: 12 },
+  tosUpdated: { color: "#333", fontSize: 11, marginBottom: 20 },
+  tosSection: { marginBottom: 24 },
+  tosSectionTitle: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 8 },
+  tosSectionBody: { color: "#666", fontSize: 13, lineHeight: 21 },
+
+  tosModalFooter: {
+    paddingHorizontal: 18, paddingTop: 12, paddingBottom: 20,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a",
+    gap: 10,
+  },
+  tosAcceptBtn: {
+    backgroundColor: "#06b6d4", borderRadius: 14, paddingVertical: 16,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+  },
+  tosAcceptBtnLoading: { backgroundColor: "#0a4a55" },
+  tosAcceptBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
+  tosLockedBtn: {
+    backgroundColor: "#0d0d0d", borderRadius: 14, paddingVertical: 16,
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     borderWidth: 1, borderColor: "#1e1e1e",
   },
-  checkLabel: { color: "#aaa", fontSize: 13, lineHeight: 20 },
+  tosLockedBtnText: { color: "#333", fontWeight: "700", fontSize: 15 },
+  tosDeclineBtn: {
+    backgroundColor: "transparent", borderRadius: 14, paddingVertical: 12,
+    alignItems: "center",
+  },
+  tosDeclineBtnText: { color: "#333", fontWeight: "600", fontSize: 14 },
 
   sheetBtn: {
     backgroundColor: "#06b6d4", borderRadius: 14,
