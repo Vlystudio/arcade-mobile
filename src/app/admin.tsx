@@ -109,7 +109,7 @@ type ManageTournament = {
 };
 
 type BracketSlot  = { user_id: string; username: string; seed: number; status: string; eliminated_game: number | null; final_rank: number | null };
-type BracketScore = { user_id: string; username: string; score: number; rank_in_game: number; is_eliminated: boolean };
+type BracketScore = { user_id: string; username: string; score: number; rank_in_game: number; rank_points: number | null; is_eliminated: boolean };
 type BracketGame  = { id: string; game_number: number; status: string; scores: BracketScore[] | null };
 type BracketGroup = { id: string; group_number: number; status: string; slots: BracketSlot[] | null; games: BracketGame[] | null };
 type BracketRound = { id: string; round_number: number; round_name: string; status: string; groups: BracketGroup[] | null };
@@ -2236,10 +2236,12 @@ export default function AdminScreen() {
                         {/* Game results */}
                         {(g.games ?? []).filter(gm => gm.status === "completed" && gm.scores).map(gm => (
                           <View key={gm.id} style={styles.bracketGameResult}>
-                            <Text style={styles.bracketGameResultLabel}>Game {gm.game_number} scores:</Text>
+                            <Text style={styles.bracketGameResultLabel}>Game {gm.game_number} results:</Text>
                             {(gm.scores ?? []).map(sc => (
                               <Text key={sc.user_id} style={[styles.bracketGameScore, sc.is_eliminated && { color: "#ef4444" }]}>
-                                {sc.username}: {sc.score.toLocaleString()} pts{sc.is_eliminated ? " ✗" : ""}
+                                {sc.username}: {sc.score.toLocaleString()}
+                                {sc.rank_points != null ? ` → ${sc.rank_points}rp` : ""}
+                                {sc.is_eliminated ? " ✗" : ""}
                               </Text>
                             ))}
                           </View>
@@ -2281,8 +2283,10 @@ export default function AdminScreen() {
             </Text>
             <Text style={styles.scoreEntryHint}>
               {scoringGame?.round.round_number === 4
-                ? "All 4 players compete — scores determine final rankings."
-                : `Enter each player's score. Lowest score is eliminated.`}
+                ? "Final 4 — scores determine 1st through 4th place."
+                : scoringGame?.game.game_number === 2
+                  ? "Scores convert to rank points added to Game 1 totals. Lowest combined rank points is eliminated."
+                  : "Scores convert to rank points (1st=4, 2nd=3, 3rd=2, 4th=1). Lowest rank points is eliminated."}
             </Text>
             {scoringGame && (scoringGame.group.slots ?? []).filter(s => s.status === "active").map(p => (
               <View key={p.user_id} style={styles.scoreEntryRow}>
