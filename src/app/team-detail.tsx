@@ -55,6 +55,8 @@ type PlayerStats = {
   worstWeekAvg: number | null;
 };
 
+type BannedUser = { user_id: string; username: string; banned_at: string };
+
 function isoWeekKey(d: Date): string {
   const t = new Date(d);
   t.setHours(0, 0, 0, 0);
@@ -87,6 +89,10 @@ export default function TeamDetailScreen() {
   const [selectedId, setSelectedId] = useState("all");
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [bannedFromTeam, setBannedFromTeam] = useState(false);
+  const [bannedUsers, setBannedUsers] = useState<BannedUser[]>([]);
+  const [kickingId, setKickingId] = useState<string | null>(null);
+  const [banningId, setBanningId] = useState<string | null>(null);
 
   // Slot preferences
   const [slotPref1, setSlotPref1] = useState<string | null>(null);
@@ -106,10 +112,25 @@ export default function TeamDetailScreen() {
   async function loadData() {
     if (!teamId || !user) return;
 
-    const [membersRes, teamRes, profileRes] = await Promise.all([
+    // Gate: check if current user is banned from this team
+    const { data: banCheck } = await supabase
+      .from("team_bans")
+      .select("id")
+      .eq("team_id", teamId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (banCheck) {
+      setBannedFromTeam(true);
+      setLoading(false);
+      return;
+    }
+
+    const [membersRes, teamRes, profileRes, bannedRes] = await Promise.all([
       supabase.from("team_members").select("user_id, role, profiles(username, avatar_url)").eq("team_id", teamId),
       supabase.from("teams").select("captain_user_id, photo_url, slot_pref_1, slot_pref_2").eq("id", teamId).single(),
       supabase.from("profiles").select("role").eq("id", user.id).single(),
+      supabase.from("team_bans").select("user_id, created_at").eq("team_id", teamId),
     ]);
 
     const memberList: Member[] = (membersRes.data ?? []).map((m: any) => {
@@ -125,6 +146,22 @@ export default function TeamDetailScreen() {
     setPhotoUrl((teamRes.data as any)?.photo_url ?? null);
     setSlotPref1((teamRes.data as any)?.slot_pref_1 ?? null);
     setSlotPref2((teamRes.data as any)?.slot_pref_2 ?? null);
+
+    // Load banned users list (RLS: only visible to the captain via banned_by = auth.uid())
+    const bannedUserIds = (bannedRes.data ?? []).map((b: any) => b.user_id as string);
+    if (bannedUserIds.length > 0) {
+      const { data: bannedProfiles } = await supabase
+        .from("profiles").select("id, username").in("id", bannedUserIds);
+      const profileMap: Record<string, string> = {};
+      for (const p of bannedProfiles ?? []) profileMap[(p as any).id] = (p as any).username ?? "Unknown";
+      setBannedUsers((bannedRes.data ?? []).map((b: any) => ({
+        user_id: b.user_id,
+        username: profileMap[b.user_id] ?? "Unknown",
+        banned_at: b.created_at,
+      })));
+    } else {
+      setBannedUsers([]);
+    }
 
     // Load announcements
     setAnnouncementsLoading(true);
@@ -287,6 +324,75 @@ export default function TeamDetailScreen() {
     setAnnounceVisible(false);
   }
 
+  async function handleKick(memberId: string, username: string) {
+    Alert.alert(
+      `Kick ${username}?`,
+      "They'll be removed from the team but can request to rejoin.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Kick",
+          style: "destructive",
+          onPress: async () => {
+            setKickingId(memberId);
+            const { data } = await supabase.rpc("rpc_team_kick", { p_team_id: teamId, p_member_id: memberId });
+            setKickingId(null);
+            if ((data as any)?.error) {
+              Alert.alert("Error", (data as any).error);
+            } else {
+              loadData();
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleBan(memberId: string, username: string) {
+    Alert.alert(
+      `Ban ${username}?`,
+      `${username} will be removed and permanently blocked from searching, viewing, or joining this team.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Ban",
+          style: "destructive",
+          onPress: async () => {
+            setBanningId(memberId);
+            const { data } = await supabase.rpc("rpc_team_ban", { p_team_id: teamId, p_member_id: memberId });
+            setBanningId(null);
+            if ((data as any)?.error) {
+              Alert.alert("Error", (data as any).error);
+            } else {
+              loadData();
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  async function handleUnban(userId: string, username: string) {
+    Alert.alert(
+      `Unban ${username}?`,
+      "They'll be able to search and request to join this team again.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Unban",
+          onPress: async () => {
+            const { data } = await supabase.rpc("rpc_team_unban", { p_team_id: teamId, p_member_id: userId });
+            if ((data as any)?.error) {
+              Alert.alert("Error", (data as any).error);
+            } else {
+              setBannedUsers((prev) => prev.filter((b) => b.user_id !== userId));
+            }
+          },
+        },
+      ]
+    );
+  }
+
   useEffect(() => { if (user) loadData(); }, [user, teamId]);
 
   // Build seasons as 8-week chunks from the date of the first score
@@ -358,6 +464,24 @@ export default function TeamDetailScreen() {
 
   if (loading) {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
+  }
+
+  if (bannedFromTeam) {
+    return (
+      <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
+        <View style={styles.bannedGate}>
+          <Ionicons name="ban" size={56} color="#ef4444" style={{ marginBottom: 20 }} />
+          <Text style={styles.bannedGateTitle}>Access Restricted</Text>
+          <Text style={styles.bannedGateSub}>You've been banned from this team and cannot view its content.</Text>
+          <Pressable
+            style={styles.bannedGateBtn}
+            onPress={() => router.canGoBack() ? router.back() : router.replace("/teams" as any)}
+          >
+            <Text style={styles.bannedGateBtnText}>Go Back</Text>
+          </Pressable>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
@@ -494,13 +618,47 @@ export default function TeamDetailScreen() {
         {/* Roster */}
         <SectionLabel text={`Roster · ${members.length}`} />
         {playerStats.map((p, i) => (
-          <PlayerRow key={p.user_id} player={p} rank={i + 1} />
+          <PlayerRow
+            key={p.user_id}
+            player={p}
+            rank={i + 1}
+            captainMode={isCaptain && p.user_id !== user?.id}
+            onActionPress={() => Alert.alert(
+              p.username,
+              "Manage this member",
+              [
+                { text: "Kick from team", style: "destructive", onPress: () => handleKick(p.user_id, p.username) },
+                { text: "Ban from team", style: "destructive", onPress: () => handleBan(p.user_id, p.username) },
+                { text: "Cancel", style: "cancel" },
+              ]
+            )}
+          />
         ))}
 
         {members.length === 0 && (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyCardText}>No members yet.</Text>
           </View>
+        )}
+
+        {isCaptain && bannedUsers.length > 0 && (
+          <>
+            <SectionLabel text={`Banned · ${bannedUsers.length}`} />
+            <View style={{ marginHorizontal: 20, marginBottom: 28 }}>
+              {bannedUsers.map((b) => (
+                <View key={b.user_id} style={styles.bannedRow}>
+                  <Avatar uri={null} name={b.username} size={36} radius={11} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.bannedUsername}>{b.username}</Text>
+                    <Text style={styles.bannedDate}>Banned {fmtRelTime(b.banned_at)}</Text>
+                  </View>
+                  <Pressable style={styles.unbanBtn} onPress={() => handleUnban(b.user_id, b.username)}>
+                    <Text style={styles.unbanBtnText}>Unban</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          </>
         )}
       </ScrollView>
 
@@ -653,7 +811,12 @@ function StatCell({ label, value, color = "#fff", sub }: {
   );
 }
 
-function PlayerRow({ player, rank }: { player: PlayerStats; rank: number }) {
+function PlayerRow({ player, rank, captainMode, onActionPress }: {
+  player: PlayerStats;
+  rank: number;
+  captainMode?: boolean;
+  onActionPress?: () => void;
+}) {
   const hasScores = player.games > 0;
   return (
     <View style={styles.playerCard}>
@@ -685,6 +848,12 @@ function PlayerRow({ player, rank }: { player: PlayerStats; rank: number }) {
           {player.bestWeekAvg !== null && <Pip label="↑ wk" value={player.bestWeekAvg} color="#22c55e" />}
           {player.worstWeekAvg !== null && <Pip label="↓ wk" value={player.worstWeekAvg} color="#f87171" />}
         </View>
+      )}
+
+      {captainMode && (
+        <Pressable style={styles.memberActionBtn} onPress={onActionPress} hitSlop={8}>
+          <Ionicons name="ellipsis-horizontal" size={16} color="#444" />
+        </Pressable>
       )}
     </View>
   );
@@ -914,6 +1083,38 @@ const styles = StyleSheet.create({
   annUsername: { color: "#fff", fontSize: 13, fontWeight: "800" },
   annTime: { color: "#333", fontSize: 11 },
   annContent: { color: "#aaa", fontSize: 14, lineHeight: 20 },
+
+  // Member action button (captain ···)
+  memberActionBtn: {
+    width: 32, height: 32, borderRadius: 10,
+    alignItems: "center", justifyContent: "center",
+    marginLeft: 4,
+  },
+
+  // Banned gate screen
+  bannedGate: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
+  bannedGateTitle: { color: "#fff", fontSize: 22, fontWeight: "900", marginBottom: 8 },
+  bannedGateSub: { color: "#555", fontSize: 15, textAlign: "center", lineHeight: 22 },
+  bannedGateBtn: {
+    marginTop: 32, backgroundColor: "#1a1a1a", borderRadius: 16,
+    paddingHorizontal: 24, paddingVertical: 14,
+  },
+  bannedGateBtnText: { color: "#fff", fontWeight: "800", fontSize: 15 },
+
+  // Banned users list (captain view)
+  bannedRow: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "#111", borderRadius: 16, padding: 14,
+    marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  bannedUsername: { color: "#888", fontSize: 14, fontWeight: "700" },
+  bannedDate: { color: "#333", fontSize: 12, marginTop: 2 },
+  unbanBtn: {
+    backgroundColor: "rgba(239,68,68,0.1)", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 7,
+    borderWidth: 1, borderColor: "rgba(239,68,68,0.25)",
+  },
+  unbanBtnText: { color: "#ef4444", fontWeight: "800", fontSize: 13 },
 
   // Announcement input
   annInput: {

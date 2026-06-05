@@ -26,6 +26,7 @@ type Team = {
   isMember: boolean; isCaptain: boolean;
   myRequestStatus: "pending" | "invited" | null;
   pendingRequestCount: number;
+  isBanned: boolean;
 };
 
 type UserResult = { id: string; username: string };
@@ -93,12 +94,14 @@ export default function TeamsScreen() {
   async function loadTeams() {
     if (!user) return;
 
-    const [teamsRes, membersRes, myRes, myRequestsRes] = await Promise.all([
+    const [teamsRes, membersRes, myRes, myRequestsRes, myBansRes] = await Promise.all([
       supabase.from("teams").select("id, name, captain_user_id, photo_url").order("name"),
       supabase.from("team_members").select("team_id, user_id"),
       supabase.from("team_members").select("team_id").eq("user_id", user.id),
       supabase.from("team_requests").select("team_id, direction, status").eq("user_id", user.id),
+      supabase.from("team_bans").select("team_id").eq("user_id", user.id),
     ]);
+    const bannedTeamIds = new Set((myBansRes.data ?? []).map((b) => b.team_id));
 
     const myIds = new Set((myRes.data ?? []).map((m) => m.team_id));
     const byTeam: Record<string, string[]> = {};
@@ -141,6 +144,7 @@ export default function TeamsScreen() {
       isCaptain: t.captain_user_id === user.id,
       myRequestStatus: myRequests[t.id] ?? null,
       pendingRequestCount: pendingByTeam[t.id] ?? 0,
+      isBanned: bannedTeamIds.has(t.id),
     }));
 
     const leagueRes = await supabase.from("league_teams").select("team_id, wins, losses");
@@ -385,7 +389,7 @@ export default function TeamsScreen() {
   const searchLower = searchText.toLowerCase().trim();
   const myTeams = teams.filter((t) => t.isMember && (!searchLower || t.name.toLowerCase().includes(searchLower)));
   const invitedTeams = teams.filter((t) => !t.isMember && t.myRequestStatus === "invited");
-  const otherTeams = teams.filter((t) => !t.isMember && t.myRequestStatus !== "invited" && (!searchLower || t.name.toLowerCase().includes(searchLower)));
+  const otherTeams = teams.filter((t) => !t.isMember && !t.isBanned && t.myRequestStatus !== "invited" && (!searchLower || t.name.toLowerCase().includes(searchLower)));
 
   return (
     <View style={styles.root}>
