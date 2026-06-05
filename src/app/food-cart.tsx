@@ -14,13 +14,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useCart } from "../context/cart-context";
 import { useLocation } from "../context/location-context";
-import { useRequireAuth } from "../hooks/use-require-auth";
 import { createSquareCheckoutLink } from "../../lib/square-food";
 
 const TAX_RATE = 0.08;
 
 export default function FoodCartScreen() {
-  const { user } = useRequireAuth();
   const { items, updateQuantity, removeItem, clearCart, total, itemCount } = useCart();
   const { location } = useLocation();
 
@@ -31,7 +29,7 @@ export default function FoodCartScreen() {
   const grandTotal = total + tax;
 
   async function handlePlaceOrder() {
-    if (!user || items.length === 0) return;
+    if (items.length === 0) return;
     setError(null);
     setPlacing(true);
 

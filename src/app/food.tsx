@@ -18,7 +18,7 @@ import BottomTabBar from "../components/bottom-tab-bar";
 import { LocationPicker } from "../components/location-picker";
 import { useCart } from "../context/cart-context";
 import { useLocation } from "../context/location-context";
-import { useRequireAuth } from "../hooks/use-require-auth";
+import { useAuth } from "../context/auth-context";
 import { fetchSquareMenu } from "../../lib/square-food";
 import { supabase } from "../../lib/supabase";
 
@@ -58,7 +58,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 export default function FoodScreen() {
-  const { loading: authLoading } = useRequireAuth();
+  const { loading: authLoading } = useAuth();
   const { addItem, itemCount } = useCart();
   const { location, isVinyl } = useLocation();
 
