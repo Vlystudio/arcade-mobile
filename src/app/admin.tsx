@@ -218,6 +218,11 @@ export default function AdminScreen() {
   const [manageLoading, setManageLoading] = useState(false);
   const [statusActioning, setStatusActioning] = useState<string | null>(null);
   const [firstFridayCreating, setFirstFridayCreating] = useState(false);
+  const [editTournTarget, setEditTournTarget] = useState<ManageTournament | null>(null);
+  const [editTournForm, setEditTournForm] = useState({ title: "", game_type: "", proposed_date: "", max_players: "20" });
+  const [editingTourn, setEditingTourn] = useState(false);
+  const [deleteTournTarget, setDeleteTournTarget] = useState<ManageTournament | null>(null);
+  const [deletingTourn, setDeletingTourn] = useState(false);
   const [resultsTarget, setResultsTarget] = useState<ManageTournament | null>(null);
   const [resultEntries, setResultEntries] = useState<{ place: number; username: string }[]>([
     { place: 1, username: "" }, { place: 2, username: "" }, { place: 3, username: "" },
@@ -872,6 +877,44 @@ export default function AdminScreen() {
     ));
   }
 
+  async function handleEditTournament() {
+    if (!editTournTarget) return;
+    setTournError(null);
+    setEditingTourn(true);
+    const maxP = parseInt(editTournForm.max_players, 10);
+    const updates: Record<string, unknown> = {
+      title: editTournForm.title.trim() || editTournTarget.title,
+      game_type: editTournForm.game_type.trim() || null,
+      max_players: isNaN(maxP) ? editTournTarget.max_players : maxP,
+    };
+    if (editTournForm.proposed_date.trim()) {
+      const d = new Date(editTournForm.proposed_date.trim());
+      if (!isNaN(d.getTime())) updates.proposed_date = d.toISOString();
+    }
+    const { error } = await supabase.from("tournaments").update(updates).eq("id", editTournTarget.id);
+    if (error) { setTournError(error.message); }
+    else {
+      setManageTournaments(prev => prev.map(t =>
+        t.id === editTournTarget.id ? { ...t, ...updates } as ManageTournament : t
+      ));
+      setEditTournTarget(null);
+    }
+    setEditingTourn(false);
+  }
+
+  async function handleDeleteTournament() {
+    if (!deleteTournTarget) return;
+    setTournError(null);
+    setDeletingTourn(true);
+    const { error } = await supabase.from("tournaments").delete().eq("id", deleteTournTarget.id);
+    if (error) { setTournError(error.message); }
+    else {
+      setManageTournaments(prev => prev.filter(t => t.id !== deleteTournTarget.id));
+      setDeleteTournTarget(null);
+    }
+    setDeletingTourn(false);
+  }
+
   async function handleRevokeQR(tournamentId: string) {
     setTournError(null);
     setQrRevoking(tournamentId);
@@ -1343,6 +1386,28 @@ export default function AdminScreen() {
                               <Text style={styles.manageTournCompletedText}>Done</Text>
                             </View>
                           )}
+                          <Pressable
+                            style={styles.manageTournIconBtn}
+                            onPress={() => {
+                              setEditTournForm({
+                                title: t.title,
+                                game_type: t.game_type ?? "",
+                                proposed_date: t.proposed_date
+                                  ? new Date(t.proposed_date).toISOString().slice(0, 10)
+                                  : "",
+                                max_players: String(t.max_players),
+                              });
+                              setEditTournTarget(t);
+                            }}
+                          >
+                            <Ionicons name="create-outline" size={15} color="#888" />
+                          </Pressable>
+                          <Pressable
+                            style={[styles.manageTournIconBtn, { borderColor: "rgba(239,68,68,0.25)", backgroundColor: "rgba(239,68,68,0.06)" }]}
+                            onPress={() => setDeleteTournTarget(t)}
+                          >
+                            <Ionicons name="trash-outline" size={15} color="#ef4444" />
+                          </Pressable>
                         </View>
                         </View>
 
@@ -1832,6 +1897,107 @@ export default function AdminScreen() {
                 {actioning_tourn
                   ? <ActivityIndicator size="small" color="#fff" />
                   : <Text style={[styles.confirmActionText, { color: "#fff" }]}>Deny</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit tournament modal */}
+      <Modal visible={!!editTournTarget} transparent animationType="slide" onRequestClose={() => setEditTournTarget(null)}>
+        <View style={styles.confirmBg}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setEditTournTarget(null)} />
+          <View style={styles.editTournSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.editTournTitle}>Edit Tournament</Text>
+            <Text style={styles.editTournSub}>"{editTournTarget?.title}"</Text>
+
+            <Text style={styles.editTournLabel}>Title</Text>
+            <TextInput
+              style={styles.editTournInput}
+              placeholder={editTournTarget?.title ?? "Title"}
+              placeholderTextColor="#333"
+              value={editTournForm.title}
+              onChangeText={v => setEditTournForm(f => ({ ...f, title: v }))}
+            />
+
+            <Text style={styles.editTournLabel}>Game Type</Text>
+            <TextInput
+              style={styles.editTournInput}
+              placeholder="e.g. pinball"
+              placeholderTextColor="#333"
+              value={editTournForm.game_type}
+              onChangeText={v => setEditTournForm(f => ({ ...f, game_type: v }))}
+            />
+
+            <Text style={styles.editTournLabel}>Proposed Date (YYYY-MM-DD)</Text>
+            <TextInput
+              style={styles.editTournInput}
+              placeholder="2025-08-15"
+              placeholderTextColor="#333"
+              value={editTournForm.proposed_date}
+              onChangeText={v => setEditTournForm(f => ({ ...f, proposed_date: v }))}
+            />
+
+            <Text style={styles.editTournLabel}>Max Players</Text>
+            <TextInput
+              style={styles.editTournInput}
+              placeholder="20"
+              placeholderTextColor="#333"
+              keyboardType="number-pad"
+              value={editTournForm.max_players}
+              onChangeText={v => setEditTournForm(f => ({ ...f, max_players: v }))}
+            />
+
+            {tournError && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={14} color="#ef4444" />
+                <Text style={styles.errorBoxText}>{tournError}</Text>
+              </View>
+            )}
+
+            <View style={styles.confirmBtns}>
+              <Pressable style={styles.confirmCancel} onPress={() => setEditTournTarget(null)}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.editTournSaveBtn, editingTourn && { opacity: 0.5 }]}
+                onPress={handleEditTournament}
+                disabled={editingTourn}
+              >
+                {editingTourn
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <Text style={styles.editTournSaveText}>Save Changes</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Delete tournament confirm modal */}
+      <Modal visible={!!deleteTournTarget} transparent animationType="fade" onRequestClose={() => setDeleteTournTarget(null)}>
+        <View style={styles.confirmBg}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setDeleteTournTarget(null)} />
+          <View style={styles.confirmSheet}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.25)" }]}>
+              <Ionicons name="trophy-outline" size={36} color="#ef4444" />
+            </View>
+            <Text style={styles.confirmTitle}>Delete Tournament?</Text>
+            <Text style={styles.confirmBody}>
+              "{deleteTournTarget?.title}" will be permanently removed. This cannot be undone.
+            </Text>
+            <View style={styles.confirmBtns}>
+              <Pressable style={styles.confirmCancel} onPress={() => setDeleteTournTarget(null)}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmActionBtn, { backgroundColor: "#ef4444" }, deletingTourn && { opacity: 0.5 }]}
+                onPress={handleDeleteTournament}
+                disabled={deletingTourn}
+              >
+                {deletingTourn
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={[styles.confirmActionText, { color: "#fff" }]}>Delete</Text>}
               </Pressable>
             </View>
           </View>
@@ -2568,4 +2734,39 @@ const styles = StyleSheet.create({
     backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center",
   },
   suppSendBtnOff: { backgroundColor: "#0a4a55", opacity: 0.5 },
+
+  manageTournIconBtn: {
+    width: 30, height: 30, borderRadius: 8,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(136,136,136,0.25)",
+    backgroundColor: "rgba(136,136,136,0.06)",
+  },
+
+  editTournSheet: {
+    backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40,
+    borderTopWidth: 1, borderColor: "#1e1e1e",
+  },
+  editTournTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
+  editTournSub:   { color: "#555", fontSize: 13, marginBottom: 20 },
+  editTournLabel: { color: "#888", fontSize: 12, fontWeight: "700", marginBottom: 6, marginTop: 12 },
+  editTournInput: {
+    backgroundColor: "#0a0a0a", borderRadius: 12,
+    borderWidth: 1, borderColor: "#1e1e1e",
+    color: "#fff", fontSize: 15,
+    paddingHorizontal: 14, paddingVertical: 12,
+  },
+  editTournSaveBtn: {
+    flex: 1, backgroundColor: "#06b6d4", borderRadius: 14,
+    paddingVertical: 14, alignItems: "center", justifyContent: "center",
+  },
+  editTournSaveText: { color: "#000", fontWeight: "900", fontSize: 15 },
+
+  errorBox: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 10,
+    padding: 10, marginTop: 12,
+    borderWidth: 1, borderColor: "rgba(239,68,68,0.2)",
+  },
+  errorBoxText: { color: "#ef4444", fontSize: 12, flex: 1 },
 });
