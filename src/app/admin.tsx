@@ -951,8 +951,13 @@ export default function AdminScreen() {
         )}
       </View>
 
-      {/* Main tab bar */}
-      <View style={styles.mainTabBar}>
+      {/* Main tab bar — horizontal scroll so all 9 tabs fit on small screens */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.mainTabBar}
+        contentContainerStyle={styles.mainTabBarContent}
+      >
         {MAIN_TABS.filter((t) => t.key !== "users" || userRole === "owner" || userRole === "architect").map(({ key, label, icon }) => (
           <Pressable
             key={key}
@@ -968,7 +973,7 @@ export default function AdminScreen() {
             <Text style={[styles.mainTabLabel, mainTab === key && styles.mainTabLabelActive]}>{label}</Text>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
 
       {/* ── Reviews ── */}
       {mainTab === "reviews" && (
@@ -2141,15 +2146,16 @@ const styles = StyleSheet.create({
   countBadge:  { minWidth: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
   countBadgeText: { color: "#000", fontWeight: "900", fontSize: 14 },
 
-  // Main tabs (Reviews / Stats / Health)
+  // Main tabs (Reviews / Stats / Health / …)
   mainTabBar: {
-    flexDirection: "row",
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
-    paddingHorizontal: 16,
+  },
+  mainTabBarContent: {
+    flexDirection: "row", paddingHorizontal: 8,
   },
   mainTabItem: {
-    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 6, paddingVertical: 13,
+    flexDirection: "row", alignItems: "center", justifyContent: "center",
+    gap: 6, paddingVertical: 13, paddingHorizontal: 12,
     borderBottomWidth: 2, borderBottomColor: "transparent",
   },
   mainTabItemActive: { borderBottomColor: "#f59e0b" },

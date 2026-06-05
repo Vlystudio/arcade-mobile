@@ -2,6 +2,7 @@ import * as Sentry from "@sentry/react-native";
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
 import React from "react";
+import { Platform, useWindowDimensions, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 Sentry.init({
@@ -18,13 +19,21 @@ import { CartProvider } from "../context/cart-context";
 import { LocationProvider } from "../context/location-context";
 
 export default function RootLayout() {
+  const { width } = useWindowDimensions();
+  const isWideWeb = Platform.OS === "web" && width >= 700;
+
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={isWideWeb ? { backgroundColor: "#050505" } : undefined}>
       <AuthProvider>
       <AdminProvider>
       <LocationProvider>
       <CartProvider>
       <ThemeProvider value={DarkTheme}>
+        {/* On wide screens, center and constrain to a phone-like column */}
+        <View style={isWideWeb
+          ? { flex: 1, maxWidth: 480, width: "100%", alignSelf: "center", overflow: "hidden" }
+          : { flex: 1 }
+        }>
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: "#000000" },
@@ -73,6 +82,7 @@ export default function RootLayout() {
           <Stack.Screen name="support-chat" options={{ headerShown: false }} />
           <Stack.Screen name="ff-signup" options={{ headerShown: false }} />
         </Stack>
+        </View>
       </ThemeProvider>
       </CartProvider>
       </LocationProvider>
