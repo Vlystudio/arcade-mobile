@@ -21,7 +21,7 @@ export default async function handler(req: any, res: any) {
 
   const url = new URL("https://www.googleapis.com/youtube/v3/search");
   url.searchParams.set("part", "snippet");
-  url.searchParams.set("q", q);
+  url.searchParams.set("q", q + " karaoke");
   url.searchParams.set("type", "video");
   url.searchParams.set("maxResults", "12");
   url.searchParams.set("key", apiKey);
