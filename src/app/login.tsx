@@ -203,7 +203,6 @@ export default function LoginScreen() {
               <Text style={styles.logoMarkText}>AT</Text>
             </View>
             <Text style={styles.appName}>ArcadeTracker</Text>
-            <Text style={styles.tagline}>Your arcade. Your stats.</Text>
           </View>
 
           {/* Account benefit notice */}
