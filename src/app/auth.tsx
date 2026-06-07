@@ -12,7 +12,15 @@ export default function AuthScreen() {
             <Text style={styles.logoMarkText}>AT</Text>
           </View>
           <Text style={styles.appName}>ArcadeTracker</Text>
-          <Text style={styles.tagline}>Track every roll. Own every lane.</Text>
+          <Text style={styles.tagline}>Your arcade. Your stats.</Text>
+        </View>
+
+        <View style={styles.noticeBanner}>
+          <Ionicons name="game-controller-outline" size={18} color="#06b6d4" style={{ marginTop: 1 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.noticeTitle}>Want to track your scores?</Text>
+            <Text style={styles.noticeBody}>Create a free account to log high scores, join teams, enter tournaments, and appear on the leaderboard.</Text>
+          </View>
         </View>
 
         <View style={styles.actions}>
@@ -97,4 +105,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#a855f7",
   },
   karaokeBtnText: { color: "#a855f7", fontWeight: "800", fontSize: 17 },
+
+  noticeBanner: {
+    flexDirection: "row", alignItems: "flex-start", gap: 12,
+    backgroundColor: "rgba(6,182,212,0.07)",
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.2)",
+    borderRadius: 16, padding: 14, marginBottom: 20,
+  },
+  noticeTitle: { color: "#06b6d4", fontSize: 13, fontWeight: "800", marginBottom: 3 },
+  noticeBody: { color: "#555", fontSize: 13, lineHeight: 19 },
 });
