@@ -27,6 +27,10 @@ import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { moderateImage } from "../../lib/moderate-image";
 import { moderateText } from "../../lib/moderate-text";
+import { AppTour } from "../components/app-tour";
+import { useTour } from "../hooks/use-tour";
+import { getTourSteps } from "../../lib/tour-steps";
+import type { AppRole } from "../components/role-badge";
 
 type Post = {
   id: string;
@@ -100,6 +104,9 @@ export default function FeedScreen() {
   const [editPhotoRemoved, setEditPhotoRemoved] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  const [userRole, setUserRole] = useState<AppRole>("user");
+  const { tourVisible, dismissTour } = useTour(user?.id);
 
   async function loadFeed(feedTab: FeedTab) {
     if (!user) return;
@@ -196,8 +203,12 @@ export default function FeedScreen() {
 
   async function loadProfile() {
     if (!user) return;
-    const { data } = await supabase.from("profiles").select("username, avatar_url").eq("id", user.id).single();
-    if (data) { setUsername(data.username); setMyAvatarUrl(data.avatar_url ?? null); }
+    const { data } = await supabase.from("profiles").select("username, avatar_url, role").eq("id", user.id).single();
+    if (data) {
+      setUsername(data.username);
+      setMyAvatarUrl(data.avatar_url ?? null);
+      setUserRole((data.role as AppRole) ?? "user");
+    }
   }
 
   useEffect(() => {
@@ -859,6 +870,12 @@ export default function FeedScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <AppTour
+        visible={tourVisible}
+        steps={getTourSteps(userRole)}
+        onDone={dismissTour}
+      />
     </View>
   );
 }

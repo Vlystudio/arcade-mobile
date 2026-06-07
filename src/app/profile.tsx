@@ -25,6 +25,9 @@ import { supabase } from "../../lib/supabase";
 import { moderateImage } from "../../lib/moderate-image";
 import { moderateText } from "../../lib/moderate-text";
 import { sendSecurityAlert } from "../../lib/security-notify";
+import { AppTour } from "../components/app-tour";
+import { useTour } from "../hooks/use-tour";
+import { getTourSteps } from "../../lib/tour-steps";
 
 type GameOption = { id: string; name: string; type: string; count: number };
 type TournPlacement = { tournament_id: string; title: string; placement: number; proposed_date: string | null };
@@ -39,6 +42,7 @@ export default function ProfileScreen() {
   const [email, setEmail] = useState<string | null>(null);
   const [role, setRole] = useState<AppRole>("user");
   const isAdmin = isElevatedRole(role);
+  const { tourVisible, replayTour, dismissTour } = useTour(user?.id);
   const [pendingCount, setPendingCount] = useState(0);
   const [teamName, setTeamName] = useState<string | null>(null);
   const [teamRole, setTeamRole] = useState<string | null>(null);
@@ -544,6 +548,7 @@ export default function ProfileScreen() {
             <ActionRow icon="trophy-outline" label="Leagues" onPress={() => router.push("/leagues")} divider />
             <ActionRow icon="chatbox-ellipses-outline" label="Contact Support" onPress={() => router.push("/support-chat" as any)} divider />
             <ActionRow icon="star-half-outline" label="Send Feedback" onPress={() => router.push("/feedback" as any)} divider />
+            <ActionRow icon="map-outline" label="How to Use This App" onPress={replayTour} divider />
             {(role === "owner" || role === "architect") && (
               <ActionRow icon="business-outline" label="Owner Dashboard" onPress={() => router.push("/owner" as any)} divider />
             )}
@@ -766,6 +771,12 @@ export default function ProfileScreen() {
           </View>
         </View>
       </Modal>
+
+      <AppTour
+        visible={tourVisible}
+        steps={getTourSteps(role)}
+        onDone={dismissTour}
+      />
     </View>
   );
 }
