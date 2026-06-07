@@ -114,15 +114,24 @@ export default function FeedScreen() {
     if (feedTab === "arcade") {
       baseQuery = baseQuery.eq("post_type", "announcement");
     } else {
-      const [followingRes, followersRes] = await Promise.all([
+      const [followingRes, followersRes, friendsRes] = await Promise.all([
         supabase.from("follows").select("following_id").eq("follower_id", user.id),
         supabase.from("follows").select("follower_id").eq("following_id", user.id),
+        supabase
+          .from("friendships")
+          .select("requester_id, addressee_id")
+          .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
+          .eq("status", "accepted"),
       ]);
+      const friendIds = (friendsRes.data ?? []).map((f: any) =>
+        f.requester_id === user.id ? f.addressee_id : f.requester_id
+      );
       const ids = [
         ...new Set([
           user.id,
           ...(followingRes.data?.map((f) => f.following_id) ?? []),
           ...(followersRes.data?.map((f) => f.follower_id) ?? []),
+          ...friendIds,
         ]),
       ];
       baseQuery = baseQuery.in("user_id", ids);
