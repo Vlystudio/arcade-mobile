@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,8 +20,10 @@ const LANE_COUNT = 6;
 const BALLS_PER_PLAYER = 3;
 const PLAYERS_PER_GAME = 3;
 const MIN_PLAYERS = 1;
-const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-const INACTIVITY_CHECK_INTERVAL_MS = 30 * 1000; // check every 30 seconds
+const INACTIVITY_WARNING_MS  = 8 * 60 * 1000;  // show warning after 8 min
+const INACTIVITY_TIMEOUT_MS  = 10 * 60 * 1000; // abandon after 10 min
+const INACTIVITY_CHECK_MS    = 30 * 1000;       // check every 30 seconds
+const WARNING_DURATION_S     = 120;             // 2-minute countdown
 
 type LaneSession = { id: string; team_id: string; lane_number: number; status: string; team_name?: string; last_activity_at?: string };
 type SessionPlayer = { session_id: string; player_user_id: string; username: string; avatar_url: string | null };
@@ -60,6 +63,10 @@ export default function SkeeballTrackerScreen() {
   const [balls, setBalls] = useState(["", "", ""]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // Inactivity warning
+  const [showWarning, setShowWarning] = useState(false);
+  const [warningCountdown, setWarningCountdown] = useState(WARNING_DURATION_S);
 
   const channelRef = useRef<any>(null);
 
@@ -109,38 +116,49 @@ export default function SkeeballTrackerScreen() {
     return () => { ch.unsubscribe(); };
   }, [teamId, mySession]);
 
-  // Inactivity timeout — check every 30s; abandon sessions with no activity for 10 min
+  // Inactivity check — every 30s, show warning at 8 min, abandon at 10 min
   useEffect(() => {
     const interval = setInterval(async () => {
       const now = Date.now();
 
-      // Abandon our own session if inactive
       if (mySession?.status === "active" && mySession.last_activity_at) {
         const idle = now - new Date(mySession.last_activity_at).getTime();
         if (idle >= INACTIVITY_TIMEOUT_MS) {
+          setShowWarning(false);
           await abandonSession(mySession.id);
           return;
         }
-      }
-
-      // Also clean up any other team's stale session (handles disconnected teams)
-      for (const s of allActiveSessions) {
-        if (s.team_id === teamId) continue;
-        if (s.last_activity_at) {
-          const idle = now - new Date(s.last_activity_at).getTime();
-          if (idle >= INACTIVITY_TIMEOUT_MS) {
-            await supabase
-              .from("skeeball_sessions")
-              .update({ status: "abandoned" })
-              .eq("id", s.id)
-              .eq("status", "active");
-          }
+        if (idle >= INACTIVITY_WARNING_MS && !showWarning) {
+          const secondsLeft = Math.ceil((INACTIVITY_TIMEOUT_MS - idle) / 1000);
+          setWarningCountdown(Math.min(secondsLeft, WARNING_DURATION_S));
+          setShowWarning(true);
         }
       }
-    }, INACTIVITY_CHECK_INTERVAL_MS);
+
+      // Clean up other disconnected teams' stale sessions
+      for (const s of allActiveSessions) {
+        if (s.team_id === teamId || !s.last_activity_at) continue;
+        const idle = now - new Date(s.last_activity_at).getTime();
+        if (idle >= INACTIVITY_TIMEOUT_MS) {
+          await supabase.from("skeeball_sessions").update({ status: "abandoned" }).eq("id", s.id).eq("status", "active");
+        }
+      }
+    }, INACTIVITY_CHECK_MS);
 
     return () => clearInterval(interval);
-  }, [mySession, allActiveSessions, teamId]);
+  }, [mySession, allActiveSessions, teamId, showWarning]);
+
+  // Countdown ticker — ticks every second while warning is visible
+  useEffect(() => {
+    if (!showWarning) return;
+    if (warningCountdown <= 0) {
+      setShowWarning(false);
+      if (mySession) abandonSession(mySession.id);
+      return;
+    }
+    const t = setTimeout(() => setWarningCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [showWarning, warningCountdown]);
 
   // Auto-complete when all 9 balls submitted
   useEffect(() => {
@@ -256,10 +274,12 @@ export default function SkeeballTrackerScreen() {
         .upsert(inserts, { onConflict: "session_id,player_user_id,ball_number" });
       if (error) throw error;
 
-      // Reset inactivity timer
+      // Reset inactivity timer and dismiss any warning
       const now = new Date().toISOString();
       await supabase.from("skeeball_sessions").update({ last_activity_at: now }).eq("id", mySession.id);
       setMySession((prev) => prev ? { ...prev, last_activity_at: now } : prev);
+      setShowWarning(false);
+      setWarningCountdown(WARNING_DURATION_S);
 
       setBallScores((prev) => [
         ...prev.filter((b) => b.player_user_id !== user.id),
@@ -270,6 +290,15 @@ export default function SkeeballTrackerScreen() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function stayActive() {
+    if (!mySession) return;
+    const now = new Date().toISOString();
+    await supabase.from("skeeball_sessions").update({ last_activity_at: now }).eq("id", mySession.id);
+    setMySession((prev) => prev ? { ...prev, last_activity_at: now } : prev);
+    setShowWarning(false);
+    setWarningCountdown(WARNING_DURATION_S);
   }
 
   async function abandonSession(sessionId: string) {
@@ -385,6 +414,7 @@ export default function SkeeballTrackerScreen() {
   if (mySession && iAmPlayer && myBallsSubmitted) {
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+        {warningModal}
         <View style={s.topBar}>
           <Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
           <Text style={s.topBarTitle}>Lane {mySession.lane_number}</Text>
@@ -431,6 +461,7 @@ export default function SkeeballTrackerScreen() {
     const ballTotal = balls.reduce((sum, b) => sum + (parseInt(b) || 0), 0);
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+        {warningModal}
         <View style={s.topBar}>
           <Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
           <Text style={s.topBarTitle}>Lane {mySession.lane_number}</Text>
@@ -489,6 +520,31 @@ export default function SkeeballTrackerScreen() {
       </SafeAreaView>
     );
   }
+
+  // ─── Inactivity warning modal (shown over any active session view) ───────────
+
+  const warningModal = (
+    <Modal visible={showWarning} transparent animationType="fade" statusBarTranslucent>
+      <View style={s.warningOverlay}>
+        <View style={s.warningCard}>
+          <View style={s.warningIconWrap}>
+            <Ionicons name="warning" size={36} color="#ef4444" />
+          </View>
+          <Text style={s.warningTitle}>Inactivity Detected</Text>
+          <Text style={s.warningSub}>
+            You will be removed from Lane {mySession?.lane_number} due to inactivity in
+          </Text>
+          <Text style={s.warningCountdown}>
+            {String(Math.floor(warningCountdown / 60)).padStart(2, "0")}:{String(warningCountdown % 60).padStart(2, "0")}
+          </Text>
+          <Pressable style={s.warningBtn} onPress={stayActive}>
+            <Ionicons name="checkmark-circle-outline" size={20} color="#000" />
+            <Text style={s.warningBtnText}>I'm Still Here</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
 
   // ─── Setup (no active session) ────────────────────────────────────────────────
 
@@ -674,4 +730,13 @@ const s = StyleSheet.create({
   youChipText: { color: "#06b6d4", fontSize: 10, fontWeight: "900" },
   ballDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#1e1e1e", borderWidth: 1, borderColor: "#2a2a2a" },
   ballDotFilled: { backgroundColor: "#22c55e", borderColor: "#22c55e" },
+
+  warningOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", alignItems: "center", justifyContent: "center", padding: 32 },
+  warningCard: { width: "100%", backgroundColor: "#111", borderRadius: 24, padding: 28, alignItems: "center", borderWidth: 1.5, borderColor: "rgba(239,68,68,0.4)" },
+  warningIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(239,68,68,0.12)", alignItems: "center", justifyContent: "center", marginBottom: 20, borderWidth: 1, borderColor: "rgba(239,68,68,0.3)" },
+  warningTitle: { color: "#ef4444", fontSize: 22, fontWeight: "900", marginBottom: 10, textAlign: "center" },
+  warningSub: { color: "#666", fontSize: 14, textAlign: "center", marginBottom: 16, lineHeight: 20 },
+  warningCountdown: { color: "#ef4444", fontSize: 56, fontWeight: "900", letterSpacing: 2, marginBottom: 28 },
+  warningBtn: { backgroundColor: "#06b6d4", borderRadius: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 16, paddingHorizontal: 32 },
+  warningBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
 });
