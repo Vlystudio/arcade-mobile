@@ -14,8 +14,8 @@ type Tab = {
 const BASE_TABS: Tab[] = [
   { label: "Feed",     icon: "home-outline",            iconActive: "home",            route: "/" },
   { label: "Games",    icon: "game-controller-outline", iconActive: "game-controller", route: "/games" },
+  { label: "Trivia",   icon: "help-circle-outline",     iconActive: "help-circle",     route: "/trivia" },
   { label: "Teams",    icon: "people-outline",          iconActive: "people",          route: "/teams" },
-  { label: "Tourneys", icon: "trophy-outline",          iconActive: "trophy",          route: "/tournaments" },
   { label: "Food",     icon: "restaurant-outline",      iconActive: "restaurant",      route: "/food" },
   { label: "Profile",  icon: "person-outline",          iconActive: "person",          route: "/profile" },
 ];

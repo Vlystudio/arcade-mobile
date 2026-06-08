@@ -59,6 +59,7 @@ export default function RootLayout() {
           <Stack.Screen name="food-cart" options={{ headerShown: false }} />
           <Stack.Screen name="tournaments" options={{ headerShown: false }} />
           <Stack.Screen name="trivia" options={{ headerShown: false }} />
+          <Stack.Screen name="trivia-join" options={{ headerShown: false }} />
           <Stack.Screen name="pool" options={{ headerShown: false }} />
           <Stack.Screen name="lane-scores" options={{ headerShown: false }} />
           <Stack.Screen name="privacy" options={{ headerShown: false }} />

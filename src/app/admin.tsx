@@ -23,7 +23,7 @@ import { supabase } from "../../lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke" | "trivia";
 type SupportTicket = { id: string; user_id: string; status: string; created_at: string; username: string; avatar_url: string | null };
 type SupportMsg    = { id: string; sender_id: string; content: string; is_admin_msg: boolean; created_at: string };
 type ReviewTab = "pending" | "approved" | "denied";
@@ -114,6 +114,30 @@ type BracketGame  = { id: string; game_number: number; status: string; scores: B
 type BracketGroup = { id: string; group_number: number; status: string; slots: BracketSlot[] | null; games: BracketGame[] | null };
 type BracketRound = { id: string; round_number: number; round_name: string; status: string; groups: BracketGroup[] | null };
 
+type AdminTriviaQuestion = {
+  id: string;
+  question: string;
+  question_type: "multiple_choice" | "text";
+  options: { id: string; text: string }[];
+  correct_answer: string;
+  points: number;
+  category: string | null;
+  created_at: string;
+};
+
+type AdminTriviaGame = {
+  id: string;
+  title: string;
+  status: "lobby" | "active" | "finished";
+  current_question_index: number;
+  max_participants: number;
+  allow_teams: boolean;
+  min_team_size: number;
+  signup_token: string;
+  participant_count?: number;
+  created_at: string;
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
@@ -126,6 +150,7 @@ const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
   { key: "forums",      label: "Forums",      icon: "chatbubbles-outline" },
   { key: "support",     label: "Support",     icon: "headset-outline" },
   { key: "karaoke",     label: "Karaoke",     icon: "mic-outline" },
+  { key: "trivia",      label: "Trivia",      icon: "help-circle-outline" },
   { key: "users",       label: "Users",       icon: "person-outline" },
 ];
 
@@ -270,6 +295,24 @@ export default function AdminScreen() {
   const [showHistory, setShowHistory]           = useState(false);
   const [karaokeError, setKaraokeError]         = useState<string | null>(null);
 
+  // Trivia state
+  const [triviaQuestions, setTriviaQuestions]   = useState<AdminTriviaQuestion[]>([]);
+  const [triviaGames, setTriviaGames]           = useState<AdminTriviaGame[]>([]);
+  const [triviaLoading, setTriviaLoading]       = useState(false);
+  const [triviaTab, setTriviaTab]               = useState<"questions" | "games">("games");
+  const [triviaError, setTriviaError]           = useState<string | null>(null);
+  // New question form
+  const [qForm, setQForm] = useState({ question: "", type: "multiple_choice" as "multiple_choice" | "text", optA: "", optB: "", optC: "", optD: "", correct: "a", points: "100", category: "" });
+  const [savingQuestion, setSavingQuestion]     = useState(false);
+  const [editingQuestion, setEditingQuestion]   = useState<AdminTriviaQuestion | null>(null);
+  const [deletingQuestion, setDeletingQuestion] = useState<string | null>(null);
+  // New game form
+  const [gForm, setGForm] = useState({ title: "Trivia Night", maxParticipants: "20", allowTeams: true, minTeamSize: "3", selectedQuestions: [] as string[] });
+  const [creatingGame, setCreatingGame]         = useState(false);
+  const [triviaGameActioning, setTriviaGameActioning] = useState<string | null>(null);
+  const [triviaQrGame, setTriviaQrGame]         = useState<AdminTriviaGame | null>(null);
+  const [showNewGameForm, setShowNewGameForm]   = useState(false);
+
   // Player list management (all tournaments)
   type RegPlayer = { id: string; user_id: string | null; guest_name: string | null; username: string; status: string };
   const [playerListTarget, setPlayerListTarget] = useState<ManageTournament | null>(null);
@@ -318,6 +361,7 @@ export default function AdminScreen() {
     if (mainTab === "forums") loadPendingForums(forumsTab);
     if (mainTab === "support") { loadSupportTickets(); setUnreadSupport(0); }
     if (mainTab === "karaoke") loadKaraokeQueue();
+    if (mainTab === "trivia") loadTriviaData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
@@ -1159,6 +1203,115 @@ export default function AdminScreen() {
     setClearingHistory(false);
   }
 
+  // ── Trivia ──────────────────────────────────────────────────────────────────
+
+  async function loadTriviaData() {
+    setTriviaLoading(true);
+    setTriviaError(null);
+    const [{ data: questions }, { data: games }] = await Promise.all([
+      supabase.from("trivia_questions").select("*").order("created_at", { ascending: false }),
+      supabase.from("trivia_games").select("*").order("created_at", { ascending: false }),
+    ]);
+    if (questions) {
+      const withCounts = await Promise.all(
+        (games ?? []).map(async (g) => {
+          const { count } = await supabase.from("trivia_participants").select("id", { count: "exact", head: true }).eq("game_id", g.id);
+          return { ...g, participant_count: count ?? 0 };
+        })
+      );
+      setTriviaQuestions(questions as AdminTriviaQuestion[]);
+      setTriviaGames(withCounts as AdminTriviaGame[]);
+    }
+    setTriviaLoading(false);
+  }
+
+  async function handleSaveQuestion() {
+    setSavingQuestion(true);
+    setTriviaError(null);
+    const opts = qForm.type === "multiple_choice"
+      ? [
+          { id: "a", text: qForm.optA.trim() },
+          { id: "b", text: qForm.optB.trim() },
+          qForm.optC.trim() ? { id: "c", text: qForm.optC.trim() } : null,
+          qForm.optD.trim() ? { id: "d", text: qForm.optD.trim() } : null,
+        ].filter(Boolean)
+      : [];
+
+    if (editingQuestion) {
+      const { error } = await supabase.from("trivia_questions").update({
+        question: qForm.question.trim(),
+        question_type: qForm.type,
+        options: opts,
+        correct_answer: qForm.correct,
+        points: parseInt(qForm.points) || 100,
+        category: qForm.category.trim() || null,
+      }).eq("id", editingQuestion.id);
+      if (error) { setTriviaError(error.message); setSavingQuestion(false); return; }
+    } else {
+      const { error } = await supabase.from("trivia_questions").insert({
+        question: qForm.question.trim(),
+        question_type: qForm.type,
+        options: opts,
+        correct_answer: qForm.correct,
+        points: parseInt(qForm.points) || 100,
+        category: qForm.category.trim() || null,
+        created_by: user!.id,
+      });
+      if (error) { setTriviaError(error.message); setSavingQuestion(false); return; }
+    }
+    setSavingQuestion(false);
+    setEditingQuestion(null);
+    setQForm({ question: "", type: "multiple_choice", optA: "", optB: "", optC: "", optD: "", correct: "a", points: "100", category: "" });
+    await loadTriviaData();
+  }
+
+  async function handleDeleteQuestion(id: string) {
+    setDeletingQuestion(id);
+    await supabase.from("trivia_questions").delete().eq("id", id);
+    setDeletingQuestion(null);
+    setTriviaQuestions(prev => prev.filter(q => q.id !== id));
+  }
+
+  async function handleCreateGame() {
+    if (!gForm.title.trim() || gForm.selectedQuestions.length === 0) {
+      setTriviaError("Enter a title and select at least one question.");
+      return;
+    }
+    setCreatingGame(true);
+    setTriviaError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_trivia_create_game", {
+      p_title: gForm.title.trim(),
+      p_max_participants: parseInt(gForm.maxParticipants) || 20,
+      p_allow_teams: gForm.allowTeams,
+      p_min_team_size: parseInt(gForm.minTeamSize) || 3,
+      p_question_ids: gForm.selectedQuestions,
+    });
+    setCreatingGame(false);
+    if (error || (data as any)?.error) {
+      setTriviaError((data as any)?.error ?? error?.message ?? "Failed to create game.");
+      return;
+    }
+    setShowNewGameForm(false);
+    setGForm({ title: "Trivia Night", maxParticipants: "20", allowTeams: true, minTeamSize: "3", selectedQuestions: [] });
+    await loadTriviaData();
+  }
+
+  async function handleTriviaGameAction(gameId: string, action: "start" | "next" | "end" | "delete") {
+    setTriviaGameActioning(gameId);
+    const rpc = action === "start" ? "rpc_admin_trivia_start_game"
+      : action === "next" ? "rpc_admin_trivia_next_question"
+      : action === "end" ? "rpc_admin_trivia_end_game"
+      : "rpc_admin_trivia_delete_game";
+    const { error } = await supabase.rpc(rpc, { p_game_id: gameId });
+    setTriviaGameActioning(null);
+    if (error) { setTriviaError(error.message); return; }
+    await loadTriviaData();
+  }
+
+  async function handleGradeAnswer(answerId: string, isCorrect: boolean) {
+    await supabase.rpc("rpc_admin_trivia_grade", { p_answer_id: answerId, p_is_correct: isCorrect });
+  }
+
   async function handleRevokeQR(tournamentId: string) {
     setTournError(null);
     setQrRevoking(tournamentId);
@@ -1224,6 +1377,7 @@ export default function AdminScreen() {
               : mainTab === "forums" ? "Forum approvals"
               : mainTab === "support" ? "Support inbox"
               : mainTab === "karaoke" ? "Monitor & moderate the queue"
+              : mainTab === "trivia" ? "Question bank & live games"
               : "Business health"}
           </Text>
         </View>
@@ -2276,6 +2430,377 @@ export default function AdminScreen() {
           ))}
         </ScrollView>
       )}
+
+      {/* ── Trivia ── */}
+      {mainTab === "trivia" && (
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.content}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={loadTriviaData} tintColor="#06b6d4" />}
+        >
+          {/* Sub-tab switcher */}
+          <View style={styles.triviaTabRow}>
+            <Pressable style={[styles.triviaTabBtn, triviaTab === "games" && styles.triviaTabBtnActive]} onPress={() => setTriviaTab("games")}>
+              <Ionicons name="game-controller-outline" size={14} color={triviaTab === "games" ? "#06b6d4" : "#555"} />
+              <Text style={[styles.triviaTabBtnText, triviaTab === "games" && { color: "#06b6d4" }]}>Games</Text>
+            </Pressable>
+            <Pressable style={[styles.triviaTabBtn, triviaTab === "questions" && styles.triviaTabBtnActive]} onPress={() => setTriviaTab("questions")}>
+              <Ionicons name="help-circle-outline" size={14} color={triviaTab === "questions" ? "#06b6d4" : "#555"} />
+              <Text style={[styles.triviaTabBtnText, triviaTab === "questions" && { color: "#06b6d4" }]}>Question Bank</Text>
+            </Pressable>
+          </View>
+
+          {!!triviaError && (
+            <View style={styles.inlineError}>
+              <Text style={styles.inlineErrorText}>{triviaError}</Text>
+            </View>
+          )}
+
+          {triviaLoading ? (
+            <ActivityIndicator color="#06b6d4" style={{ marginTop: 40 }} />
+          ) : triviaTab === "games" ? (
+            <>
+              {/* Create game button */}
+              <Pressable style={styles.triviaCreateBtn} onPress={() => { setTriviaError(null); setShowNewGameForm(v => !v); }}>
+                <Ionicons name={showNewGameForm ? "chevron-up" : "add-circle-outline"} size={16} color="#06b6d4" />
+                <Text style={styles.triviaCreateBtnText}>{showNewGameForm ? "Cancel" : "Create New Game"}</Text>
+              </Pressable>
+
+              {showNewGameForm && (
+                <View style={styles.triviaFormCard}>
+                  <Text style={styles.triviaFormLabel}>Game Title</Text>
+                  <TextInput
+                    style={styles.triviaFormInput}
+                    value={gForm.title}
+                    onChangeText={v => setGForm(f => ({ ...f, title: v }))}
+                    placeholderTextColor="#333"
+                  />
+                  <View style={styles.triviaFormRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.triviaFormLabel}>Max Players</Text>
+                      <TextInput style={styles.triviaFormInput} keyboardType="number-pad" value={gForm.maxParticipants} onChangeText={v => setGForm(f => ({ ...f, maxParticipants: v }))} placeholderTextColor="#333" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.triviaFormLabel}>Min Team Size</Text>
+                      <TextInput style={styles.triviaFormInput} keyboardType="number-pad" value={gForm.minTeamSize} onChangeText={v => setGForm(f => ({ ...f, minTeamSize: v }))} placeholderTextColor="#333" />
+                    </View>
+                  </View>
+                  <View style={styles.triviaToggleRow}>
+                    <Text style={styles.triviaFormLabel}>Allow Teams</Text>
+                    <Pressable
+                      style={[styles.triviaToggle, gForm.allowTeams && styles.triviaToggleOn]}
+                      onPress={() => setGForm(f => ({ ...f, allowTeams: !f.allowTeams }))}
+                    >
+                      <View style={[styles.triviaToggleThumb, gForm.allowTeams && styles.triviaToggleThumbOn]} />
+                    </Pressable>
+                  </View>
+                  <Text style={[styles.triviaFormLabel, { marginTop: 8 }]}>Select Questions ({gForm.selectedQuestions.length} selected)</Text>
+                  {triviaQuestions.length === 0 && (
+                    <Text style={styles.triviaEmpty}>No questions in bank. Add some in the Question Bank tab.</Text>
+                  )}
+                  {triviaQuestions.map(q => (
+                    <Pressable
+                      key={q.id}
+                      style={[styles.triviaQPickRow, gForm.selectedQuestions.includes(q.id) && styles.triviaQPickRowSelected]}
+                      onPress={() => {
+                        setGForm(f => ({
+                          ...f,
+                          selectedQuestions: f.selectedQuestions.includes(q.id)
+                            ? f.selectedQuestions.filter(id => id !== q.id)
+                            : [...f.selectedQuestions, q.id],
+                        }));
+                      }}
+                    >
+                      <View style={[styles.triviaCheckbox, gForm.selectedQuestions.includes(q.id) && styles.triviaCheckboxChecked]}>
+                        {gForm.selectedQuestions.includes(q.id) && <Ionicons name="checkmark" size={11} color="#000" />}
+                      </View>
+                      <Text style={styles.triviaQPickText} numberOfLines={2}>{q.question}</Text>
+                      <Text style={styles.triviaQPickType}>{q.question_type === "multiple_choice" ? "MC" : "Text"}</Text>
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    style={[styles.triviaSaveBtn, creatingGame && { opacity: 0.5 }]}
+                    onPress={handleCreateGame}
+                    disabled={creatingGame}
+                  >
+                    {creatingGame
+                      ? <ActivityIndicator color="#000" size="small" />
+                      : <Text style={styles.triviaSaveBtnText}>Create Game</Text>
+                    }
+                  </Pressable>
+                </View>
+              )}
+
+              {/* Active games */}
+              {triviaGames.length === 0 ? (
+                <EmptyState title="No trivia games" sub="Create one above to get started." icon="help-circle-outline" color="#06b6d4" />
+              ) : (
+                triviaGames.map(game => (
+                  <View key={game.id} style={styles.triviaGameCard}>
+                    <View style={styles.triviaGameCardTop}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.triviaGameTitle}>{game.title}</Text>
+                        <Text style={styles.triviaGameMeta}>
+                          {game.participant_count ?? 0}/{game.max_participants} players · Q{game.current_question_index}
+                          {game.allow_teams ? ` · Teams (min ${game.min_team_size})` : " · Individual"}
+                        </Text>
+                      </View>
+                      <View style={[styles.triviaStatusBadge, {
+                        backgroundColor: game.status === "lobby" ? "rgba(245,158,11,0.15)" : game.status === "active" ? "rgba(34,197,94,0.15)" : "rgba(85,85,85,0.15)",
+                      }]}>
+                        <Text style={[styles.triviaStatusText, {
+                          color: game.status === "lobby" ? "#f59e0b" : game.status === "active" ? "#22c55e" : "#555",
+                        }]}>
+                          {game.status.toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {/* QR code */}
+                    {game.status === "lobby" && (
+                      <View style={styles.triviaQrRow}>
+                        <Pressable style={styles.triviaQrBtn} onPress={() => setTriviaQrGame(game)}>
+                          <Ionicons name="qr-code-outline" size={14} color="#06b6d4" />
+                          <Text style={styles.triviaQrBtnText}>Show QR</Text>
+                        </Pressable>
+                      </View>
+                    )}
+
+                    {/* Action buttons */}
+                    <View style={styles.triviaGameActions}>
+                      {game.status === "lobby" && (
+                        <Pressable
+                          style={[styles.triviaActionBtn, { backgroundColor: "rgba(34,197,94,0.12)", borderColor: "rgba(34,197,94,0.3)" }, triviaGameActioning === game.id && { opacity: 0.5 }]}
+                          onPress={() => handleTriviaGameAction(game.id, "start")}
+                          disabled={triviaGameActioning === game.id}
+                        >
+                          <Ionicons name="play" size={13} color="#22c55e" />
+                          <Text style={[styles.triviaActionBtnText, { color: "#22c55e" }]}>Start</Text>
+                        </Pressable>
+                      )}
+                      {game.status === "active" && (
+                        <>
+                          <Pressable
+                            style={[styles.triviaActionBtn, { backgroundColor: "rgba(6,182,212,0.12)", borderColor: "rgba(6,182,212,0.3)" }, triviaGameActioning === game.id && { opacity: 0.5 }]}
+                            onPress={() => handleTriviaGameAction(game.id, "next")}
+                            disabled={triviaGameActioning === game.id}
+                          >
+                            <Ionicons name="play-skip-forward" size={13} color="#06b6d4" />
+                            <Text style={[styles.triviaActionBtnText, { color: "#06b6d4" }]}>Next Q</Text>
+                          </Pressable>
+                          <Pressable
+                            style={[styles.triviaActionBtn, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.25)" }, triviaGameActioning === game.id && { opacity: 0.5 }]}
+                            onPress={() => handleTriviaGameAction(game.id, "end")}
+                            disabled={triviaGameActioning === game.id}
+                          >
+                            <Ionicons name="stop" size={13} color="#ef4444" />
+                            <Text style={[styles.triviaActionBtnText, { color: "#ef4444" }]}>End</Text>
+                          </Pressable>
+                        </>
+                      )}
+                      {game.status === "finished" && (
+                        <Pressable
+                          style={[styles.triviaActionBtn, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.25)" }, triviaGameActioning === game.id && { opacity: 0.5 }]}
+                          onPress={() => handleTriviaGameAction(game.id, "delete")}
+                          disabled={triviaGameActioning === game.id}
+                        >
+                          <Ionicons name="trash-outline" size={13} color="#ef4444" />
+                          <Text style={[styles.triviaActionBtnText, { color: "#ef4444" }]}>Delete</Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  </View>
+                ))
+              )}
+            </>
+          ) : (
+            /* ── Question Bank ── */
+            <>
+              {/* Add / edit question form */}
+              <View style={styles.triviaFormCard}>
+                <Text style={styles.triviaFormTitle}>{editingQuestion ? "Edit Question" : "Add Question"}</Text>
+                <Text style={styles.triviaFormLabel}>Question</Text>
+                <TextInput
+                  style={[styles.triviaFormInput, { minHeight: 60, textAlignVertical: "top" }]}
+                  multiline
+                  placeholder="Enter question text..."
+                  placeholderTextColor="#333"
+                  value={qForm.question}
+                  onChangeText={v => setQForm(f => ({ ...f, question: v }))}
+                />
+                <Text style={styles.triviaFormLabel}>Type</Text>
+                <View style={styles.triviaTypeRow}>
+                  {(["multiple_choice", "text"] as const).map(t => (
+                    <Pressable
+                      key={t}
+                      style={[styles.triviaTypeBtn, qForm.type === t && styles.triviaTypeBtnActive]}
+                      onPress={() => setQForm(f => ({ ...f, type: t }))}
+                    >
+                      <Text style={[styles.triviaTypeBtnText, qForm.type === t && { color: "#06b6d4" }]}>
+                        {t === "multiple_choice" ? "Multiple Choice" : "Written Answer"}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+                {qForm.type === "multiple_choice" && (
+                  <>
+                    {(["optA", "optB", "optC", "optD"] as const).map((key, i) => (
+                      <View key={key} style={styles.triviaOptRow}>
+                        <Pressable
+                          style={[styles.triviaOptLetter, qForm.correct === ["a","b","c","d"][i] && styles.triviaOptLetterCorrect]}
+                          onPress={() => setQForm(f => ({ ...f, correct: ["a","b","c","d"][i] }))}
+                        >
+                          <Text style={[styles.triviaOptLetterText, qForm.correct === ["a","b","c","d"][i] && { color: "#000" }]}>
+                            {["A","B","C","D"][i]}
+                          </Text>
+                        </Pressable>
+                        <TextInput
+                          style={[styles.triviaFormInput, { flex: 1, marginBottom: 0 }]}
+                          placeholder={`Option ${["A","B","C","D"][i]}${i < 2 ? " (required)" : " (optional)"}`}
+                          placeholderTextColor="#333"
+                          value={qForm[key]}
+                          onChangeText={v => setQForm(f => ({ ...f, [key]: v }))}
+                        />
+                      </View>
+                    ))}
+                    <Text style={[styles.triviaFormLabel, { fontSize: 11, color: "#444" }]}>Tap a letter to mark it as correct answer</Text>
+                  </>
+                )}
+                {qForm.type === "text" && (
+                  <>
+                    <Text style={styles.triviaFormLabel}>Correct Answer</Text>
+                    <TextInput
+                      style={styles.triviaFormInput}
+                      placeholder="Expected answer (for auto-grading)"
+                      placeholderTextColor="#333"
+                      value={qForm.correct}
+                      onChangeText={v => setQForm(f => ({ ...f, correct: v }))}
+                    />
+                  </>
+                )}
+                <View style={styles.triviaFormRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.triviaFormLabel}>Points</Text>
+                    <TextInput style={styles.triviaFormInput} keyboardType="number-pad" value={qForm.points} onChangeText={v => setQForm(f => ({ ...f, points: v }))} placeholderTextColor="#333" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.triviaFormLabel}>Category</Text>
+                    <TextInput style={styles.triviaFormInput} placeholder="e.g. History" placeholderTextColor="#333" value={qForm.category} onChangeText={v => setQForm(f => ({ ...f, category: v }))} />
+                  </View>
+                </View>
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  {editingQuestion && (
+                    <Pressable style={styles.triviaDiscardBtn} onPress={() => {
+                      setEditingQuestion(null);
+                      setQForm({ question: "", type: "multiple_choice", optA: "", optB: "", optC: "", optD: "", correct: "a", points: "100", category: "" });
+                    }}>
+                      <Text style={styles.triviaDiscardBtnText}>Cancel</Text>
+                    </Pressable>
+                  )}
+                  <Pressable
+                    style={[styles.triviaSaveBtn, { flex: 1 }, savingQuestion && { opacity: 0.5 }]}
+                    onPress={handleSaveQuestion}
+                    disabled={savingQuestion}
+                  >
+                    {savingQuestion
+                      ? <ActivityIndicator color="#000" size="small" />
+                      : <Text style={styles.triviaSaveBtnText}>{editingQuestion ? "Save Changes" : "Add Question"}</Text>
+                    }
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Question list */}
+              {triviaQuestions.length === 0 ? (
+                <EmptyState title="No questions yet" sub="Add questions above to build your bank." icon="help-circle-outline" color="#06b6d4" />
+              ) : (
+                triviaQuestions.map(q => (
+                  <View key={q.id} style={styles.triviaQCard}>
+                    <View style={styles.triviaQCardTop}>
+                      <View style={{ flex: 1 }}>
+                        {q.category && <Text style={styles.triviaQCategory}>{q.category}</Text>}
+                        <Text style={styles.triviaQText}>{q.question}</Text>
+                        <Text style={styles.triviaQMeta}>
+                          {q.question_type === "multiple_choice" ? "Multiple Choice" : "Written"} · {q.points} pts
+                        </Text>
+                      </View>
+                      <View style={styles.triviaQActions}>
+                        <Pressable
+                          onPress={() => {
+                            setEditingQuestion(q);
+                            const opts: Record<string, string> = {};
+                            (q.options ?? []).forEach((o: any) => { opts[`opt${o.id.toUpperCase()}`] = o.text; });
+                            setQForm({
+                              question: q.question,
+                              type: q.question_type,
+                              optA: opts.optA ?? "",
+                              optB: opts.optB ?? "",
+                              optC: opts.optC ?? "",
+                              optD: opts.optD ?? "",
+                              correct: q.correct_answer,
+                              points: String(q.points),
+                              category: q.category ?? "",
+                            });
+                          }}
+                          hitSlop={8}
+                        >
+                          <Ionicons name="pencil-outline" size={16} color="#06b6d4" />
+                        </Pressable>
+                        <Pressable
+                          onPress={() => handleDeleteQuestion(q.id)}
+                          disabled={deletingQuestion === q.id}
+                          hitSlop={8}
+                        >
+                          {deletingQuestion === q.id
+                            ? <ActivityIndicator size="small" color="#ef4444" />
+                            : <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                          }
+                        </Pressable>
+                      </View>
+                    </View>
+                    {q.question_type === "multiple_choice" && q.options.length > 0 && (
+                      <View style={styles.triviaQOpts}>
+                        {q.options.map((o: any) => (
+                          <View key={o.id} style={[styles.triviaQOpt, o.id === q.correct_answer && styles.triviaQOptCorrect]}>
+                            <Text style={[styles.triviaQOptText, o.id === q.correct_answer && { color: "#22c55e" }]}>
+                              {o.id.toUpperCase()}. {o.text}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                ))
+              )}
+            </>
+          )}
+        </ScrollView>
+      )}
+
+      {/* ── Trivia QR Modal ── */}
+      <Modal visible={!!triviaQrGame} transparent animationType="fade" onRequestClose={() => setTriviaQrGame(null)}>
+        <View style={styles.confirmBg}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setTriviaQrGame(null)} />
+          <View style={[styles.confirmSheet, { alignItems: "center" }]}>
+            <Text style={styles.confirmTitle}>{triviaQrGame?.title}</Text>
+            <Text style={[styles.confirmBody, { marginBottom: 16 }]}>Players scan this to sign up</Text>
+            {triviaQrGame && (
+              // eslint-disable-next-line @typescript-eslint/no-require-imports
+              <Image
+                source={{ uri: `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`${process.env.EXPO_PUBLIC_APP_URL ?? "https://arcadetracker.app"}/trivia-join?token=${triviaQrGame.signup_token}`)}` }}
+                style={{ width: 220, height: 220, borderRadius: 12 }}
+                contentFit="contain"
+              />
+            )}
+            <Text style={[styles.confirmBody, { marginTop: 12, fontSize: 11 }]}>
+              Token: {triviaQrGame?.signup_token?.slice(0, 8)}…
+            </Text>
+            <Pressable style={[styles.confirmCancel, { marginTop: 16, alignSelf: "stretch" }]} onPress={() => setTriviaQrGame(null)}>
+              <Text style={styles.confirmCancelText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* Post results modal */}
       <Modal visible={!!resultsTarget} transparent animationType="slide" onRequestClose={() => setResultsTarget(null)}>
@@ -3759,4 +4284,72 @@ const styles = StyleSheet.create({
 
   karaokeHistoryToggle: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", marginTop: 8 },
   karaokeHistoryToggleText: { color: "#555", fontSize: 13, fontWeight: "700" },
+
+  // ── Trivia ───────────────────────────────────────────────────────────────────
+  triviaTabRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  triviaTabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12, paddingVertical: 10, borderWidth: 1, borderColor: "#1e1e1e", backgroundColor: "#0d0d0d" },
+  triviaTabBtnActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.07)" },
+  triviaTabBtnText: { color: "#555", fontWeight: "800", fontSize: 13 },
+
+  triviaCreateBtn: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 16, borderWidth: 1, borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.06)", marginBottom: 12 },
+  triviaCreateBtnText: { color: "#06b6d4", fontWeight: "800", fontSize: 14 },
+
+  triviaFormCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: "#1e1e1e" },
+  triviaFormTitle: { color: "#fff", fontSize: 15, fontWeight: "900", marginBottom: 12 },
+  triviaFormLabel: { color: "#555", fontSize: 12, fontWeight: "700", marginBottom: 5, marginTop: 10 },
+  triviaFormInput: { backgroundColor: "#0a0a0a", borderRadius: 10, borderWidth: 1, borderColor: "#1e1e1e", color: "#fff", fontSize: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 2 },
+  triviaFormRow: { flexDirection: "row", gap: 10 },
+
+  triviaToggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10, marginBottom: 4 },
+  triviaToggle: { width: 44, height: 26, borderRadius: 13, backgroundColor: "#1a1a1a", justifyContent: "center", paddingHorizontal: 3, borderWidth: 1, borderColor: "#2a2a2a" },
+  triviaToggleOn: { backgroundColor: "rgba(6,182,212,0.2)", borderColor: "rgba(6,182,212,0.4)" },
+  triviaToggleThumb: { width: 20, height: 20, borderRadius: 10, backgroundColor: "#333" },
+  triviaToggleThumbOn: { backgroundColor: "#06b6d4", alignSelf: "flex-end" },
+
+  triviaTypeRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
+  triviaTypeBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", backgroundColor: "#0d0d0d" },
+  triviaTypeBtnActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.07)" },
+  triviaTypeBtnText: { color: "#555", fontWeight: "700", fontSize: 13 },
+
+  triviaOptRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  triviaOptLetter: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#1a1a1a", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#2a2a2a" },
+  triviaOptLetterCorrect: { backgroundColor: "#22c55e", borderColor: "#22c55e" },
+  triviaOptLetterText: { color: "#555", fontWeight: "900", fontSize: 13 },
+
+  triviaQPickRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#0a0a0a", borderRadius: 10, padding: 10, marginBottom: 6, borderWidth: 1, borderColor: "#1a1a1a" },
+  triviaQPickRowSelected: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.05)" },
+  triviaCheckbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1, borderColor: "#2a2a2a", alignItems: "center", justifyContent: "center" },
+  triviaCheckboxChecked: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
+  triviaQPickText: { flex: 1, color: "#888", fontSize: 12 },
+  triviaQPickType: { color: "#444", fontSize: 10, fontWeight: "700" },
+
+  triviaSaveBtn: { backgroundColor: "#06b6d4", borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 12 },
+  triviaSaveBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
+  triviaDiscardBtn: { borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 12, borderWidth: 1, borderColor: "#1e1e1e", paddingHorizontal: 16 },
+  triviaDiscardBtnText: { color: "#555", fontWeight: "700", fontSize: 14 },
+  triviaEmpty: { color: "#444", fontSize: 13, textAlign: "center", paddingVertical: 16 },
+
+  triviaGameCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#1e1e1e" },
+  triviaGameCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 },
+  triviaGameTitle: { color: "#fff", fontSize: 15, fontWeight: "900" },
+  triviaGameMeta: { color: "#555", fontSize: 12, marginTop: 3 },
+  triviaStatusBadge: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
+  triviaStatusText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
+  triviaQrRow: { marginBottom: 10 },
+  triviaQrBtn: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", borderRadius: 10, paddingVertical: 7, paddingHorizontal: 12, borderWidth: 1, borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.07)" },
+  triviaQrBtnText: { color: "#06b6d4", fontSize: 12, fontWeight: "800" },
+  triviaGameActions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  triviaActionBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1 },
+  triviaActionBtnText: { fontSize: 12, fontWeight: "800" },
+
+  triviaQCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#1e1e1e" },
+  triviaQCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  triviaQCategory: { color: "#a855f7", fontSize: 10, fontWeight: "800", marginBottom: 3 },
+  triviaQText: { color: "#fff", fontSize: 13, fontWeight: "700", lineHeight: 19, marginBottom: 4 },
+  triviaQMeta: { color: "#444", fontSize: 11 },
+  triviaQActions: { flexDirection: "row", gap: 14, paddingTop: 2 },
+  triviaQOpts: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 10 },
+  triviaQOpt: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#1a1a1a" },
+  triviaQOptCorrect: { borderColor: "rgba(34,197,94,0.4)", backgroundColor: "rgba(34,197,94,0.07)" },
+  triviaQOptText: { color: "#555", fontSize: 11, fontWeight: "700" },
 });
