@@ -86,11 +86,12 @@ export default function SkeeballTrackerScreen() {
       .on("postgres_changes", { event: "*", schema: "public", table: "skeeball_sessions" }, async () => {
         const { data } = await supabase
           .from("skeeball_sessions")
-          .select("id, team_id, lane_number, status")
+          .select("id, team_id, lane_number, status, teams(name)")
           .eq("status", "active");
 
         const sessions: LaneSession[] = (data ?? []).map((s: any) => ({
           id: s.id, team_id: s.team_id, lane_number: s.lane_number, status: s.status,
+          team_name: Array.isArray(s.teams) ? s.teams[0]?.name : s.teams?.name,
         }));
         setAllActiveSessions(sessions);
 
@@ -118,12 +119,13 @@ export default function SkeeballTrackerScreen() {
     setError(null);
     try {
       const [sessRes, memRes] = await Promise.all([
-        supabase.from("skeeball_sessions").select("id, team_id, lane_number, status").eq("status", "active"),
+        supabase.from("skeeball_sessions").select("id, team_id, lane_number, status, teams(name)").eq("status", "active"),
         supabase.from("team_members").select("user_id, role, profiles(username, avatar_url)").eq("team_id", teamId),
       ]);
 
       const sessions: LaneSession[] = (sessRes.data ?? []).map((s: any) => ({
         id: s.id, team_id: s.team_id, lane_number: s.lane_number, status: s.status,
+        team_name: Array.isArray(s.teams) ? s.teams[0]?.name : s.teams?.name,
       }));
       setAllActiveSessions(sessions);
 
@@ -491,9 +493,9 @@ export default function SkeeballTrackerScreen() {
                 onPress={() => !taken && setSelectedLane(sel ? null : lane)}
                 disabled={taken}
               >
-                <Text style={[s.laneBtnNum, sel && { color: "#000" }, taken && { color: "#2a2a2a" }]}>{lane}</Text>
-                <Text style={[s.laneBtnStatus, sel && { color: "#000" }, taken && { color: "#444" }]}>
-                  {taken ? "In Use" : sel ? "Selected" : "Open"}
+                <Text style={[s.laneBtnNum, sel && { color: "#000" }, taken && { color: "#333" }]}>{lane}</Text>
+                <Text style={[s.laneBtnStatus, sel && { color: "#000" }, taken && { color: "#ef4444" }]}>
+                  {taken ? "Locked" : sel ? "Selected" : "Open"}
                 </Text>
                 {taken && takenBy?.team_name && (
                   <Text style={s.laneTeamName} numberOfLines={1}>{takenBy.team_name}</Text>
@@ -601,13 +603,13 @@ const s = StyleSheet.create({
   checkbox: { width: 26, height: 26, borderRadius: 8, backgroundColor: "#1a1a1a", borderWidth: 1.5, borderColor: "#2a2a2a", alignItems: "center", justifyContent: "center" },
   checkboxSel: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
 
-  laneGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 28 },
-  laneBtn: { width: "30%", aspectRatio: 1, backgroundColor: "#111", borderRadius: 20, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "#1e1e1e", gap: 4 },
+  laneGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 28 },
+  laneBtn: { width: "31%", height: 72, backgroundColor: "#111", borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "#1e1e1e", gap: 2, paddingHorizontal: 6 },
   laneBtnSel: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
-  laneBtnTaken: { backgroundColor: "#0d0d0d", borderColor: "#1a1a1a" },
-  laneBtnNum: { color: "#fff", fontSize: 28, fontWeight: "900" },
-  laneBtnStatus: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
-  laneTeamName: { color: "#2a2a2a", fontSize: 10, textAlign: "center", paddingHorizontal: 4 },
+  laneBtnTaken: { backgroundColor: "#0d0d0d", borderColor: "#1e1e1e" },
+  laneBtnNum: { color: "#fff", fontSize: 22, fontWeight: "900" },
+  laneBtnStatus: { color: "#444", fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  laneTeamName: { color: "#555", fontSize: 10, textAlign: "center", paddingHorizontal: 2 },
 
   progressRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   progressCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e", borderBottomWidth: 0 },
