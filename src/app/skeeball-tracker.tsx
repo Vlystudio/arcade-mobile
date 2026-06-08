@@ -194,6 +194,8 @@ export default function SkeeballTrackerScreen() {
         return { user_id: m.user_id, role: m.role, username: p?.username ?? "Unknown", avatar_url: p?.avatar_url ?? null };
       });
       setTeamMembers(members);
+      // Pre-select all members (up to 3) so the user just needs to pick a lane
+      setSelectedPlayers(members.slice(0, PLAYERS_PER_GAME).map((m) => m.user_id));
 
       const mine = sessions.find((s) => s.team_id === teamId) ?? null;
       setMySession(mine);
