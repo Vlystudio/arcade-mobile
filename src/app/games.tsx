@@ -269,6 +269,19 @@ export default function GamesScreen() {
             <Ionicons name="chevron-forward" size={18} color="#f59e0b" />
           </Pressable>
 
+          <Pressable style={styles.tourneysCard} onPress={() => router.push("/tournaments" as any)}>
+            <View style={styles.triviaCardLeft}>
+              <View style={styles.tourneysIconWrap}>
+                <Ionicons name="trophy-outline" size={26} color="#22c55e" />
+              </View>
+              <View>
+                <Text style={styles.tourneysCardTitle}>Tournaments</Text>
+                <Text style={styles.tourneysCardSub}>First Fridays · Brackets · Prizes</Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color="#22c55e" />
+          </Pressable>
+
           <Pressable style={styles.leaderLink} onPress={() => router.push("/leaderboard")}>
             <Ionicons name="podium-outline" size={16} color="#06b6d4" />
             <Text style={styles.leaderLinkText}>View Leaderboard</Text>
@@ -594,4 +607,17 @@ const styles = StyleSheet.create({
   },
   triviaCardTitle: { color: "#fff", fontSize: 16, fontWeight: "900", marginBottom: 2 },
   triviaCardSub:   { color: "#f59e0b", fontSize: 12, fontWeight: "600" },
+
+  tourneysCard: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    backgroundColor: "rgba(34,197,94,0.07)", borderRadius: 20,
+    padding: 18, marginBottom: 12,
+    borderWidth: 1, borderColor: "rgba(34,197,94,0.22)",
+  },
+  tourneysIconWrap: {
+    width: 48, height: 48, borderRadius: 14,
+    backgroundColor: "rgba(34,197,94,0.14)", alignItems: "center", justifyContent: "center",
+  },
+  tourneysCardTitle: { color: "#fff", fontSize: 16, fontWeight: "900", marginBottom: 2 },
+  tourneysCardSub:   { color: "#22c55e", fontSize: 12, fontWeight: "600" },
 });
