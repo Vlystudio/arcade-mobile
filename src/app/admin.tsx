@@ -780,7 +780,7 @@ export default function AdminScreen() {
     const members = (membersRes.data ?? []) as any[];
 
     const teamUserIds: Record<string, string[]> = {};
-    for (const m of members) (teamUserIds[m.team_id] ??= []).push(m.user_id);
+    for (const m of members) { if (!teamUserIds[m.team_id]) teamUserIds[m.team_id] = []; teamUserIds[m.team_id].push(m.user_id); }
 
     const allUserIds = [...new Set(members.map((m) => m.user_id as string))];
     let userAvgMap: Record<string, number> = {};
@@ -788,7 +788,7 @@ export default function AdminScreen() {
       const { data: scoreData } = await supabase
         .from("scores").select("user_id, score").in("user_id", allUserIds).eq("status", "approved");
       const userBuckets: Record<string, number[]> = {};
-      for (const s of scoreData ?? []) (userBuckets[(s as any).user_id] ??= []).push((s as any).score);
+      for (const s of scoreData ?? []) { const uid = (s as any).user_id; if (!userBuckets[uid]) userBuckets[uid] = []; userBuckets[uid].push((s as any).score); }
       for (const [uid, vals] of Object.entries(userBuckets))
         userAvgMap[uid] = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
     }

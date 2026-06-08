@@ -70,7 +70,7 @@ function weeklyAvgs(scores: ScoreRow[]): number[] {
   const map: Record<string, number[]> = {};
   for (const s of scores) {
     const k = isoWeekKey(new Date(s.created_at));
-    (map[k] ??= []).push(s.score);
+    if (!map[k]) map[k] = []; map[k].push(s.score);
   }
   return Object.values(map).map((arr) => Math.round(arr.reduce((a, b) => a + b, 0) / arr.length));
 }
