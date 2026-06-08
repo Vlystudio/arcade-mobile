@@ -80,4 +80,5 @@ const s = StyleSheet.create({
   body: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
   btn: { marginTop: 8, backgroundColor: "#06b6d4", borderRadius: 16, paddingVertical: 14, paddingHorizontal: 32 },
   btnText: { color: "#000", fontWeight: "900", fontSize: 15 },
+  loadingText: { color: "#888", fontSize: 14, marginTop: 8 },
 });
