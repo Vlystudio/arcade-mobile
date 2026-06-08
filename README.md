@@ -16,7 +16,7 @@ React Native (Expo SDK 55) arcade venue companion app backed by Supabase (Postgr
 |--------|-------------|
 | **Games** | Multi-game leaderboard, QR lane check-in, score submission with photo proof |
 | **Leaderboard** | Global score rankings across all game types |
-| **Skee-Ball Tracker** | Live 3-player session tracker — per-ball scoring across 6 lanes |
+| **Skee-Ball Tracker** | Live session tracker for 1–3 players — scorekeeper mode lets any team member enter all balls for the whole team; balls numbered sequentially across players (Ball 1–9 for 3 players); per-player totals and team grand total shown live |
 | **Lane Scores** | Per-lane score history and player stats |
 | **Pool** | Table occupancy tracking, game type selection (8-ball, 9-ball, cutthroat, straight), player roster per table |
 | **Trivia Night** | Event sign-up, team formation for Trivia Night events |
@@ -193,10 +193,10 @@ Open in Expo Go (scan QR), iOS Simulator (`i`), or Android Emulator (`a`).
 ### Row Level Security
 Every table has RLS enabled. The anon key cannot bypass it. Key rules:
 
-- **Profiles**: Anyone authenticated can read. Users can only update their own row, and **cannot set `is_admin` or `is_arcade_official` on themselves** — those fields are locked to the current value in the WITH CHECK clause.
+- **Profiles**: The raw `profiles` table is readable only by the owner and admins. All cross-user lookups (leaderboard, team member search, friend search) query the `public_profiles` view, which hides private accounts from other users and never exposes `is_admin`, `email`, `phone`, or `square_customer_id`. Users can toggle their own privacy flag; admins always see all profiles. Users cannot set `is_admin` or `is_arcade_official` on themselves — those fields are locked by the WITH CHECK clause.
 - **Scores**: New inserts must have `status = 'pending'`. Only admins can flip status to `approved`/`denied`.
 - **Announcements**: Only users with `is_arcade_official = true` can insert `post_type = 'announcement'`.
-- **Check-ins**: The DB enforces a single active check-in per user via a `NOT EXISTS` sub-select in the INSERT policy.
+- **Check-ins**: All inserts go through `rpc_check_in` (SECURITY DEFINER). Direct `INSERT INTO check_ins` is blocked by RLS for every role. The RPC enforces one active check-in per user, a 30-minute same-lane cooldown, and token hash validation.
 - **Tournament management**: Only admins can create/approve tournaments. Owners (set via `created_by` on admin approval) can update `announcement` and cancel their own tournament — nothing else.
 
 ### Admin access
@@ -264,20 +264,27 @@ Square prices are **never derived from the client**. The server-side `/api/squar
 Payment/order status must come from `/api/square/webhook`, which verifies Square's HMAC signature, deduplicates event IDs, and stores status server-side. Do not trust client redirects as proof of payment.
 
 ### Security testing
-Run `scripts/security-verification-tests.sql` in the Supabase SQL Editor after every migration. It uses `SET LOCAL ROLE` to simulate anonymous, authenticated, and admin callers across 9 test blocks. Every row should return `result = 'PASS'`.
+Run `scripts/security-verification-tests.sql` in the Supabase SQL Editor after every migration. It uses `SET LOCAL ROLE` to simulate anonymous, authenticated, and admin callers across 19 test blocks. RAISE NOTICE outputs appear in the Messages pane; SELECT results (Blocks 1, 3, 5, 6, 8, 9, 13, 14) return `result = 'PASS'` rows.
 
 The test suite verifies:
-- Anonymous cannot read scores, profiles, audit log, security events, check-ins, rate-limit log, QR tokens, venue admins
-- Authenticated user cannot insert directly into `check_ins` or `scores`
+- Anonymous cannot read scores, profiles, audit log, security events, check-ins, QR tokens, or venue admins
+- `public_profiles` view is readable by anon but hides private profiles
+- Authenticated user cannot insert directly into `check_ins` or `scores` (RPC-only paths)
 - Authenticated user cannot read `admin_audit_log`
 - Authenticated user cannot update another user's profile
-- Authenticated user cannot self-promote to admin (escalation trigger fires)
-- Admin RPCs are rejected without MFA (P0003 exception)
-- Invalid QR token returns `lane_not_found`
+- Authenticated user cannot self-promote to admin
+- Admin RPCs reject callers without MFA AAL2 (raises P0003)
+- `rpc_check_in` with an unknown token returns `lane_not_found` (no legacy fallback)
 - `hash_lane_token()` produces consistent 64-char hex output
-- `public_profiles` view does not expose `is_admin`, `email`, or `phone`
-- `scores_score_range` constraint exists
-- RLS is enabled on all 12 sensitive tables
+- `storage.foldername()` helper returns expected path segments
+- `public_profiles` view does not expose `is_admin`, `email`, `phone`, or `square_customer_id`
+- Venue cross-isolation: venue A admin cannot access venue B's score queue
+- Non-admin cannot call `rpc_admin_review_score`, `rpc_admin_approve_tournament`, or `rpc_admin_rotate_lane_token`
+- Storage cleanup RPCs blocked for AAL1 sessions and non-admins
+- Extended MFA enforcement for lane and team admin RPCs
+- `scores_score_range` check constraint exists (0–9,999,999)
+- RLS is enabled on all sensitive tables
+- `check_ins` direct-insert RLS policy blocks all non-RPC inserts
 
 ### Monitoring and alerting
 See `docs/security-monitoring.md` for the full event catalogue, alert thresholds, triage queries, and recommended tooling (Sentry, Supabase log drain, DB webhook → `notify-admin` Edge Function).
