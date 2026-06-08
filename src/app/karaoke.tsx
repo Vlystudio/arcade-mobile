@@ -127,16 +127,17 @@ export default function KaraokeScreen() {
     if (!name) { setAddError("Enter your name so people know who requested it."); return; }
     setAdding(videoId);
     setAddError(null);
-    const { error } = await supabase.from("karaoke_queue").insert({
-      video_id: videoId,
-      title,
-      channel,
-      thumbnail_url: thumbnail || null,
-      requested_by: user?.id ?? null,
-      requester_name: name,
+    const { data, error } = await supabase.rpc("rpc_karaoke_add", {
+      p_video_id: videoId,
+      p_title: title,
+      p_channel: channel,
+      p_thumbnail_url: thumbnail || null,
+      p_requester_name: name,
     });
     if (error) {
       setAddError(error.message);
+    } else if (data?.error) {
+      setAddError(data.message ?? "Could not add song.");
     } else {
       setShowAdd(false);
       setSearchResults([]);
