@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -136,6 +137,14 @@ type AdminTriviaGame = {
   signup_token: string;
   participant_count?: number;
   created_at: string;
+};
+
+type TriviaParticipant = {
+  id: string;
+  display_name: string;
+  participant_type: "individual" | "team";
+  score: number;
+  user_id: string | null;
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -312,6 +321,9 @@ export default function AdminScreen() {
   const [triviaGameActioning, setTriviaGameActioning] = useState<string | null>(null);
   const [triviaQrGame, setTriviaQrGame]         = useState<AdminTriviaGame | null>(null);
   const [showNewGameForm, setShowNewGameForm]   = useState(false);
+  const [triviaParticipants, setTriviaParticipants] = useState<Record<string, TriviaParticipant[]>>({});
+  const [expandedGamePlayers, setExpandedGamePlayers] = useState<string | null>(null);
+  const [kickingParticipant, setKickingParticipant] = useState<string | null>(null);
 
   // Player list management (all tournaments)
   type RegPlayer = { id: string; user_id: string | null; guest_name: string | null; username: string; status: string };
@@ -1310,6 +1322,28 @@ export default function AdminScreen() {
 
   async function handleGradeAnswer(answerId: string, isCorrect: boolean) {
     await supabase.rpc("rpc_admin_trivia_grade", { p_answer_id: answerId, p_is_correct: isCorrect });
+  }
+
+  async function loadGameParticipants(gameId: string) {
+    const { data } = await supabase
+      .from("trivia_participants")
+      .select("id, display_name, participant_type, score, user_id")
+      .eq("game_id", gameId)
+      .order("score", { ascending: false });
+    setTriviaParticipants(prev => ({ ...prev, [gameId]: (data ?? []) as TriviaParticipant[] }));
+  }
+
+  async function kickTriviaParticipant(gameId: string, participantId: string) {
+    setKickingParticipant(participantId);
+    await supabase.from("trivia_participants").delete().eq("id", participantId);
+    setTriviaParticipants(prev => ({
+      ...prev,
+      [gameId]: (prev[gameId] ?? []).filter(p => p.id !== participantId),
+    }));
+    setTriviaGames(prev => prev.map(g =>
+      g.id === gameId ? { ...g, participant_count: Math.max(0, (g.participant_count ?? 1) - 1) } : g
+    ));
+    setKickingParticipant(null);
   }
 
   async function handleRevokeQR(tournamentId: string) {
@@ -2563,6 +2597,72 @@ export default function AdminScreen() {
                           <Ionicons name="qr-code-outline" size={14} color="#06b6d4" />
                           <Text style={styles.triviaQrBtnText}>Show QR</Text>
                         </Pressable>
+                      </View>
+                    )}
+
+                    {/* Players panel */}
+                    <Pressable
+                      style={styles.triviaPlayersToggle}
+                      onPress={() => {
+                        if (expandedGamePlayers === game.id) {
+                          setExpandedGamePlayers(null);
+                        } else {
+                          setExpandedGamePlayers(game.id);
+                          loadGameParticipants(game.id);
+                        }
+                      }}
+                    >
+                      <Ionicons name="people-outline" size={14} color="#888" />
+                      <Text style={styles.triviaPlayersToggleText}>
+                        Players ({game.participant_count ?? 0})
+                      </Text>
+                      <Ionicons
+                        name={expandedGamePlayers === game.id ? "chevron-up" : "chevron-down"}
+                        size={14}
+                        color="#555"
+                      />
+                    </Pressable>
+
+                    {expandedGamePlayers === game.id && (
+                      <View style={styles.triviaPlayersList}>
+                        {(triviaParticipants[game.id] ?? []).length === 0 ? (
+                          <Text style={styles.triviaPlayersEmpty}>No players joined yet.</Text>
+                        ) : (
+                          (triviaParticipants[game.id] ?? []).map(p => (
+                            <View key={p.id} style={styles.triviaPlayerRow}>
+                              <View style={styles.triviaPlayerAvatar}>
+                                <Text style={styles.triviaPlayerAvatarText}>
+                                  {p.display_name[0].toUpperCase()}
+                                </Text>
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.triviaPlayerName}>{p.display_name}</Text>
+                                <Text style={styles.triviaPlayerMeta}>
+                                  {p.participant_type === "team" ? "Team" : "Individual"} · {p.score} pts
+                                </Text>
+                              </View>
+                              <Pressable
+                                style={[styles.triviaKickBtn, kickingParticipant === p.id && { opacity: 0.4 }]}
+                                onPress={() =>
+                                  Alert.alert(
+                                    "Kick Player",
+                                    `Remove ${p.display_name} from this game?`,
+                                    [
+                                      { text: "Cancel", style: "cancel" },
+                                      { text: "Kick", style: "destructive", onPress: () => kickTriviaParticipant(game.id, p.id) },
+                                    ]
+                                  )
+                                }
+                                disabled={kickingParticipant === p.id}
+                              >
+                                {kickingParticipant === p.id
+                                  ? <ActivityIndicator size="small" color="#ef4444" />
+                                  : <Ionicons name="person-remove-outline" size={16} color="#ef4444" />
+                                }
+                              </Pressable>
+                            </View>
+                          ))
+                        )}
                       </View>
                     )}
 
@@ -4338,6 +4438,36 @@ const styles = StyleSheet.create({
   triviaQrRow: { marginBottom: 10 },
   triviaQrBtn: { flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "flex-start", borderRadius: 10, paddingVertical: 7, paddingHorizontal: 12, borderWidth: 1, borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.07)" },
   triviaQrBtnText: { color: "#06b6d4", fontSize: 12, fontWeight: "800" },
+  triviaPlayersToggle: {
+    flexDirection: "row", alignItems: "center", gap: 7,
+    paddingVertical: 9, paddingHorizontal: 2, marginBottom: 2,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1e1e1e",
+  },
+  triviaPlayersToggleText: { flex: 1, color: "#666", fontSize: 12, fontWeight: "700" },
+  triviaPlayersList: {
+    backgroundColor: "#0a0a0a", borderRadius: 12,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 10, overflow: "hidden",
+  },
+  triviaPlayersEmpty: { color: "#444", fontSize: 12, textAlign: "center", paddingVertical: 14 },
+  triviaPlayerRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  triviaPlayerAvatar: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#2a2a2a",
+    alignItems: "center", justifyContent: "center",
+  },
+  triviaPlayerAvatarText: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  triviaPlayerName: { color: "#fff", fontSize: 13, fontWeight: "700" },
+  triviaPlayerMeta: { color: "#555", fontSize: 11, marginTop: 1 },
+  triviaKickBtn: {
+    width: 32, height: 32, borderRadius: 9,
+    backgroundColor: "rgba(239,68,68,0.08)", borderWidth: 1, borderColor: "rgba(239,68,68,0.2)",
+    alignItems: "center", justifyContent: "center",
+  },
+
   triviaGameActions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
   triviaActionBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1 },
   triviaActionBtnText: { fontSize: 12, fontWeight: "800" },
