@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -52,6 +53,7 @@ export default function SkeeballTrackerScreen() {
   const [sessionPlayers, setSessionPlayers] = useState<SessionPlayer[]>([]);
   const [ballScores, setBallScores] = useState<BallScore[]>([]);
   const [teamMembers, setTeamMembers] = useState<Member[]>([]);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Setup state
@@ -173,10 +175,12 @@ export default function SkeeballTrackerScreen() {
     setLoading(true);
     setError(null);
     try {
-      const [sessRes, memRes] = await Promise.all([
+      const [sessRes, memRes, profileRes] = await Promise.all([
         supabase.from("skeeball_sessions").select("id, team_id, lane_number, status, last_activity_at, teams(name)").eq("status", "active"),
         supabase.from("team_members").select("user_id, role, profiles(username, avatar_url)").eq("team_id", teamId),
+        supabase.from("profiles").select("is_admin").eq("id", user!.id).single(),
       ]);
+      setIsAdmin(profileRes.data?.is_admin === true);
 
       const sessions: LaneSession[] = (sessRes.data ?? []).map((s: any) => ({
         id: s.id, team_id: s.team_id, lane_number: s.lane_number, status: s.status,
@@ -299,6 +303,28 @@ export default function SkeeballTrackerScreen() {
     setMySession((prev) => prev ? { ...prev, last_activity_at: now } : prev);
     setShowWarning(false);
     setWarningCountdown(WARNING_DURATION_S);
+  }
+
+  function kickTeam(session: LaneSession) {
+    Alert.alert(
+      "Kick Team Off Lane",
+      `Remove ${session.team_name ?? "this team"} from Lane ${session.lane_number}? Their scores will not be saved.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Kick Off Lane", style: "destructive",
+          onPress: async () => {
+            await supabase.from("skeeball_sessions").update({ status: "abandoned" }).eq("id", session.id).eq("status", "active");
+            setAllActiveSessions((prev) => prev.filter((s) => s.id !== session.id));
+            if (mySession?.id === session.id) {
+              setMySession(null);
+              setSessionPlayers([]);
+              setBallScores([]);
+            }
+          },
+        },
+      ]
+    );
   }
 
   async function abandonSession(sessionId: string) {
@@ -598,20 +624,26 @@ export default function SkeeballTrackerScreen() {
             const takenBy = allActiveSessions.find((s) => s.lane_number === lane);
             const sel = selectedLane === lane;
             return (
-              <Pressable
-                key={lane}
-                style={[s.laneBtn, sel && s.laneBtnSel, taken && s.laneBtnTaken]}
-                onPress={() => !taken && setSelectedLane(sel ? null : lane)}
-                disabled={taken}
-              >
-                <Text style={[s.laneBtnNum, sel && { color: "#000" }, taken && { color: "#333" }]}>{lane}</Text>
-                <Text style={[s.laneBtnStatus, sel && { color: "#000" }, taken && { color: "#ef4444" }]}>
-                  {taken ? "Locked" : sel ? "Selected" : "Open"}
-                </Text>
-                {taken && takenBy?.team_name && (
-                  <Text style={s.laneTeamName} numberOfLines={1}>{takenBy.team_name}</Text>
+              <View key={lane} style={[s.laneBtn, sel && s.laneBtnSel, taken && s.laneBtnTaken]}>
+                <Pressable
+                  style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 2, width: "100%" }}
+                  onPress={() => !taken && setSelectedLane(sel ? null : lane)}
+                  disabled={taken}
+                >
+                  <Text style={[s.laneBtnNum, sel && { color: "#000" }, taken && { color: "#333" }]}>{lane}</Text>
+                  <Text style={[s.laneBtnStatus, sel && { color: "#000" }, taken && { color: "#ef4444" }]}>
+                    {taken ? "Locked" : sel ? "Selected" : "Open"}
+                  </Text>
+                  {taken && takenBy?.team_name && (
+                    <Text style={s.laneTeamName} numberOfLines={1}>{takenBy.team_name}</Text>
+                  )}
+                </Pressable>
+                {taken && isAdmin && takenBy && (
+                  <Pressable style={s.kickBtn} onPress={() => kickTeam(takenBy)}>
+                    <Ionicons name="close-circle" size={16} color="#ef4444" />
+                  </Pressable>
                 )}
-              </Pressable>
+              </View>
             );
           })}
         </View>
@@ -730,6 +762,8 @@ const s = StyleSheet.create({
   youChipText: { color: "#06b6d4", fontSize: 10, fontWeight: "900" },
   ballDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#1e1e1e", borderWidth: 1, borderColor: "#2a2a2a" },
   ballDotFilled: { backgroundColor: "#22c55e", borderColor: "#22c55e" },
+
+  kickBtn: { position: "absolute", top: 4, right: 4, padding: 2 },
 
   warningOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", alignItems: "center", justifyContent: "center", padding: 32 },
   warningCard: { width: "100%", backgroundColor: "#111", borderRadius: 24, padding: 28, alignItems: "center", borderWidth: 1.5, borderColor: "rgba(239,68,68,0.4)" },
