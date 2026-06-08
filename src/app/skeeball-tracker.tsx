@@ -61,8 +61,8 @@ export default function SkeeballTrackerScreen() {
   const [selectedLane, setSelectedLane] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
 
-  // Scoring state
-  const [balls, setBalls] = useState(["", "", ""]);
+  // Scoring state — keyed by player_user_id, each value is [ball1, ball2, ball3]
+  const [allBalls, setAllBalls] = useState<Record<string, string[]>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -73,8 +73,9 @@ export default function SkeeballTrackerScreen() {
   const channelRef = useRef<any>(null);
 
   const iAmPlayer = sessionPlayers.some((p) => p.player_user_id === user?.id);
-  const myBalls = ballScores.filter((b) => b.player_user_id === user?.id);
-  const myBallsSubmitted = myBalls.length >= BALLS_PER_PLAYER;
+  const allBallsSubmitted = sessionPlayers.length > 0 && sessionPlayers.every(
+    (sp) => ballScores.filter((b) => b.player_user_id === sp.player_user_id).length >= BALLS_PER_PLAYER
+  );
   const sessionDone = mySession?.status === "completed";
   const takenLanes = new Set(allActiveSessions.map((s) => s.lane_number));
 
@@ -162,9 +163,9 @@ export default function SkeeballTrackerScreen() {
     return () => clearTimeout(t);
   }, [showWarning, warningCountdown]);
 
-  // Auto-complete when all 9 balls submitted
+  // Auto-complete when all balls submitted (works for 1–3 players)
   useEffect(() => {
-    if (!mySession || mySession.status !== "active" || sessionPlayers.length < PLAYERS_PER_GAME) return;
+    if (!mySession || mySession.status !== "active" || sessionPlayers.length === 0) return;
     const allIn = sessionPlayers.every(
       (sp) => ballScores.filter((b) => b.player_user_id === sp.player_user_id).length >= BALLS_PER_PLAYER
     );
@@ -220,7 +221,17 @@ export default function SkeeballTrackerScreen() {
       return { ...p, username: m?.username ?? "Unknown", avatar_url: m?.avatar_url ?? null };
     });
     setSessionPlayers(players);
-    setBallScores(scoresRes.data ?? []);
+    const scores: BallScore[] = scoresRes.data ?? [];
+    setBallScores(scores);
+
+    const initialBalls: Record<string, string[]> = {};
+    for (const sp of players) {
+      initialBalls[sp.player_user_id] = [1, 2, 3].map((bn) => {
+        const ball = scores.find((b) => b.player_user_id === sp.player_user_id && b.ball_number === bn);
+        return ball ? String(ball.score) : "";
+      });
+    }
+    setAllBalls(initialBalls);
 
     // Realtime for this session's ball scores
     if (channelRef.current) channelRef.current.unsubscribe();
@@ -267,30 +278,34 @@ export default function SkeeballTrackerScreen() {
 
   async function submitBalls() {
     if (!user || !mySession) return;
-    const parsed = balls.map((b) => parseInt(b) || 0);
-    if (balls.some((b) => b === "")) { setSubmitError("Enter a score for each ball."); return; }
+    const allFilled = sessionPlayers.every((sp) =>
+      (allBalls[sp.player_user_id] ?? []).length === 3 &&
+      (allBalls[sp.player_user_id] ?? []).every((b) => b !== "")
+    );
+    if (!allFilled) { setSubmitError("Enter a score for every ball before submitting."); return; }
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const inserts = parsed.map((score, i) => ({
-        session_id: mySession.id, player_user_id: user.id, ball_number: i + 1, score,
-      }));
+      const inserts = sessionPlayers.flatMap((sp) =>
+        (allBalls[sp.player_user_id] ?? ["0", "0", "0"]).map((score, i) => ({
+          session_id: mySession!.id,
+          player_user_id: sp.player_user_id,
+          ball_number: i + 1,
+          score: parseInt(score) || 0,
+        }))
+      );
       const { error } = await supabase
         .from("skeeball_ball_scores")
         .upsert(inserts, { onConflict: "session_id,player_user_id,ball_number" });
       if (error) throw error;
 
-      // Reset inactivity timer and dismiss any warning
       const now = new Date().toISOString();
-      await supabase.from("skeeball_sessions").update({ last_activity_at: now }).eq("id", mySession.id);
+      await supabase.from("skeeball_sessions").update({ last_activity_at: now }).eq("id", mySession!.id);
       setMySession((prev) => prev ? { ...prev, last_activity_at: now } : prev);
       setShowWarning(false);
       setWarningCountdown(WARNING_DURATION_S);
 
-      setBallScores((prev) => [
-        ...prev.filter((b) => b.player_user_id !== user.id),
-        ...inserts.map((ins, i) => ({ ...ins, id: `local_${i}` })),
-      ]);
+      setBallScores(inserts.map((ins, i) => ({ ...ins, id: `local_${i}` })));
     } catch (e: any) {
       setSubmitError(e?.message ?? "Failed to submit scores");
     } finally {
@@ -361,6 +376,14 @@ export default function SkeeballTrackerScreen() {
       );
     }
     setMySession((prev) => prev ? { ...prev, status: "completed" } : prev);
+  }
+
+  function updateBall(uid: string, index: number, value: string) {
+    setAllBalls((prev) => {
+      const updated = [...(prev[uid] ?? ["", "", ""])];
+      updated[index] = value.replace(/[^0-9]/g, "");
+      return { ...prev, [uid]: updated };
+    });
   }
 
   function togglePlayer(uid: string) {
@@ -464,7 +487,7 @@ export default function SkeeballTrackerScreen() {
 
   // ─── Waiting (I submitted, waiting for teammates) ─────────────────────────────
 
-  if (mySession && iAmPlayer && myBallsSubmitted) {
+  if (mySession && iAmPlayer && allBallsSubmitted) {
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         {warningModal}
@@ -476,7 +499,7 @@ export default function SkeeballTrackerScreen() {
         <View style={s.centered}>
           <View style={s.waitWrap}><ActivityIndicator size="large" color="#06b6d4" /></View>
           <Text style={s.bigTitle}>Scores Submitted!</Text>
-          <Text style={s.bigSub}>Waiting for teammates…</Text>
+          <Text style={s.bigSub}>Finalizing results…</Text>
           <View style={{ width: "100%", paddingHorizontal: 24, marginTop: 32 }}>
             {playerProgress.map((pp) => (
               <ProgressRow key={pp.player_user_id} pp={pp} isMe={pp.player_user_id === user?.id} />
@@ -510,8 +533,14 @@ export default function SkeeballTrackerScreen() {
 
   // ─── Scoring (my turn) ────────────────────────────────────────────────────────
 
-  if (mySession && iAmPlayer && !myBallsSubmitted) {
-    const ballTotal = balls.reduce((sum, b) => sum + (parseInt(b) || 0), 0);
+  if (mySession && iAmPlayer && !allBallsSubmitted) {
+    const grandTotal = sessionPlayers.reduce((sum, sp) =>
+      sum + (allBalls[sp.player_user_id] ?? []).reduce((s, b) => s + (parseInt(b) || 0), 0), 0
+    );
+    const allFilled = sessionPlayers.every((sp) =>
+      (allBalls[sp.player_user_id] ?? []).length === 3 &&
+      (allBalls[sp.player_user_id] ?? []).every((b) => b !== "")
+    );
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         {warningModal}
@@ -525,29 +554,54 @@ export default function SkeeballTrackerScreen() {
             <Ionicons name="location" size={15} color="#06b6d4" />
             <Text style={s.laneChipText}>Lane {mySession.lane_number}</Text>
           </View>
-          <Text style={s.scoreTitle}>Enter Your Ball Scores</Text>
-          <Text style={s.scoreSub}>Enter the score for each of your 3 balls</Text>
+          <Text style={s.scoreTitle}>Enter Ball Scores</Text>
+          <Text style={s.scoreSub}>
+            {sessionPlayers.length === 1
+              ? "Enter scores for 3 balls"
+              : `Track all ${sessionPlayers.length * 3} balls for your team`}
+          </Text>
 
-          {[0, 1, 2].map((i) => (
-            <View key={i} style={s.ballRow}>
-              <Text style={s.ballLabel}>Ball {i + 1}</Text>
-              <TextInput
-                style={s.ballInput}
-                value={balls[i]}
-                onChangeText={(v) => { const n = [...balls]; n[i] = v.replace(/[^0-9]/g, ""); setBalls(n); }}
-                keyboardType="number-pad"
-                placeholder="0"
-                placeholderTextColor="#333"
-                maxLength={3}
-              />
-              <Text style={s.ballUnit}>pts</Text>
+          {sessionPlayers.map((sp, playerIdx) => {
+            const playerBalls = allBalls[sp.player_user_id] ?? ["", "", ""];
+            const playerTotal = playerBalls.reduce((s, b) => s + (parseInt(b) || 0), 0);
+            return (
+              <View key={sp.player_user_id} style={s.playerSection}>
+                <View style={s.playerSectionHeader}>
+                  <Avatar uri={sp.avatar_url} name={sp.username} size={32} radius={10} />
+                  <Text style={s.playerSectionName}>{sp.username}</Text>
+                  {sp.player_user_id === user?.id && (
+                    <View style={s.youChip}><Text style={s.youChipText}>You</Text></View>
+                  )}
+                  <Text style={s.playerSectionTotal}>{playerTotal} pts</Text>
+                </View>
+                {[0, 1, 2].map((i) => {
+                  const ballNum = playerIdx * 3 + i + 1;
+                  return (
+                    <View key={i} style={s.ballRow}>
+                      <Text style={s.ballLabel}>Ball {ballNum}</Text>
+                      <TextInput
+                        style={s.ballInput}
+                        value={playerBalls[i]}
+                        onChangeText={(v) => updateBall(sp.player_user_id, i, v)}
+                        keyboardType="number-pad"
+                        placeholder="0"
+                        placeholderTextColor="#333"
+                        maxLength={3}
+                      />
+                      <Text style={s.ballUnit}>pts</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            );
+          })}
+
+          {sessionPlayers.length > 1 && (
+            <View style={s.totalRow}>
+              <Text style={s.totalLabel}>Team total</Text>
+              <Text style={s.totalValue}>{grandTotal} pts</Text>
             </View>
-          ))}
-
-          <View style={s.totalRow}>
-            <Text style={s.totalLabel}>Your total</Text>
-            <Text style={s.totalValue}>{ballTotal} pts</Text>
-          </View>
+          )}
 
           {submitError && (
             <View style={s.errorBox}>
@@ -557,18 +611,13 @@ export default function SkeeballTrackerScreen() {
           )}
 
           <Pressable
-            style={[s.submitBtn, (submitting || balls.some((b) => b === "")) && s.btnOff]}
+            style={[s.submitBtn, (!allFilled || submitting) && s.btnOff]}
             onPress={submitBalls}
-            disabled={submitting || balls.some((b) => b === "")}
+            disabled={!allFilled || submitting}
           >
             {submitting ? <ActivityIndicator size="small" color="#000" /> : <Ionicons name="checkmark-circle-outline" size={20} color="#000" />}
-            <Text style={s.submitBtnText}>Submit My Scores</Text>
+            <Text style={s.submitBtnText}>Submit All Scores</Text>
           </Pressable>
-
-          <Text style={[s.sectionLabel, { marginTop: 28 }]}>Team Progress</Text>
-          {playerProgress.map((pp) => (
-            <ProgressRow key={pp.player_user_id} pp={pp} isMe={pp.player_user_id === user?.id} card />
-          ))}
         </ScrollView>
       </SafeAreaView>
     );
@@ -725,7 +774,12 @@ const s = StyleSheet.create({
   scoreTitle: { color: "#fff", fontSize: 22, fontWeight: "900", marginBottom: 6 },
   scoreSub: { color: "#555", fontSize: 13, marginBottom: 24 },
 
-  ballRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#111", borderRadius: 16, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "#1e1e1e", gap: 12 },
+  playerSection: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#1e1e1e" },
+  playerSectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  playerSectionName: { color: "#fff", fontSize: 14, fontWeight: "800", flex: 1 },
+  playerSectionTotal: { color: "#06b6d4", fontSize: 16, fontWeight: "900" },
+
+  ballRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a", gap: 12 },
   ballLabel: { color: "#555", fontSize: 14, fontWeight: "700", width: 48 },
   ballInput: { flex: 1, color: "#fff", fontSize: 28, fontWeight: "900", textAlign: "center" },
   ballUnit: { color: "#333", fontSize: 13, fontWeight: "700", width: 28, textAlign: "right" },
