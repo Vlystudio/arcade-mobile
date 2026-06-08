@@ -83,7 +83,7 @@ export default function LeaderboardScreen() {
     if (!user) return;
     let query = supabase
       .from("scores")
-      .select("user_id, score, created_at, game_id, profiles(username), games(name, type)")
+      .select("user_id, score, created_at, game_id, games(name, type)")
       .eq("status", "approved")
       .order("score", { ascending: false })
       .limit(50);
@@ -96,10 +96,23 @@ export default function LeaderboardScreen() {
     if (gameId) query = query.eq("game_id", gameId);
 
     const { data } = await query;
+
+    // Fetch display names from public_profiles (respects is_private flag).
+    // Private users show as "Unknown" on the leaderboard.
+    const userIds = [...new Set((data ?? []).map((r: any) => r.user_id as string))];
+    let usernameMap: Record<string, string> = {};
+    if (userIds.length > 0) {
+      const { data: pubProfiles } = await supabase
+        .from("public_profiles")
+        .select("id, username")
+        .in("id", userIds);
+      for (const p of pubProfiles ?? []) usernameMap[p.id] = p.username ?? "Unknown";
+    }
+
     const mapped: LeaderEntry[] = (data ?? []).map((row: any, i: number) => ({
       rank: i + 1,
       user_id: row.user_id,
-      username: Array.isArray(row.profiles) ? (row.profiles[0]?.username ?? "Unknown") : (row.profiles?.username ?? "Unknown"),
+      username: usernameMap[row.user_id] ?? "Unknown",
       game_name: Array.isArray(row.games) ? (row.games[0]?.name ?? "Game") : (row.games?.name ?? "Game"),
       game_type: Array.isArray(row.games) ? (row.games[0]?.type ?? "") : (row.games?.type ?? ""),
       score: row.score,
@@ -156,7 +169,7 @@ export default function LeaderboardScreen() {
     );
     if (ids.length) {
       const { data: profiles } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, username, avatar_url")
         .in("id", ids);
       setShareFriends((profiles ?? []).map((p: any) => ({

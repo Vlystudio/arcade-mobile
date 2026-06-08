@@ -167,12 +167,9 @@ BEGIN
   INSERT INTO lane_qr_tokens (lane_id, venue_id, token_hash, expires_at, created_by)
   VALUES (p_lane_id, v_venue_id, v_hash, v_expires_at, auth.uid());
 
-  -- Also update the legacy column for backward compat with any old clients
-  UPDATE lanes
-     SET lane_qr_token       = v_raw_token,
-         qr_token_issued_at  = now(),
-         qr_token_expires_at = v_expires_at
-   WHERE id = p_lane_id;
+  -- lanes.lane_qr_token is DEPRECATED — no longer written to.
+  -- All token validation now goes through lane_qr_tokens.token_hash only.
+  -- Column retained for schema compatibility; see COMMENT below.
 
   INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
   VALUES (
@@ -263,32 +260,14 @@ BEGIN
       END IF;
     END;
   ELSE
-    -- ── Path B: legacy lane_qr_token fallback ─────────────
-    SELECT l.id, l.lane_number, l.game_id, l.venue_id, l.status
-      INTO v_lane
-      FROM lanes l
-     WHERE l.lane_qr_token = p_token
-     LIMIT 1;
-
-    IF NOT FOUND THEN
-      INSERT INTO security_events (event_type, severity, user_id, details)
-      VALUES ('qr_token_invalid', 'warn', v_user_id,
-        jsonb_build_object('token_suffix', right(p_token, 8)))
-      ON CONFLICT DO NOTHING;
-      RETURN json_build_object('error', 'lane_not_found',
-        'message', 'This QR code does not match any lane.');
-    END IF;
-
-    -- Check legacy expiry
-    IF EXISTS (
-      SELECT 1 FROM lanes
-       WHERE id = v_lane.id
-         AND qr_token_expires_at IS NOT NULL
-         AND qr_token_expires_at < now()
-    ) THEN
-      RETURN json_build_object('error', 'token_expired',
-        'message', 'This QR code has expired. Ask staff to regenerate it.');
-    END IF;
+    -- No hashed token found. Legacy lane_qr_token fallback has been removed.
+    -- Any token not in lane_qr_tokens is unconditionally rejected.
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('qr_token_invalid', 'warn', v_user_id,
+      jsonb_build_object('token_suffix', right(p_token, 8)))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error', 'lane_not_found',
+      'message', 'This QR code does not match any lane. Ask staff to scan the current code.');
   END IF;
 
   -- ── Common validation ────────────────────────────────────
@@ -350,7 +329,26 @@ REVOKE ALL ON FUNCTION public.rpc_check_in(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.rpc_check_in(text) TO authenticated;
 
 
--- ── 5. Migrate existing lanes → lane_qr_tokens ───────────────
+-- ── 5. Mark legacy column deprecated ────────────────────────
+COMMENT ON COLUMN lanes.lane_qr_token IS
+  'DEPRECATED — no longer written to. Use lane_qr_tokens.token_hash instead. '
+  'Column kept for schema compatibility only. Remove in a future migration once '
+  'all clients have been updated.';
+
+
+-- ── 6. Ensure check_ins cannot be inserted directly ──────────
+-- RLS policy: direct INSERT blocked; all check-ins go through rpc_check_in.
+DROP POLICY IF EXISTS "No direct insert check_ins" ON check_ins;
+CREATE POLICY "No direct insert check_ins" ON check_ins
+  FOR INSERT WITH CHECK (false);
+
+-- Users may only read their own check-ins.
+DROP POLICY IF EXISTS "Users read own check_ins" ON check_ins;
+CREATE POLICY "Users read own check_ins" ON check_ins
+  FOR SELECT USING (user_id = auth.uid() OR public.is_admin());
+
+
+-- ── 7. Migrate existing lanes → lane_qr_tokens ───────────────
 -- Back-fills any lane that already has lane_qr_token set.
 -- Tokens are migrated as pre-hashed; admins should rotate soon.
 INSERT INTO lane_qr_tokens (lane_id, venue_id, token_hash, expires_at, created_by)

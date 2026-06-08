@@ -300,15 +300,28 @@ CREATE TRIGGER trig_queue_post_photo_cleanup
 -- ─────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.rpc_admin_get_storage_cleanup_queue(p_limit int DEFAULT 100)
 RETURNS TABLE (id uuid, bucket text, path text, reason text, created_at timestamptz)
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT id, bucket, path, reason, created_at
-    FROM storage_cleanup_queue
-   WHERE processed_at IS NULL
-   ORDER BY created_at
-   LIMIT p_limit;
+BEGIN
+  PERFORM public.require_mfa();
+
+  IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_get_storage_cleanup_queue'))
+    ON CONFLICT DO NOTHING;
+    RAISE EXCEPTION 'unauthorized' USING ERRCODE = 'P0001';
+  END IF;
+
+  RETURN QUERY
+    SELECT scq.id, scq.bucket, scq.path, scq.reason, scq.created_at
+      FROM storage_cleanup_queue scq
+     WHERE scq.processed_at IS NULL
+     ORDER BY scq.created_at
+     LIMIT p_limit;
+END;
 $$;
 
 REVOKE ALL ON FUNCTION public.rpc_admin_get_storage_cleanup_queue(int) FROM PUBLIC;
@@ -316,14 +329,25 @@ GRANT  EXECUTE ON FUNCTION public.rpc_admin_get_storage_cleanup_queue(int) TO au
 
 CREATE OR REPLACE FUNCTION public.rpc_admin_mark_storage_cleaned(p_ids uuid[])
 RETURNS void
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+BEGIN
+  PERFORM public.require_mfa();
+
+  IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_mark_storage_cleaned'))
+    ON CONFLICT DO NOTHING;
+    RAISE EXCEPTION 'unauthorized' USING ERRCODE = 'P0001';
+  END IF;
+
   UPDATE storage_cleanup_queue
      SET processed_at = now()
-   WHERE id = ANY(p_ids)
-     AND public.is_admin();
+   WHERE id = ANY(p_ids);
+END;
 $$;
 
 REVOKE ALL ON FUNCTION public.rpc_admin_mark_storage_cleaned(uuid[]) FROM PUBLIC;

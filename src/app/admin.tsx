@@ -426,6 +426,8 @@ export default function AdminScreen() {
     return () => { supabase.removeChannel(ch); };
   }, [isAdmin, mainTab]);
 
+  // UX-only gate — redirects non-admins for a better experience.
+  // Real authorization is enforced by SECURITY DEFINER RPCs and RLS in every mutation.
   async function checkAdminAndLoad() {
     const { data } = await supabase.from("profiles").select("role").eq("id", user!.id).single();
     const role = data?.role ?? "user";
@@ -528,6 +530,10 @@ export default function AdminScreen() {
 
   async function loadReviews(tab: ReviewTab) {
     setReviewLoading(true);
+    // p_venue_id omitted → platform-admin scope (all venues).
+    // This screen is accessible only to platform admins (role = admin/owner/architect).
+    // Venue-admin-scoped access is handled by passing p_venue_id — add that here
+    // if/when this screen is extended to support venue-admin login.
     const { data, error } = await supabase.rpc("rpc_admin_get_score_review_queue", {
       p_status: tab,
     });

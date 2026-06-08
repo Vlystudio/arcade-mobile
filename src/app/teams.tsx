@@ -299,7 +299,7 @@ export default function TeamsScreen() {
   async function searchInviteUsers(text: string) {
     if (!text.trim() || !user) { setInviteResults([]); return; }
     setInviteSearching(true);
-    const { data } = await supabase.from("profiles").select("id, username").ilike("username", `%${text.trim()}%`).neq("id", user.id).limit(8);
+    const { data } = await supabase.from("public_profiles").select("id, username").ilike("username", `%${text.trim()}%`).neq("id", user.id).limit(8);
     setInviteResults(data ?? []);
     setInviteSearching(false);
   }
@@ -347,7 +347,7 @@ export default function TeamsScreen() {
 
     const userIds = reqData.map((r: any) => r.user_id);
     const { data: profileData } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, username")
       .in("id", userIds);
 

@@ -31,7 +31,6 @@ jobs:
 
       - name: Lint
         run: npx expo lint --max-warnings 0
-        continue-on-error: true
 
       - name: Web export (smoke build)
         run: npx expo export --platform web
@@ -84,7 +83,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   sast:
-    name: SAST (Semgrep)
+    # Semgrep is ADVISORY — findings are uploaded to GitHub Security tab but
+    # do not block the build. This is intentional during development: the
+    # auto ruleset produces noise on generated/vendored code.
+    #
+    # ACTION REQUIRED before customer-production launch:
+    #   1. Triage all open Semgrep findings in the Security tab.
+    #   2. Suppress false positives with inline `# nosemgrep` comments.
+    #   3. Remove `continue-on-error: true` from the scan step to make it blocking.
+    name: SAST (Semgrep — advisory)
     runs-on: ubuntu-latest
     container:
       image: semgrep/semgrep
@@ -94,7 +101,7 @@ jobs:
 
       - name: Semgrep scan
         run: semgrep scan --config=auto --sarif --output=semgrep.sarif src/ api/ lib/
-        continue-on-error: true
+        continue-on-error: true  # advisory — see comment above
 
       - name: Upload Semgrep SARIF
         uses: github/codeql-action/upload-sarif@v3

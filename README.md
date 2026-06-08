@@ -121,6 +121,8 @@ Run these SQL scripts **in order** in the Supabase SQL Editor:
 | 14 | `scripts/storage-security.sql` | Storage bucket RLS policies, including private media quarantine + cleanup queue |
 | 15 | `scripts/square-webhook-events.sql` | Square webhook idempotency and payment/order status tables |
 | 16 | `scripts/input-validation-hardening.sql` | Database check constraints for user-generated inputs |
+| 17 | `scripts/security-hardening-3.sql` | Venue-scoped score review queue, score proof signed URL RPC, lane token rotation fix |
+| 18 | `scripts/security-cleanup.sql` | Production hardening: remove QR legacy fallback, fix storage cleanup RPC auth, deprecate `lanes.lane_qr_token` |
 
 > **Verification:** After all scripts are applied, run `scripts/security-verification-tests.sql` in the SQL Editor. Every row should return `result = 'PASS'`.
 
@@ -165,7 +167,7 @@ Open in Expo Go (scan QR), iOS Simulator (`i`), or Android Emulator (`a`).
 | `follows` | `follower_id`, `following_id` | |
 | `scores` | `id`, `user_id`, `game_id`, `score`, `status`, `photo_url` | `status`: `pending` \| `approved` \| `denied` |
 | `games` | `id`, `name`, `type` | Seeded via `seed-games.sql` |
-| `lanes` | `id`, `lane_number`, `lane_qr_token`, `status`, `game_id` | QR tokens are hashed + expiring; raw value never stored (see Security Model) |
+| `lanes` | `id`, `lane_number`, `status`, `game_id` | `lane_qr_token` column is **deprecated** — no longer written to; use `lane_qr_tokens` table |
 | `check_ins` | `id`, `user_id`, `lane_id`, `status` | Inserts via rpc_check_in only — direct inserts blocked by RLS |
 | `teams` | `id`, `name`, `captain_id` | |
 | `team_members` | `team_id`, `user_id` | |
@@ -201,15 +203,17 @@ Every table has RLS enabled. The anon key cannot bypass it. Key rules:
 Admin screens verify `profiles.is_admin` with a live DB query on every mount (`checkAdminAndLoad` in `admin.tsx`). The frontend check is for UX only — all sensitive operations are blocked by RLS regardless.
 
 ### QR codes
-Lane QR tokens are **hashed and expiring** — raw token values are never stored in the DB.
+Lane QR check-in uses **hashed, expiring, revocable tokens** stored in `lane_qr_tokens` and validated exclusively through `rpc_check_in`. Raw token values are never stored in the database.
 
-1. Admins generate tokens via `rpc_admin_generate_lane_qr_token(lane_id)` — the raw token is returned once and must be printed/embedded in the QR code.
+1. Admins generate tokens via `rpc_admin_generate_lane_qr_token(lane_id)` — the raw token is returned once and must be printed/embedded in the QR code immediately.
 2. The DB stores only the SHA-256 hash (`lane_qr_tokens.token_hash`). A compromised DB reveals nothing usable.
-3. Tokens expire after 90 days. Admins can force-rotate any time.
-4. Revoked and expired tokens are rejected with distinct error codes in `rpc_check_in`.
-5. Only one active check-in per user at a time (RLS enforced).
-6. Rate-limit: 30-minute cooldown before re-checking into the same lane.
-7. Test-lane buttons (`__DEV__` only) are hidden in production builds.
+3. Default token lifetime: **30 days** (720 hours). Admins can force-rotate any time via `rpc_admin_rotate_lane_token`.
+4. Revoked and expired tokens are rejected with distinct error codes (`token_revoked`, `token_expired`).
+5. `lanes.lane_qr_token` is **deprecated** — no longer written to; all validation goes through `lane_qr_tokens` only.
+6. Check-ins are **RPC-only** — direct `INSERT INTO check_ins` is blocked by RLS for all roles.
+7. One active check-in per user at a time (enforced server-side in `rpc_check_in`).
+8. Rate-limit: 30-minute cooldown before re-checking into the same lane.
+9. Test-lane buttons (`__DEV__` only) are hidden in production builds.
 
 ### Score submission
 Score inserts are routed through `rpc_submit_score` (SECURITY DEFINER). The RPC:
@@ -227,6 +231,10 @@ All admin-only mutations use SECURITY DEFINER RPCs. Every RPC:
 | RPC | Who can call |
 |-----|-------------|
 | `rpc_admin_review_score` | Platform admin **or** venue admin of that score's venue |
+| `rpc_admin_get_score_review_queue` | Platform admin (all venues) **or** venue admin (own venue only via `p_venue_id`) |
+| `rpc_admin_create_score_proof_signed_url` | Platform admin **or** venue admin of that score's venue |
+| `rpc_admin_generate_lane_qr_token` / `rpc_admin_rotate_lane_token` | Platform admin **or** venue admin of that lane's venue |
+| `rpc_admin_get_storage_cleanup_queue` / `rpc_admin_mark_storage_cleaned` | Platform admin only (+ MFA) |
 | `rpc_admin_update_forum_status` | Platform admin only |
 | `rpc_admin_approve_tournament` / `rpc_admin_deny_tournament` | Platform admin only |
 | `rpc_admin_set_tournament_status` | Platform admin only |
