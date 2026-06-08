@@ -33,6 +33,15 @@ CREATE TABLE IF NOT EXISTS security_events (
 -- venue_role_revoked       — venue admin/owner/staff removed
 -- account_deleted          — self-requested account deletion
 -- suspicious_login         — multiple failed MFA attempts (future)
+-- login_failed               — auth failed login (wrong password / no account)
+-- mfa_failed                 — MFA code rejected
+-- mfa_disabled               — 2FA removed from account
+-- password_reset_requested   — password reset email triggered
+-- storage_upload_spike       — >10 uploads in 5 min from same user
+-- suspicious_score_spike     — >5 score submissions in 10 min (above rate limit)
+-- payment_webhook_invalid_sig — Square webhook received invalid HMAC signature
+-- payment_webhook_replay     — duplicate Square event_id (replay attempt)
+-- moderation_flagged         — image or text flagged by moderation service
 
 CREATE INDEX IF NOT EXISTS idx_sec_events_type       ON security_events (event_type);
 CREATE INDEX IF NOT EXISTS idx_sec_events_severity   ON security_events (severity);
@@ -214,3 +223,36 @@ DROP TRIGGER IF EXISTS guard_role_escalation_trigger ON profiles;
 CREATE TRIGGER guard_role_escalation_trigger
   BEFORE UPDATE ON profiles
   FOR EACH ROW EXECUTE FUNCTION public.guard_role_escalation();
+
+
+-- ── 6. Log payment webhook security events ────────────────────
+-- Called from api/square/webhook.ts via supabase.rpc()
+-- when signature validation fails or a replay is detected.
+CREATE OR REPLACE FUNCTION public.log_payment_security_event(
+  p_event_type text,
+  p_details    jsonb DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO security_events (event_type, severity, details)
+  VALUES (
+    p_event_type,
+    CASE p_event_type
+      WHEN 'payment_webhook_invalid_sig' THEN 'critical'
+      WHEN 'payment_webhook_replay'      THEN 'warn'
+      ELSE 'warn'
+    END,
+    p_details
+  );
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END;
+$$;
+
+-- This function is called by the server-side API route (service role), not by users.
+-- Do NOT grant to authenticated or anon.
+REVOKE ALL ON FUNCTION public.log_payment_security_event(text, jsonb) FROM PUBLIC;

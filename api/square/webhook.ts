@@ -34,6 +34,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const signature = req.headers["x-square-hmacsha256-signature"];
   if (typeof signature !== "string" || !verifySquareSignature(rawBody, signature, signatureKey, notificationUrl)) {
     console.warn("[square-webhook] invalid signature");
+    // Log security event (fire-and-forget; do not block the 401 response)
+    supabase.rpc("log_payment_security_event", {
+      p_event_type: "payment_webhook_invalid_sig",
+      p_details: { endpoint: req.url },
+    }).catch(() => {});
     return res.status(401).json({ error: "unauthorized" });
   }
 
@@ -59,6 +64,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (eventError) {
     if (eventError.code === "23505") {
+      // Duplicate event_id — log as replay attempt (fire-and-forget)
+      supabase.rpc("log_payment_security_event", {
+        p_event_type: "payment_webhook_replay",
+        p_details: { event_id: eventId },
+      }).catch(() => {});
       return res.status(200).json({ ok: true, duplicate: true });
     }
     console.error("[square-webhook] event insert failed", eventError.message);

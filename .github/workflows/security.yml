@@ -8,20 +8,17 @@ on:
 
 permissions:
   contents: read
-  security-events: write   # CodeQL / dependency-review
+  security-events: write
   actions: read
 
 jobs:
-  security:
-    name: Type-check, lint, and audit
+  build-and-lint:
+    name: Type-check, lint & web build
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
-      - name: Set up Node
-        uses: actions/setup-node@v6
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
@@ -32,42 +29,88 @@ jobs:
       - name: TypeScript type check
         run: npx tsc --noEmit
 
-      - name: npm audit (high/critical only, production deps)
+      - name: Lint
+        run: npx expo lint --max-warnings 0
+        continue-on-error: true
+
+      - name: Web export (smoke build)
+        run: npx expo export --platform web
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: placeholder_anon_key
+          EXPO_PUBLIC_API_BASE_URL: https://placeholder.example.com
+          EXPO_PUBLIC_SITE_URL: https://placeholder.example.com
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: npm audit (high/critical, production only)
         run: npm audit --audit-level=high --omit=dev
+
+      - name: Generate SBOM
+        run: npx @cyclonedx/cyclonedx-npm --output-format json --output-file sbom.json
+        continue-on-error: true
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sbom
+          path: sbom.json
+          retention-days: 30
+
+  secret-scan:
+    name: Secret scanning (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  sast:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    if: github.actor != 'dependabot[bot]'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Semgrep scan
+        run: semgrep scan --config=auto --sarif --output=semgrep.sarif src/ api/ lib/
+        continue-on-error: true
+
+      - name: Upload Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: semgrep.sarif
 
   dependency-review:
     name: Dependency review (PRs only)
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v4
 
       - name: Dependency review
-        uses: actions/dependency-review-action@v5
+        uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
-          # Deny any package with a known license incompatibility
           deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
-
-  secret-scan:
-    name: Secret scanning check
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Check for accidental secrets in diff
-        run: |
-          # Fail if any EXPO_PUBLIC_ key that looks like a secret appears in staged files
-          # (anon keys are fine; service role keys are not)
-          if git diff origin/${{ github.base_ref || 'master' }}...HEAD -- '*.ts' '*.tsx' '*.js' '*.env*' \
-            | grep -E 'service_role|SUPABASE_SERVICE_ROLE|SQUARE_ACCESS_TOKEN\s*=' | grep -v '^\-'; then
-            echo "::error::Possible secret detected in diff. Check the lines above."
-            exit 1
-          fi
-        continue-on-error: false

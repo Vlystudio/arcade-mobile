@@ -29,6 +29,15 @@ This document describes the monitoring strategy, alert types, recommended toolin
 | `account_deleted` | info | Self-requested account deletion completed |
 | `moderation_service_down` | warn/critical | AWS Rekognition / OpenAI unavailable in production |
 | `payment_validation_fail` | warn | Square catalog rejection |
+| `login_failed` | warn | Failed login attempt (wrong password / account not found) |
+| `mfa_failed` | warn | Correct password but MFA code wrong or timed out |
+| `mfa_disabled` | warn | MFA removed from account |
+| `password_reset_requested` | info | Password reset email triggered |
+| `storage_upload_spike` | warn | User uploaded >10 files in 5 minutes |
+| `suspicious_score_spike` | warn | User submitted >5 scores in 10 minutes (above normal rate-limit) |
+| `payment_webhook_invalid_sig` | critical | Square webhook received with invalid HMAC signature |
+| `payment_webhook_replay` | warn | Duplicate Square event_id received (replay attempt) |
+| `moderation_flagged` | warn | Image or text flagged by moderation service |
 
 ---
 
@@ -165,6 +174,46 @@ WHERE event_type = 'role_escalation_attempt'
 ORDER BY created_at DESC;
 ```
 
+### Failed login / MFA attempts (potential credential stuffing)
+```sql
+SELECT user_id, event_type, COUNT(*) as attempts, MAX(created_at) as last_attempt
+FROM security_events
+WHERE event_type IN ('login_failed', 'mfa_failed')
+  AND created_at > now() - interval '1 hour'
+GROUP BY user_id, event_type
+HAVING COUNT(*) >= 3
+ORDER BY attempts DESC;
+```
+
+### Storage upload spikes
+```sql
+SELECT user_id, COUNT(*) as uploads, MAX(created_at) as last_upload
+FROM security_events
+WHERE event_type = 'storage_upload_spike'
+  AND created_at > now() - interval '24 hours'
+GROUP BY user_id
+ORDER BY uploads DESC;
+```
+
+### Payment integrity issues
+```sql
+SELECT event_type, details, created_at
+FROM security_events
+WHERE event_type IN ('payment_webhook_invalid_sig', 'payment_webhook_replay')
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+### Moderation flags by type
+```sql
+SELECT details->>'record_type' as content_type, COUNT(*) as flags
+FROM security_events
+WHERE event_type = 'moderation_flagged'
+  AND created_at > now() - interval '7 days'
+GROUP BY 1
+ORDER BY flags DESC;
+```
+
 ---
 
 ## Alert Thresholds (Recommended)
@@ -177,6 +226,28 @@ ORDER BY created_at DESC;
 | `rate_limit_hit` | >100 in 1 hour overall | Check for automated attack |
 | `moderation_service_down` | Any in production | Page on-call + check AWS/OpenAI |
 | Failed logins (Supabase Auth logs) | >10 in 5 min | Enable Auth rate limiting, check for credential stuffing |
+| `login_failed` | >10 in 5 min same user | Possible credential stuffing — check Supabase Auth logs |
+| `mfa_failed` | >5 in 10 min same user | Possible MFA brute-force |
+| `payment_webhook_invalid_sig` | Any | Immediate — possible webhook spoofing attempt |
+| `storage_upload_spike` | Any | Review uploaded content for abuse |
+| `moderation_flagged` | >3 from same user in 1h | Possible repeat offender — review account |
+
+---
+
+## New Event SQL Additions
+
+```sql
+-- New event types added in security hardening pass 2:
+-- login_failed              — auth.users login failure (hook or Supabase Auth log)
+-- mfa_failed                — MFA code rejected
+-- mfa_disabled              — 2FA removed from account
+-- password_reset_requested  — password reset email triggered
+-- storage_upload_spike      — >10 uploads in 5 min from one user
+-- suspicious_score_spike    — >5 score submissions in 10 min
+-- payment_webhook_invalid_sig — Square webhook HMAC mismatch
+-- payment_webhook_replay    — duplicate Square event_id
+-- moderation_flagged        — image or text flagged by AI moderation
+```
 
 ---
 

@@ -165,8 +165,8 @@ Open in Expo Go (scan QR), iOS Simulator (`i`), or Android Emulator (`a`).
 | `follows` | `follower_id`, `following_id` | |
 | `scores` | `id`, `user_id`, `game_id`, `score`, `status`, `photo_url` | `status`: `pending` \| `approved` \| `denied` |
 | `games` | `id`, `name`, `type` | Seeded via `seed-games.sql` |
-| `lanes` | `id`, `lane_number`, `lane_qr_token`, `status`, `game_id` | QR token is a static secret per lane |
-| `check_ins` | `id`, `user_id`, `lane_id`, `status` | One active check-in per user enforced by RLS |
+| `lanes` | `id`, `lane_number`, `lane_qr_token`, `status`, `game_id` | QR tokens are hashed + expiring; raw value never stored (see Security Model) |
+| `check_ins` | `id`, `user_id`, `lane_id`, `status` | Inserts via rpc_check_in only — direct inserts blocked by RLS |
 | `teams` | `id`, `name`, `captain_id` | |
 | `team_members` | `team_id`, `user_id` | |
 | `tournaments` | `id`, `title`, `status`, `is_official`, `is_individual`, `signup_type`, `created_by`, `announcement` | |
