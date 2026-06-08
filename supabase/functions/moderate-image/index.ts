@@ -15,6 +15,7 @@
 
 import { createClient }                                from "https://esm.sh/@supabase/supabase-js@2";
 import { RekognitionClient, DetectModerationLabelsCommand } from "https://esm.sh/@aws-sdk/client-rekognition@3";
+import { corsHeaders, handleCors, rejectDisallowedOrigin } from "../_shared/cors.ts";
 
 const AWS_KEY    = Deno.env.get("AWS_ACCESS_KEY_ID")     ?? "";
 const AWS_SECRET = Deno.env.get("AWS_SECRET_ACCESS_KEY") ?? "";
@@ -46,10 +47,7 @@ const BLOCK_LABELS: Record<string, string> = {
   "Explosions And Blasts":    "violent content",
 };
 
-const CORS = {
-  "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const QUARANTINE_BUCKET = "media-quarantine";
 
 async function logModerationFailure(
   admin: ReturnType<typeof createClient>,
@@ -66,12 +64,17 @@ async function logModerationFailure(
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
+  const rejectedOrigin = rejectDisallowedOrigin(req);
+  if (rejectedOrigin) return rejectedOrigin;
+  const CORS = corsHeaders(req);
+
   if (req.method !== "POST")
     return Response.json({ error: "method_not_allowed" }, { status: 405, headers: CORS });
 
   // ── Missing credentials ───────────────────────────────────
-  if (!AWS_KEY || !AWS_SECRET) {
+  /*
     if (IS_PROD) {
       // Production: fail closed — do not allow content through
       console.error("[moderate-image] PRODUCTION: AWS credentials not configured — rejecting");
@@ -86,17 +89,25 @@ Deno.serve(async (req: Request) => {
     // Dev: warn and allow
     console.warn("[moderate-image] DEV: AWS credentials not configured — skipping moderation");
     return Response.json({ ok: true, flagged: false, skipped: true }, { headers: CORS });
-  }
+  */
 
-  const body = await req.json() as {
+  let body: {
     image_url:   string;
     bucket:      string;
     path:        string;
     record_type: "avatar" | "post" | "score_proof" | "team_photo" | string;
     record_id:   string;
+    publish_to_bucket?: string;
+    publish_to_path?: string;
+    content_type?: string;
   };
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "invalid_json" }, { status: 400, headers: CORS });
+  }
 
-  const { image_url, bucket, path, record_type, record_id } = body;
+  const { image_url, bucket, path, record_type, record_id, publish_to_bucket, publish_to_path, content_type } = body;
 
   if (!image_url) {
     return Response.json({ error: "image_url required" }, { status: 400, headers: CORS });
@@ -123,6 +134,34 @@ Deno.serve(async (req: Request) => {
     }
     const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
 
+    if (!AWS_KEY || !AWS_SECRET) {
+      if (IS_PROD) {
+        console.error("[moderate-image] PRODUCTION: AWS credentials not configured - rejecting");
+        await logModerationFailure(admin, "missing_aws_credentials", { is_production: true });
+        return Response.json(
+          { ok: false, flagged: false, error: "moderation_unavailable",
+            message: "Content moderation is temporarily unavailable. Please try again later." },
+          { status: 503, headers: CORS }
+        );
+      }
+      console.warn("[moderate-image] DEV: AWS credentials not configured - publishing without Rekognition");
+      if (publish_to_bucket && publish_to_path) {
+        const published = await publishApprovedImage(admin, {
+          sourceBucket: bucket,
+          sourcePath: path,
+          targetBucket: publish_to_bucket,
+          targetPath: publish_to_path,
+          bytes: imgBytes,
+          contentType: content_type ?? "image/jpeg",
+        });
+        return Response.json(
+          { ok: published.ok, flagged: false, skipped: true, published_url: published.ok ? published.publicUrl : undefined },
+          { headers: CORS }
+        );
+      }
+      return Response.json({ ok: true, flagged: false, skipped: true }, { headers: CORS });
+    }
+
     const rekognition = new RekognitionClient({
       region:      AWS_REGION,
       credentials: { accessKeyId: AWS_KEY, secretAccessKey: AWS_SECRET },
@@ -142,6 +181,30 @@ Deno.serve(async (req: Request) => {
     }
 
     if (reasons.size === 0) {
+      if (publish_to_bucket && publish_to_path) {
+        const published = await publishApprovedImage(admin, {
+          sourceBucket: bucket,
+          sourcePath: path,
+          targetBucket: publish_to_bucket,
+          targetPath: publish_to_path,
+          bytes: imgBytes,
+          contentType: content_type ?? "image/jpeg",
+        });
+        if (!published.ok) {
+          if (IS_PROD) {
+            await setPendingReview(admin, record_type, record_id, "image_publish_failed");
+            await logModerationFailure(admin, "image_publish_failed",
+              { bucket, path, record_type, record_id, publish_to_bucket, publish_to_path });
+            return Response.json(
+              { ok: false, flagged: false, pending_review: true,
+                message: "Image could not be published safely. Content held for manual review." },
+              { headers: CORS }
+            );
+          }
+          return Response.json({ ok: true, flagged: false }, { headers: CORS });
+        }
+        return Response.json({ ok: true, flagged: false, published_url: published.publicUrl }, { headers: CORS });
+      }
       return Response.json({ ok: true, flagged: false }, { headers: CORS });
     }
 
@@ -153,13 +216,14 @@ Deno.serve(async (req: Request) => {
       if (delErr) console.error("[moderate-image] storage delete error:", delErr.message);
     }
 
-    if (record_type === "avatar" && record_id) {
+    const uploadedPublicly = bucket !== QUARANTINE_BUCKET;
+    if (uploadedPublicly && record_type === "avatar" && record_id) {
       await admin.from("profiles").update({ avatar_url: null }).eq("id", record_id);
-    } else if (record_type === "post" && record_id) {
+    } else if (uploadedPublicly && record_type === "post" && record_id) {
       await admin.from("posts").update({ photo_url: null }).eq("id", record_id);
-    } else if (record_type === "score_proof" && record_id) {
+    } else if (uploadedPublicly && record_type === "score_proof" && record_id) {
       await admin.from("scores").update({ proof_storage_path: null }).eq("id", record_id);
-    } else if (record_type === "team_photo" && record_id) {
+    } else if (uploadedPublicly && record_type === "team_photo" && record_id) {
       await admin.from("teams").update({ photo_url: null }).eq("id", record_id);
     }
 
@@ -204,6 +268,41 @@ Deno.serve(async (req: Request) => {
     return Response.json({ ok: true, flagged: false }, { headers: CORS });
   }
 });
+
+async function publishApprovedImage(
+  admin: ReturnType<typeof createClient>,
+  params: {
+    sourceBucket: string;
+    sourcePath: string;
+    targetBucket: string;
+    targetPath: string;
+    bytes: Uint8Array;
+    contentType: string;
+  }
+): Promise<{ ok: true; publicUrl: string } | { ok: false }> {
+  const { error: uploadErr } = await admin.storage
+    .from(params.targetBucket)
+    .upload(params.targetPath, params.bytes, {
+      contentType: params.contentType,
+      upsert: true,
+    });
+  if (uploadErr) {
+    console.error("[moderate-image] publish upload error:", uploadErr.message);
+    return { ok: false };
+  }
+
+  if (params.sourceBucket && params.sourcePath) {
+    const { error: removeErr } = await admin.storage
+      .from(params.sourceBucket)
+      .remove([params.sourcePath]);
+    if (removeErr) {
+      console.warn("[moderate-image] quarantine remove warning:", removeErr.message);
+    }
+  }
+
+  const { data } = admin.storage.from(params.targetBucket).getPublicUrl(params.targetPath);
+  return { ok: true, publicUrl: data.publicUrl };
+}
 
 async function setPendingReview(
   admin: ReturnType<typeof createClient>,

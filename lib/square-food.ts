@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import { validateFoodInstructions, validateTableNumber } from "./validation";
 
 export type SquareFoodItem = {
   id: string;
@@ -52,10 +53,20 @@ export async function createSquareCheckoutLink(input: {
   instructions?: string;
   items: SquareCartItem[];
 }) {
+  const table = validateTableNumber(input.tableNumber);
+  const instructions = validateFoodInstructions(input.instructions);
+  if (!table.ok || !instructions.ok) {
+    throw new Error("Invalid order details.");
+  }
+
   const response = await fetch(getApiUrl("/api/square/orders"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      tableNumber: table.value || undefined,
+      instructions: instructions.value || undefined,
+    }),
   });
   const data = await response.json().catch(() => null);
 

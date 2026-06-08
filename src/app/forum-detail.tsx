@@ -20,7 +20,8 @@ import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 
 import { API_BASE as MOD_BASE } from "../../lib/api-base";
-const POST_LIMIT = 280;
+import { validateChatMessage, VALIDATION_LIMITS } from "../../lib/validation";
+const POST_LIMIT = VALIDATION_LIMITS.chatMessage;
 
 type ForumPost = {
   id: string;
@@ -69,13 +70,14 @@ export default function ForumDetailScreen() {
   useEffect(() => { if (user && forumId) loadPosts(); }, [user, forumId]);
 
   async function handlePost() {
-    if (!user || !newPost.trim() || !forumId) return;
+    const forumPost = validateChatMessage(newPost);
+    if (!user || !forumPost.ok || !forumId) return;
     setPosting(true);
 
     try {
       const modRes = await fetch(`${MOD_BASE}/api/moderation/text`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: newPost }),
+        body: JSON.stringify({ text: forumPost.value }),
       });
       if (modRes.ok) {
         const { flagged, reason } = await modRes.json();
@@ -89,7 +91,7 @@ export default function ForumDetailScreen() {
 
     const { data, error } = await supabase
       .from("forum_posts")
-      .insert({ forum_id: forumId, user_id: user.id, content: newPost.trim() })
+      .insert({ forum_id: forumId, user_id: user.id, content: forumPost.value })
       .select("id, created_at")
       .single();
 
@@ -99,7 +101,7 @@ export default function ForumDetailScreen() {
     const newEntry: ForumPost = {
       id: data.id, user_id: user.id,
       username: "You", avatar_url: null,
-      content: newPost.trim(), created_at: data.created_at,
+      content: forumPost.value, created_at: data.created_at,
     };
     setPosts((prev) => [...prev, newEntry]);
     setNewPost("");

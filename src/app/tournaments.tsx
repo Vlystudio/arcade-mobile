@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { validateTournamentDescription, validateTournamentTitle } from "../../lib/validation";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -264,13 +265,18 @@ export default function TournamentsScreen() {
   }
 
   async function handleSubmitRequest() {
-    if (!user || !reqTitle.trim()) return;
     setSubmitError(null);
+    const safeTitle = validateTournamentTitle(reqTitle);
+    const safeDescription = validateTournamentDescription(reqDesc);
+    if (!user || !safeTitle.ok || !safeDescription.ok) {
+      setSubmitError(!safeTitle.ok ? safeTitle.error : !safeDescription.ok ? safeDescription.error : null);
+      return;
+    }
     setSubmitting(true);
     const { error } = await supabase.from("tournament_requests").insert({
       user_id: user.id,
-      title: reqTitle.trim(),
-      description: reqDesc.trim() || null,
+      title: safeTitle.value,
+      description: safeDescription.value || null,
       game_type: reqGameType || null,
       proposed_date: (() => { if (!reqDate.trim()) return null; const d = new Date(reqDate); return isNaN(d.getTime()) ? null : d.toISOString(); })(),
       max_teams: parseInt(reqMaxTeams, 10) || 8,

@@ -19,6 +19,15 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../components/avatar";
 import BottomTabBar from "../components/bottom-tab-bar";
+import {
+  AdminAccessGate,
+  AdminScoreReviewPanel,
+  AuditSecurityLogsPanel,
+  ForumModerationPanel,
+  TournamentAdminPanel,
+  UserRoleAdminPanel,
+  VenueAdminPanel,
+} from "../components/admin/admin-feature-panels";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 
@@ -1397,9 +1406,9 @@ export default function AdminScreen() {
   // ── Render ─────────────────────────────────────────────────────────────────
 
   if (authLoading || checking) {
-    return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
+    return <AdminAccessGate loading isAdmin={false}><View /></AdminAccessGate>;
   }
-  if (!isAdmin) return null;
+  if (!isAdmin) return <AdminAccessGate loading={false} isAdmin={false}><View /></AdminAccessGate>;
 
   return (
     <View style={styles.rootView}>
@@ -1466,7 +1475,7 @@ export default function AdminScreen() {
 
       {/* ── Reviews ── */}
       {mainTab === "reviews" && (
-        <>
+        <AdminScoreReviewPanel>
           <View style={styles.subTabBar}>
             {REVIEW_TABS.map((tab) => (
               <Pressable
@@ -1510,11 +1519,12 @@ export default function AdminScreen() {
               </>
             )}
           </ScrollView>
-        </>
+        </AdminScoreReviewPanel>
       )}
 
       {/* ── Stats ── */}
       {mainTab === "stats" && (
+        <AuditSecurityLogsPanel>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
@@ -1526,10 +1536,12 @@ export default function AdminScreen() {
             <StatsSection data={statsData} />
           )}
         </ScrollView>
+        </AuditSecurityLogsPanel>
       )}
 
       {/* ── Health ── */}
       {mainTab === "health" && (
+        <AuditSecurityLogsPanel>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
@@ -1541,10 +1553,12 @@ export default function AdminScreen() {
             <HealthSection data={healthData} />
           )}
         </ScrollView>
+        </AuditSecurityLogsPanel>
       )}
 
       {/* ── Teams ── */}
       {mainTab === "teams" && (
+        <VenueAdminPanel>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
@@ -1581,10 +1595,12 @@ export default function AdminScreen() {
             </>
           )}
         </ScrollView>
+        </VenueAdminPanel>
       )}
 
       {/* ── Scheduler ── */}
       {mainTab === "scheduler" && (
+        <VenueAdminPanel>
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           {schedLoading ? (
             <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
@@ -1691,6 +1707,7 @@ export default function AdminScreen() {
             </>
           )}
         </ScrollView>
+        </VenueAdminPanel>
       )}
 
       {/* Reassign modal */}
@@ -1735,7 +1752,7 @@ export default function AdminScreen() {
 
       {/* ── Tournaments ── */}
       {mainTab === "tournaments" && (
-        <>
+        <TournamentAdminPanel>
           <View style={styles.subTabBar}>
             {(["pending", "approved", "denied", "manage"] as const).map((tab) => (
               <Pressable
@@ -2063,7 +2080,7 @@ export default function AdminScreen() {
             )}
           </ScrollView>
           )}
-        </>
+        </TournamentAdminPanel>
       )}
 
       {/* ── Support Inbox ── */}
@@ -2163,6 +2180,7 @@ export default function AdminScreen() {
 
       {/* ── Users ── */}
       {mainTab === "users" && (
+        <UserRoleAdminPanel>
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
@@ -2231,11 +2249,12 @@ export default function AdminScreen() {
               })
           )}
         </ScrollView>
+        </UserRoleAdminPanel>
       )}
 
       {/* ── Forums ── */}
       {mainTab === "forums" && (
-        <>
+        <ForumModerationPanel>
           <View style={styles.subTabBar}>
             {(["pending", "approved"] as const).map((tab) => (
               <Pressable
@@ -2321,7 +2340,7 @@ export default function AdminScreen() {
               </>
             )}
           </ScrollView>
-        </>
+        </ForumModerationPanel>
       )}
 
       {/* ── Karaoke ── */}

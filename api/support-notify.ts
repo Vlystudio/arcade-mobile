@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "./_cors";
+import { checkRateLimit } from "./_ratelimit";
 
 const supabase = createClient(
   (process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL)!,
@@ -11,7 +13,11 @@ const SUPPORT_FROM   = process.env.SUPPORT_FROM_EMAIL  ?? "ArcadeTracker <norepl
 const SUPPORT_TO     = process.env.SUPPORT_NOTIFY_EMAIL ?? "valeyardvisuals@gmail.com";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCorsPreflight(req, res, "POST, OPTIONS")) return;
+  applyCors(req, res, "POST, OPTIONS");
+  if (rejectDisallowedOrigin(req, res)) return;
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  if (!(await checkRateLimit(req, res))) return;
 
   // Verify caller is an authenticated Supabase user
   const authHeader = req.headers.authorization ?? "";
@@ -21,8 +27,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { data: { user }, error: authErr } = await supabase.auth.getUser(token);
   if (authErr || !user) return res.status(401).json({ error: "unauthorized" });
 
-  const { ticketId } = req.body ?? {};
-  if (!ticketId) return res.status(400).json({ error: "missing_ticket_id" });
+  const { ticketId } = typeof req.body === "object" && req.body ? req.body as { ticketId?: unknown } : {};
+  if (typeof ticketId !== "string" || !/^[0-9a-f-]{32,36}$/i.test(ticketId)) {
+    return res.status(400).json({ error: "invalid_request" });
+  }
 
   // Fetch ticket and user profile
   const { data: ticket } = await supabase

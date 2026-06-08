@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { validateTeamName } from "../../lib/validation";
 
 type Team = {
   id: string; name: string; captain_user_id: string;
@@ -257,9 +258,10 @@ export default function TeamsScreen() {
   }
 
   async function handleRename() {
-    if (!user || !renameTarget || !renameText.trim()) return;
+    const name = validateTeamName(renameText);
+    if (!user || !renameTarget || !name.ok) return;
     setRenaming(true);
-    await supabase.from("teams").update({ name: renameText.trim() }).eq("id", renameTarget.id);
+    await supabase.from("teams").update({ name: name.value }).eq("id", renameTarget.id);
     setRenaming(false);
     setRenameTarget(null);
     setRenameText("");
@@ -267,13 +269,16 @@ export default function TeamsScreen() {
   }
 
   async function handleCreateTeam() {
-    if (!user || !newTeamName.trim()) return;
-    const name = newTeamName.trim();
     setCreateError(null);
+    const name = validateTeamName(newTeamName);
+    if (!user || !name.ok) {
+      if (!name.ok) setCreateError(name.error);
+      return;
+    }
     setCreating(true);
     const { data: team, error } = await supabase
       .from("teams")
-      .insert({ name, captain_user_id: user.id, slot_pref_1: newSlotPref1, slot_pref_2: newSlotPref2 })
+      .insert({ name: name.value, captain_user_id: user.id, slot_pref_1: newSlotPref1, slot_pref_2: newSlotPref2 })
       .select("id")
       .single();
     if (error || !team) {
@@ -287,7 +292,7 @@ export default function TeamsScreen() {
     setNewTeamName("");
     setNewSlotPref1(null);
     setNewSlotPref2(null);
-    router.push({ pathname: "/team-detail" as any, params: { teamId: team.id, teamName: name } });
+    router.push({ pathname: "/team-detail" as any, params: { teamId: team.id, teamName: name.value } });
     loadTeams();
   }
 

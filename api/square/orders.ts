@@ -1,5 +1,7 @@
 import { checkRateLimit } from "../_ratelimit";
+import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "../_cors";
 import { assertSquareConfigured, sendJson, squareRequest } from "./_shared";
+import { validateFoodInstructions, validateTableNumber } from "../../lib/validation";
 
 type SquareOrderItem = {
   squareVariationId: string;
@@ -7,13 +9,20 @@ type SquareOrderItem = {
 };
 
 export default async function handler(req: any, res: any) {
+  if (handleCorsPreflight(req, res, "POST, OPTIONS")) return;
+  applyCors(req, res, "POST, OPTIONS");
+  if (rejectDisallowedOrigin(req, res)) return;
+
   if (req.method !== "POST") {
     return sendJson(res, 405, { error: "Method not allowed" });
   }
 
   if (!(await checkRateLimit(req, res))) return;
 
-  const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+  const body = parseJsonBody(req.body);
+  if (!body) {
+    return sendJson(res, 400, { error: "Invalid order request." });
+  }
   const locationSlug = String(body?.locationSlug ?? "arcade_bar");
   const config = assertSquareConfigured(locationSlug);
 
@@ -24,9 +33,15 @@ export default async function handler(req: any, res: any) {
     });
   }
 
-  const items = (body?.items ?? []) as SquareOrderItem[];
+  const items = Array.isArray(body?.items) ? body.items as SquareOrderItem[] : [];
   if (!items.length) {
     return sendJson(res, 400, { error: "Order must include at least one item." });
+  }
+
+  const tableCheck = validateTableNumber(body?.tableNumber);
+  const instructionCheck = validateFoodInstructions(body?.instructions);
+  if (!tableCheck.ok || !instructionCheck.ok) {
+    return sendJson(res, 400, { error: "Invalid order details." });
   }
 
   // Validate quantity bounds (client must not send 0 or absurdly large quantities)
@@ -65,7 +80,7 @@ export default async function handler(req: any, res: any) {
     const obj = catalogObjects.get(item.squareVariationId);
     if (!obj) {
       return sendJson(res, 400, {
-        error: `Item "${item.squareVariationId}" was not found in the Square catalog.`,
+        error: "A selected item is not available.",
       });
     }
     if (obj.is_deleted) {
@@ -94,7 +109,7 @@ export default async function handler(req: any, res: any) {
   const localOrderId = body?.localOrderId ?? createUuid();
   const externalPrefix = process.env.SQUARE_REFERENCE_PREFIX ?? "arcadetracker";
   const referenceId = `${externalPrefix}:${localOrderId}`.slice(0, 40);
-  const note = buildOrderNote(body?.tableNumber, body?.instructions);
+  const note = buildOrderNote(tableCheck.value, instructionCheck.value);
 
   const payload = {
     idempotency_key: localOrderId,
@@ -111,7 +126,7 @@ export default async function handler(req: any, res: any) {
       metadata: Object.fromEntries(
         Object.entries({
           app_order_id: String(localOrderId).slice(0, 40),
-          table_or_lane: String(body?.tableNumber ?? "").slice(0, 40) || undefined,
+          table_or_lane: tableCheck.value || undefined,
         }).filter(([, v]) => v !== undefined && v !== "")
       ),
       // Prices come entirely from Square's catalog — client quantity only.
@@ -137,10 +152,24 @@ export default async function handler(req: any, res: any) {
       paymentLink: result?.payment_link ?? null,
     });
   } catch (error: any) {
+    console.error("[square-orders] checkout link failed", error?.message ?? error);
     return sendJson(res, 502, {
-      error: error?.message ?? "Unable to create Square checkout.",
+      error: "Unable to create Square checkout. Please try again.",
     });
   }
+}
+
+function parseJsonBody(body: unknown): Record<string, any> | null {
+  if (!body) return {};
+  if (typeof body === "string") {
+    try {
+      const parsed = JSON.parse(body);
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+  return typeof body === "object" ? body as Record<string, any> : null;
 }
 
 /**

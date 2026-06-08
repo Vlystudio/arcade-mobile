@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { validateChatMessage } from "../../lib/validation";
 
 type Message = {
   id: string;
@@ -95,17 +96,18 @@ export default function TeamChatScreen() {
   }, [user, teamId]);
 
   async function sendMessage() {
-    if (!user || !teamId || !draft.trim()) return;
+    const message = validateChatMessage(draft);
+    if (!user || !teamId || !message.ok) return;
     setSending(true);
 
-    const mod = await moderateText(draft.trim());
+    const mod = await moderateText(message.value);
     if (!mod.ok) {
       Alert.alert("Message blocked", mod.message);
       setSending(false);
       return;
     }
 
-    const { error } = await supabase.from("team_messages").insert({ team_id: teamId, user_id: user.id, content: draft.trim() });
+    const { error } = await supabase.from("team_messages").insert({ team_id: teamId, user_id: user.id, content: message.value });
     if (error) Alert.alert("Error", error.message);
     setDraft("");
     setSending(false);

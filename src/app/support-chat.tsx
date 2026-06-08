@@ -17,6 +17,7 @@ import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
 
 import { API_BASE } from "../../lib/api-base";
+import { validateSupportFeedback } from "../../lib/validation";
 
 type SupportMessage = {
   id: string;
@@ -120,17 +121,17 @@ export default function SupportChatScreen() {
   }, [ticketId]);
 
   async function handleSend() {
-    const trimmed = text.trim();
-    if (!trimmed || sending) return;
+    const message = validateSupportFeedback(text);
+    if (!message.ok || sending) return;
     setSending(true);
     setText("");
 
     const { data, error } = await supabase.rpc("rpc_send_support_message", {
-      p_content: trimmed,
+      p_content: message.value,
     });
 
     if (error || (data as any)?.error) {
-      setText(trimmed);
+      setText(message.value);
       setSending(false);
       return;
     }

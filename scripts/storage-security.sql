@@ -23,18 +23,10 @@ CREATE POLICY "avatars: public read" ON storage.objects
   FOR SELECT USING (bucket_id = 'avatars');
 
 CREATE POLICY "avatars: owner upload" ON storage.objects
-  FOR INSERT WITH CHECK (
-    bucket_id = 'avatars'
-    AND auth.uid() IS NOT NULL
-    -- Path must start with the caller's user ID
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  );
+  FOR INSERT WITH CHECK (false);
 
 CREATE POLICY "avatars: owner update" ON storage.objects
-  FOR UPDATE USING (
-    bucket_id = 'avatars'
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  );
+  FOR UPDATE USING (false) WITH CHECK (false);
 
 CREATE POLICY "avatars: owner delete" ON storage.objects
   FOR DELETE USING (
@@ -60,11 +52,7 @@ CREATE POLICY "post-photos: public read" ON storage.objects
   FOR SELECT USING (bucket_id = 'post-photos');
 
 CREATE POLICY "post-photos: owner upload" ON storage.objects
-  FOR INSERT WITH CHECK (
-    bucket_id = 'post-photos'
-    AND auth.uid() IS NOT NULL
-    AND (storage.foldername(name))[1] = auth.uid()::text
-  );
+  FOR INSERT WITH CHECK (false);
 
 CREATE POLICY "post-photos: owner delete" ON storage.objects
   FOR DELETE USING (
@@ -85,8 +73,10 @@ DROP POLICY IF EXISTS "score-proofs: no public read"   ON storage.objects;
 DROP POLICY IF EXISTS "score-proofs: owner upload"     ON storage.objects;
 DROP POLICY IF EXISTS "score-proofs: owner read"       ON storage.objects;
 DROP POLICY IF EXISTS "score-proofs: venue admin read" ON storage.objects;
+DROP POLICY IF EXISTS "score-proofs: admin read"       ON storage.objects;
 DROP POLICY IF EXISTS "score-proofs: admin delete"     ON storage.objects;
 DROP POLICY IF EXISTS "score-proofs: owner delete"     ON storage.objects;
+DROP POLICY IF EXISTS "score-proofs: delete"           ON storage.objects;
 
 -- Owner can upload to their own folder
 CREATE POLICY "score-proofs: owner upload" ON storage.objects
@@ -126,6 +116,38 @@ CREATE POLICY "score-proofs: delete" ON storage.objects
 -- BUCKET: message-media  (private — participants only)
 -- Path convention: {conversation_id}/{sender_user_id}/{filename}
 -- ─────────────────────────────────────────────────────────────
+
+-- -----------------------------------------------------------------------------
+-- BUCKET: media-quarantine  (PRIVATE - public media before moderation)
+-- Path convention: {user_id}/{target_bucket}/{filename}
+-- -----------------------------------------------------------------------------
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('media-quarantine', 'media-quarantine', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
+
+DROP POLICY IF EXISTS "media-quarantine: owner upload" ON storage.objects;
+DROP POLICY IF EXISTS "media-quarantine: owner read"   ON storage.objects;
+DROP POLICY IF EXISTS "media-quarantine: owner delete" ON storage.objects;
+
+CREATE POLICY "media-quarantine: owner upload" ON storage.objects
+  FOR INSERT WITH CHECK (
+    bucket_id = 'media-quarantine'
+    AND auth.uid() IS NOT NULL
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+CREATE POLICY "media-quarantine: owner read" ON storage.objects
+  FOR SELECT USING (
+    bucket_id = 'media-quarantine'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+CREATE POLICY "media-quarantine: owner delete" ON storage.objects
+  FOR DELETE USING (
+    bucket_id = 'media-quarantine'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
 
 DROP POLICY IF EXISTS "message-media: participant read"  ON storage.objects;
 DROP POLICY IF EXISTS "message-media: sender upload"     ON storage.objects;
@@ -180,17 +202,9 @@ DROP POLICY IF EXISTS "team-photos: member delete"  ON storage.objects;
 CREATE POLICY "team-photos: public read" ON storage.objects
   FOR SELECT USING (bucket_id = 'team-photos');
 
--- Only team members can upload team photos
+-- Public team photos are published by the moderation service role only.
 CREATE POLICY "team-photos: member upload" ON storage.objects
-  FOR INSERT WITH CHECK (
-    bucket_id = 'team-photos'
-    AND auth.uid() IS NOT NULL
-    AND EXISTS (
-      SELECT 1 FROM team_members
-       WHERE team_id = ((storage.foldername(name))[1])::uuid
-         AND user_id = auth.uid()
-    )
-  );
+  FOR INSERT WITH CHECK (false);
 
 CREATE POLICY "team-photos: member delete" ON storage.objects
   FOR DELETE USING (

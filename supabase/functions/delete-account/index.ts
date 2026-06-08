@@ -13,6 +13,7 @@
 //   7. Call auth.admin.deleteUser — invalidates all sessions
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders, handleCors, rejectDisallowedOrigin } from "../_shared/cors.ts";
 
 const SUPA_URL  = Deno.env.get("SUPABASE_URL")!;
 const SUPA_ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -20,13 +21,13 @@ const SUPA_SVC  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const MAX_SESSION_AGE_SECONDS = 600; // 10 minutes
 
-const CORS = {
-  "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
+  const rejectedOrigin = rejectDisallowedOrigin(req);
+  if (rejectedOrigin) return rejectedOrigin;
+  const CORS = corsHeaders(req);
+
   if (req.method !== "POST")
     return Response.json({ error: "method_not_allowed" }, { status: 405, headers: CORS });
 
@@ -64,7 +65,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     // ── 1. Delete all storage files for this user ─────────────────────────────
-    const BUCKETS = ["avatars", "post-photos", "message-media", "score-proofs"];
+    const BUCKETS = ["avatars", "post-photos", "message-media", "score-proofs", "media-quarantine"];
     await Promise.all(BUCKETS.map(async (bucket) => {
       const { data: files, error: listErr } = await admin.storage.from(bucket).list(uid);
       if (listErr || !files?.length) return;
@@ -103,7 +104,7 @@ Deno.serve(async (req: Request) => {
     if (deleteError) {
       console.error("[delete-account] auth.admin.deleteUser error:", deleteError.message);
       return Response.json(
-        { error: "delete_failed", message: deleteError.message },
+        { error: "delete_failed", message: "Account deletion failed. Please try again." },
         { status: 500, headers: CORS },
       );
     }
@@ -112,7 +113,7 @@ Deno.serve(async (req: Request) => {
   } catch (err: any) {
     console.error("[delete-account] unexpected error:", err?.message ?? err);
     return Response.json(
-      { error: "internal_error", message: err?.message ?? "Unknown error" },
+      { error: "internal_error", message: "Account deletion failed. Please try again." },
       { status: 500, headers: CORS },
     );
   }

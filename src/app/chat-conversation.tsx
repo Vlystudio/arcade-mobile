@@ -31,6 +31,7 @@ import {
 } from "../../lib/crypto";
 
 import { API_BASE as MOD_BASE } from "../../lib/api-base";
+import { validateChatMessage } from "../../lib/validation";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -178,8 +179,9 @@ export default function ChatConversationScreen() {
   }, [loading]);
 
   async function sendMessage() {
-    if (!text.trim() || !user || !conversationId || sending) return;
-    const content = text.trim();
+    const message = validateChatMessage(text);
+    if (!message.ok || !user || !conversationId || sending) return;
+    const content = message.value;
     setSending(true);
 
     try {

@@ -22,8 +22,8 @@ import { RoleBadge, isElevatedRole } from "../components/role-badge";
 import type { AppRole } from "../components/role-badge";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
-import { moderateImage } from "../../lib/moderate-image";
 import { moderateText } from "../../lib/moderate-text";
+import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
 import { sendSecurityAlert } from "../../lib/security-notify";
 import { AppTour } from "../components/app-tour";
 import { useTour } from "../hooks/use-tour";
@@ -192,17 +192,15 @@ export default function ProfileScreen() {
       const response = await fetch(uri);
       const blob = await response.blob();
       const path = `${user.id}/avatar.jpg`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(path, blob, { upsert: true, contentType: "image/jpeg" });
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
-      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-
-      const mod = await moderateImage({ imageUrl: urlData.publicUrl, bucket: "avatars", path, recordType: "avatar", recordId: user.id });
-      if (!mod.ok) throw new Error(mod.message);
+      const { publicUrl } = await uploadModeratedPublicImage({
+        ownerId: user.id,
+        data: blob,
+        contentType: "image/jpeg",
+        publicBucket: "avatars",
+        publicPath: path,
+        recordType: "avatar",
+        recordId: user.id,
+      });
 
       const { error: dbError } = await supabase.from("profiles").update({ avatar_url: publicUrl }).eq("id", user.id);
       if (dbError) throw dbError;

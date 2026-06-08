@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { createClient } from "@supabase/supabase-js";
+import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "./_cors";
+import { checkRateLimit } from "./_ratelimit";
 
 const supabase = createClient(
   (process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL)!,
@@ -30,7 +32,11 @@ const EVENTS = {
 type SecurityEvent = keyof typeof EVENTS;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCorsPreflight(req, res, "POST, OPTIONS")) return;
+  applyCors(req, res, "POST, OPTIONS");
+  if (rejectDisallowedOrigin(req, res)) return;
   if (req.method !== "POST") return res.status(405).json({ error: "method_not_allowed" });
+  if (!(await checkRateLimit(req, res))) return;
 
   const token = (req.headers.authorization ?? "").replace("Bearer ", "").trim();
   if (!token) return res.status(401).json({ error: "unauthorized" });

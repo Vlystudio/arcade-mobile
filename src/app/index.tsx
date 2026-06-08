@@ -25,8 +25,9 @@ import { Avatar } from "../components/avatar";
 import { ImageLightbox } from "../components/image-lightbox";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
-import { moderateImage } from "../../lib/moderate-image";
 import { moderateText } from "../../lib/moderate-text";
+import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
+import { validateCommentContent, validatePostContent } from "../../lib/validation";
 import { AppTour } from "../components/app-tour";
 import { useTour } from "../hooks/use-tour";
 import { getTourSteps } from "../../lib/tour-steps";
@@ -260,7 +261,12 @@ export default function FeedScreen() {
 
   async function handleSaveEdit() {
     if (!editingPost || !user) return;
-    if (!editContent.trim() && !editPhotoUri && editPhotoRemoved && !editingPost.photo_url) {
+    const editText = validatePostContent(editContent);
+    if (!editText.ok) {
+      setEditError(editText.error);
+      return;
+    }
+    if (!editText.value && !editPhotoUri && editPhotoRemoved && !editingPost.photo_url) {
       setEditError("Post must have text or a photo.");
       return;
     }
@@ -281,29 +287,18 @@ export default function FeedScreen() {
           return;
         }
         const path = `${user.id}/${Date.now()}.jpg`;
-        const { error: upErr } = await supabase.storage
-          .from("post-photos")
-          .upload(path, arrayBuffer, { upsert: false, contentType: "image/jpeg" });
-        if (upErr) throw upErr;
-        const { data: urlData } = supabase.storage.from("post-photos").getPublicUrl(path);
-        const candidateUrl = urlData.publicUrl;
+        const published = await uploadModeratedPublicImage({
+          ownerId: user.id,
+          data: arrayBuffer,
+          contentType: "image/jpeg",
+          publicBucket: "post-photos",
+          publicPath: path,
+          recordType: "post",
+          recordId: editingPost.id,
+        });
 
         // Moderate before saving to DB — delete orphaned file if flagged
-        const modResult = await moderateImage({
-          imageUrl:   candidateUrl,
-          bucket:     "post-photos",
-          path,
-          recordType: "post",
-          recordId:   editingPost.id,
-        });
-        if (!modResult.ok) {
-          await supabase.storage.from("post-photos").remove([path]);
-          setEditError(modResult.message ?? "Photo was flagged by content moderation.");
-          setEditSaving(false);
-          return;
-        }
-
-        nextPhotoUrl = candidateUrl;
+        nextPhotoUrl = published.publicUrl;
       } catch (err: any) {
         setEditError("Photo upload failed: " + (err.message ?? "unknown error"));
         setEditSaving(false);
@@ -313,7 +308,7 @@ export default function FeedScreen() {
       nextPhotoUrl = null;
     }
 
-    const updates: Record<string, any> = { content: editContent.trim() || null };
+    const updates: Record<string, any> = { content: editText.value || null };
     if (nextPhotoUrl !== undefined) updates.photo_url = nextPhotoUrl;
 
     const { error } = await supabase.from("posts").update(updates).eq("id", editingPost.id);
@@ -322,7 +317,7 @@ export default function FeedScreen() {
 
     setPosts((prev) => prev.map((p) => p.id !== editingPost.id ? p : {
       ...p,
-      content: editContent.trim() || null,
+      content: editText.value || null,
       photo_url: nextPhotoUrl !== undefined ? nextPhotoUrl : p.photo_url,
     }));
     setEditingPost(null);
@@ -336,12 +331,17 @@ export default function FeedScreen() {
   }
 
   async function handlePost() {
-    if (!user || (!postContent.trim() && !postPhotoUri)) return;
+    const postText = validatePostContent(postContent);
+    if (!user || ((!postText.ok || !postText.value) && !postPhotoUri)) return;
     setPostError(null);
+    if (!postText.ok) {
+      setPostError(postText.error);
+      return;
+    }
     setPosting(true);
 
-    if (postContent.trim()) {
-      const textMod = await moderateText(postContent.trim());
+    if (postText.value) {
+      const textMod = await moderateText(postText.value);
       if (!textMod.ok) {
         setPostError(textMod.message);
         setPosting(false);
@@ -361,20 +361,16 @@ export default function FeedScreen() {
           return;
         }
         const path = `${user.id}/${Date.now()}.jpg`;
-        const { error: uploadErr } = await supabase.storage
-          .from("post-photos")
-          .upload(path, arrayBuffer, { upsert: false, contentType: "image/jpeg" });
-        if (uploadErr) throw uploadErr;
-        const { data: urlData } = supabase.storage.from("post-photos").getPublicUrl(path);
-        photoUrl = urlData.publicUrl;
-
-        const mod = await moderateImage({ imageUrl: photoUrl, bucket: "post-photos", path, recordType: "post", recordId: "" });
-        if (!mod.ok) {
-          await supabase.storage.from("post-photos").remove([path]);
-          setPostError(mod.message);
-          setPosting(false);
-          return;
-        }
+        const published = await uploadModeratedPublicImage({
+          ownerId: user.id,
+          data: arrayBuffer,
+          contentType: "image/jpeg",
+          publicBucket: "post-photos",
+          publicPath: path,
+          recordType: "post",
+          recordId: "",
+        });
+        photoUrl = published.publicUrl;
       } catch (err: any) {
         setPostError("Photo upload failed: " + (err.message ?? "unknown error"));
         setPosting(false);
@@ -384,7 +380,7 @@ export default function FeedScreen() {
 
     const { error } = await supabase.from("posts").insert({
       user_id: user.id,
-      content: postContent.trim() || null,
+      content: postText.value || null,
       post_type: isArcadeOfficial && postAsAnnouncement ? "announcement" : "post",
       photo_url: photoUrl,
     });
@@ -427,10 +423,11 @@ export default function FeedScreen() {
   }
 
   async function submitComment() {
-    if (!user || !commentPostId || !newComment.trim()) return;
+    const comment = validateCommentContent(newComment);
+    if (!user || !commentPostId || !comment.ok) return;
     setCommentPosting(true);
 
-    const mod = await moderateText(newComment.trim());
+    const mod = await moderateText(comment.value);
     if (!mod.ok) {
       Alert.alert("Comment blocked", mod.message);
       setCommentPosting(false);
@@ -438,7 +435,7 @@ export default function FeedScreen() {
     }
 
     const { error } = await supabase.from("post_comments").insert({
-      post_id: commentPostId, user_id: user.id, content: newComment.trim(),
+      post_id: commentPostId, user_id: user.id, content: comment.value,
     });
     setCommentPosting(false);
     if (error) { Alert.alert("Error", error.message); return; }
@@ -446,7 +443,7 @@ export default function FeedScreen() {
     setComments((prev) => [...prev, {
       id: Date.now().toString(), user_id: user.id,
       username: username ?? "You", avatar_url: myAvatarUrl,
-      content: newComment.trim(), created_at: new Date().toISOString(),
+      content: comment.value, created_at: new Date().toISOString(),
     }]);
     setNewComment("");
     setPosts((prev) => prev.map((p) => p.id === commentPostId ? { ...p, comment_count: p.comment_count + 1 } : p));

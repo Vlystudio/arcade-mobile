@@ -74,7 +74,12 @@ export async function squareRequest(path: string, config: SquareConfig, init: Re
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(getSquareErrorMessage(data, `Square request failed with status ${response.status}.`));
+    console.error("[square] request failed", {
+      path,
+      status: response.status,
+      error: getSquareErrorMessage(data, "Square request failed."),
+    });
+    throw new Error("square_request_failed");
   }
 
   return data;

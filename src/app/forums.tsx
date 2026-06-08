@@ -22,6 +22,7 @@ import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
 import { isElevatedRole } from "../components/role-badge";
+import { validateForumDescription, validateForumTitle } from "../../lib/validation";
 
 const GAME_TYPES = ["All", "Skee-Ball", "Pinball", "Arcade", "Basketball", "Air Hockey", "Pool", "General"];
 
@@ -92,11 +93,16 @@ export default function ForumsScreen() {
   }, [user]);
 
   async function handleCreate() {
-    if (!user || !title.trim()) return;
     setSubmitError(null);
+    const safeTitle = validateForumTitle(title);
+    const safeDescription = validateForumDescription(description);
+    if (!user || !safeTitle.ok || !safeDescription.ok) {
+      setSubmitError(!safeTitle.ok ? safeTitle.error : !safeDescription.ok ? safeDescription.error : null);
+      return;
+    }
     setSubmitting(true);
 
-    const mod = await moderateText(`${title} ${description}`);
+    const mod = await moderateText(`${safeTitle.value} ${safeDescription.value}`);
     if (!mod.ok) {
       setSubmitError(mod.message);
       setSubmitting(false);
@@ -105,8 +111,8 @@ export default function ForumsScreen() {
 
     const elevated = isElevatedRole(userRole);
     const { error } = await supabase.from("forums").insert({
-      title: title.trim(),
-      description: description.trim() || null,
+      title: safeTitle.value,
+      description: safeDescription.value || null,
       game_type: gameType === "General" ? null : gameType,
       creator_id: user.id,
       status: elevated ? "approved" : "pending",

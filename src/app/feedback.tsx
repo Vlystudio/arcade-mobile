@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { validateSupportFeedback } from "../../lib/validation";
 
 const CATEGORIES = [
   { key: "bug",     label: "Bug Report",       icon: "bug-outline" as const,       color: "#ef4444" },
@@ -35,14 +36,15 @@ export default function FeedbackScreen() {
 
   async function handleSubmit() {
     setError(null);
-    if (message.trim().length < 10) {
-      setError("Please write at least 10 characters.");
+    const feedback = validateSupportFeedback(message);
+    if (!feedback.ok) {
+      setError(feedback.error);
       return;
     }
     setSubmitting(true);
     const { data, error: rpcErr } = await supabase.rpc("rpc_submit_feedback", {
       p_category:    category,
-      p_message:     message.trim(),
+      p_message:     feedback.value,
       p_rating:      rating > 0 ? rating : null,
       p_app_version: "1.0.0",
     });

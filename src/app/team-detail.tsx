@@ -20,8 +20,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
-import { moderateImage } from "../../lib/moderate-image";
+import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { validateChatMessage } from "../../lib/validation";
 
 const SLOTS = ["6:00 PM", "7:15 PM", "8:30 PM"] as const;
 type SlotTime = typeof SLOTS[number];
@@ -240,41 +241,19 @@ export default function TeamDetailScreen() {
       });
 
       const path = `${teamId}/photo.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("team-photos")
-        .upload(path, arrayBuffer, { upsert: true, contentType: mimeType });
-      if (uploadError) throw uploadError;
-
-      const { data: urlData } = supabase.storage.from("team-photos").getPublicUrl(path);
-      const publicUrl = `${urlData.publicUrl}?t=${Date.now()}`;
-      let finalUrl = publicUrl;
-
-      const urlCheck = await fetch(publicUrl, { method: "HEAD" }).catch(() => null);
-
-      if (!urlCheck?.ok) {
-        // Bucket is private — use a long-lived signed URL instead
-        const { data: signed, error: signErr } = await supabase.storage
-          .from("team-photos")
-          .createSignedUrl(path, 10 * 365 * 24 * 3600);
-        if (signErr || !signed?.signedUrl) {
-          Alert.alert("Storage error", "Could not get photo URL. Please try again.");
-          return;
-        }
-        finalUrl = signed.signedUrl;
-      }
-
-      // Content moderation — runs before the DB update so flagged photos are never saved
-      const modResult = await moderateImage({
-        imageUrl:   finalUrl,
-        bucket:     "team-photos",
-        path,
+      let finalUrl = (await uploadModeratedPublicImage({
+        ownerId: user.id,
+        data: arrayBuffer,
+        contentType: mimeType,
+        publicBucket: "team-photos",
+        publicPath: path,
         recordType: "team_photo",
-        recordId:   teamId,
-      });
-      if (!modResult.ok) {
-        throw new Error(modResult.message ?? "Photo was flagged by content moderation.");
-      }
+        recordId: teamId,
+      })).publicUrl;
 
+
+        // Bucket is private — use a long-lived signed URL instead
+      // Content moderation — runs before the DB update so flagged photos are never saved
       const { error: dbError } = await supabase
         .from("teams")
         .update({ photo_url: finalUrl })
@@ -300,10 +279,11 @@ export default function TeamDetailScreen() {
   }
 
   async function postAnnouncement() {
-    if (!user || !teamId || !newAnnouncement.trim()) return;
+    const announcement = validateChatMessage(newAnnouncement);
+    if (!user || !teamId || !announcement.ok) return;
     setPostingAnnouncement(true);
 
-    const mod = await moderateText(newAnnouncement.trim());
+    const mod = await moderateText(announcement.value);
     if (!mod.ok) {
       Alert.alert("Post blocked", mod.message);
       setPostingAnnouncement(false);
@@ -312,14 +292,14 @@ export default function TeamDetailScreen() {
 
     const { data, error } = await supabase
       .from("team_announcements")
-      .insert({ team_id: teamId, user_id: user.id, content: newAnnouncement.trim() })
+      .insert({ team_id: teamId, user_id: user.id, content: announcement.value })
       .select("id, created_at")
       .single();
     setPostingAnnouncement(false);
     if (error) { Alert.alert("Error", error.message); return; }
     setAnnouncements((prev) => [{
       id: data.id, user_id: user.id, username: "You", avatar_url: null,
-      content: newAnnouncement.trim(), created_at: data.created_at,
+      content: announcement.value, created_at: data.created_at,
     }, ...prev]);
     setNewAnnouncement("");
     setAnnounceVisible(false);

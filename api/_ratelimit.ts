@@ -1,5 +1,6 @@
 import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { applyCors } from "./_cors";
 
 // In production (IS_PRODUCTION=true or NODE_ENV=production), missing Upstash
 // credentials cause all rate-limited endpoints to return 503 rather than
@@ -65,7 +66,7 @@ export async function checkRateLimit(req: any, res: any): Promise<boolean> {
     if (IS_PROD) {
       res.statusCode = 503;
       res.setHeader("Content-Type", "application/json");
-      res.setHeader("Access-Control-Allow-Origin", "*");
+      applyCors(req, res, "GET, POST, OPTIONS");
       res.setHeader("Retry-After", "60");
       res.end(JSON.stringify({
         error: "Service temporarily unavailable. Please try again later.",
@@ -82,7 +83,7 @@ export async function checkRateLimit(req: any, res: any): Promise<boolean> {
     if (!success) {
       res.statusCode = 429;
       res.setHeader("Content-Type", "application/json");
-      res.setHeader("Access-Control-Allow-Origin", "*");
+      applyCors(req, res, "GET, POST, OPTIONS");
       res.setHeader("Retry-After", String(Math.ceil((reset - Date.now()) / 1000)));
       res.setHeader("X-RateLimit-Limit", String(limit));
       res.setHeader("X-RateLimit-Remaining", "0");
@@ -99,7 +100,7 @@ export async function checkRateLimit(req: any, res: any): Promise<boolean> {
       // Prod: fail closed on Redis error
       res.statusCode = 503;
       res.setHeader("Content-Type", "application/json");
-      res.setHeader("Access-Control-Allow-Origin", "*");
+      applyCors(req, res, "GET, POST, OPTIONS");
       res.end(JSON.stringify({ error: "Service temporarily unavailable. Please try again later." }));
       return false;
     }

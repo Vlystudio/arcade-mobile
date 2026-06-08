@@ -1,7 +1,12 @@
 import { checkRateLimit } from "../_ratelimit";
+import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "../_cors";
 import { assertSquareConfigured, fetchSquareCategories, normalizeSquareCatalogItems, sendJson, squareRequest } from "./_shared";
 
 export default async function handler(req: any, res: any) {
+  if (handleCorsPreflight(req, res, "GET, OPTIONS")) return;
+  applyCors(req, res, "GET, OPTIONS");
+  if (rejectDisallowedOrigin(req, res)) return;
+
   if (req.method !== "GET") {
     return sendJson(res, 405, { error: "Method not allowed" });
   }
@@ -30,8 +35,9 @@ export default async function handler(req: any, res: any) {
       items: normalizeSquareCatalogItems(items, categories),
     });
   } catch (error: any) {
+    console.error("[square-menu] load failed", error?.message ?? error);
     return sendJson(res, 502, {
-      error: error?.message ?? "Unable to load Square menu.",
+      error: "Unable to load Square menu.",
     });
   }
 }

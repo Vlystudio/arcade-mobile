@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "crypto";
 import { checkRateLimit } from "../_ratelimit";
+import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "../_cors";
 
 const MIN_CONFIDENCE = 75;
 const FLAGGED_PARENT_CATEGORIES = [
@@ -77,10 +78,14 @@ async function rekognitionDetect(
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCorsPreflight(req, res, "POST, OPTIONS")) return;
+  applyCors(req, res, "POST, OPTIONS");
+  if (rejectDisallowedOrigin(req, res)) return;
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (!(await checkRateLimit(req, res))) return;
 
-  const { imageUrl } = req.body ?? {};
+  const body = typeof req.body === "string" ? safeJson(req.body) : req.body;
+  const { imageUrl } = body ?? {};
   if (typeof imageUrl !== "string") return res.status(400).json({ error: "imageUrl required" });
 
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
@@ -114,4 +119,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error("Rekognition error:", err?.message);
     return res.json({ flagged: false, reason: "moderation_error" });
   }
+}
+
+function safeJson(value: string) {
+  try { return JSON.parse(value); } catch { return {}; }
 }

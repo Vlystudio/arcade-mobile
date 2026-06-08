@@ -81,6 +81,7 @@ EXPO_PUBLIC_SUPABASE_URL=https://xxxxxxxxxxxx.supabase.co
 EXPO_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 EXPO_PUBLIC_SITE_URL=https://your-live-site.example.com
 EXPO_PUBLIC_API_BASE_URL=https://your-live-site.example.com
+EXPO_PUBLIC_IS_PRODUCTION=true
 ```
 The anon key is safe to ship in a mobile app — it can only do what your RLS policies allow.
 
@@ -94,6 +95,9 @@ SQUARE_VERSION=2026-05-20
 SQUARE_REFERENCE_PREFIX=arcadetracker
 SQUARE_CURRENCY=USD
 SQUARE_CHECKOUT_REDIRECT_URL=https://your-live-site.example.com/food
+SQUARE_WEBHOOK_SIGNATURE_KEY=your-square-webhook-signature-key
+SQUARE_WEBHOOK_NOTIFICATION_URL=https://your-live-site.example.com/api/square/webhook
+APP_ALLOWED_ORIGINS=https://your-live-site.example.com,https://your-vercel-domain.vercel.app
 ```
 
 ### 3. Database setup
@@ -114,7 +118,9 @@ Run these SQL scripts **in order** in the Supabase SQL Editor:
 | 11 | `scripts/security-events.sql` | Structured security audit log (`security_events` table, `log_security_event` RPC) |
 | 12 | `scripts/venue-role-hardening.sql` | Venue role hierarchy (`owner`/`admin`/`staff`), scoped helper functions |
 | 13 | `scripts/qr-token-hardening.sql` | Hashed QR tokens with expiry, revocation, and backfill migration |
-| 14 | `scripts/storage-security.sql` | Storage bucket RLS policies for all 5 buckets + cleanup queue |
+| 14 | `scripts/storage-security.sql` | Storage bucket RLS policies, including private media quarantine + cleanup queue |
+| 15 | `scripts/square-webhook-events.sql` | Square webhook idempotency and payment/order status tables |
+| 16 | `scripts/input-validation-hardening.sql` | Database check constraints for user-generated inputs |
 
 > **Verification:** After all scripts are applied, run `scripts/security-verification-tests.sql` in the SQL Editor. Every row should return `result = 'PASS'`.
 
@@ -135,8 +141,11 @@ Create the following buckets in the Supabase dashboard:
 | `score-proofs` | **Private** | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
 | `message-media` | **Private** | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
 | `team-photos` | **Public** | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
+| `media-quarantine` | **Private** | 5 MB | `image/jpeg`, `image/png`, `image/webp` |
 
 Storage RLS policies are applied by `scripts/storage-security.sql` (step 14 above). Do **not** add manual policies for these buckets — the script handles everything.
+
+Public user media uploads first go to `media-quarantine`; the `moderate-image` Edge Function publishes approved files into the public bucket.
 
 ### 5. Start the dev server
 ```bash
@@ -244,6 +253,8 @@ BEFORE INSERT triggers on `posts` (10/h), `messages` (60/min), `team_messages` (
 ### Square / payments
 Square prices are **never derived from the client**. The server-side `/api/square/orders` route fetches prices directly from the Square Catalog API using `SQUARE_ACCESS_TOKEN`. The client only sends variation IDs and quantities; the server resolves prices and creates the order. Taxes, tips, fees, and the final payable total are shown by Square at hosted checkout, so the cart only displays an item subtotal.
 
+Payment/order status must come from `/api/square/webhook`, which verifies Square's HMAC signature, deduplicates event IDs, and stores status server-side. Do not trust client redirects as proof of payment.
+
 ### Security testing
 Run `scripts/security-verification-tests.sql` in the Supabase SQL Editor after every migration. It uses `SET LOCAL ROLE` to simulate anonymous, authenticated, and admin callers across 9 test blocks. Every row should return `result = 'PASS'`.
 
@@ -320,6 +331,9 @@ eas submit --platform android
 | `SQUARE_REFERENCE_PREFIX` | `api/square/` | Optional prefix for order reference IDs |
 | `SQUARE_CURRENCY` | `api/square/` | Currency code, defaults to `USD` |
 | `SQUARE_CHECKOUT_REDIRECT_URL` | `api/square/` | URL Square redirects to after payment |
+| `SQUARE_WEBHOOK_SIGNATURE_KEY` | `api/square/webhook.ts` | Square webhook signature key |
+| `SQUARE_WEBHOOK_NOTIFICATION_URL` | `api/square/webhook.ts` | Exact webhook URL configured in Square |
+| `APP_ALLOWED_ORIGINS` | Vercel API + Edge Functions | Comma-separated production browser origins allowed by CORS |
 | `UPSTASH_REDIS_REST_URL` | `api/_ratelimit.ts` | Upstash Redis URL for API rate limiting |
 | `UPSTASH_REDIS_REST_TOKEN` | `api/_ratelimit.ts` | Upstash Redis token |
 | `IS_PRODUCTION` | `api/_ratelimit.ts`, Edge Functions | Set to `true` in production to enable fail-closed behavior |
@@ -334,6 +348,8 @@ eas submit --platform android
 | `AWS_REGION` | `moderate-image` | AWS region (e.g., `us-east-1`) |
 | `OPENAI_API_KEY` | `moderate-text` | OpenAI API key for text moderation |
 | `IS_PRODUCTION` | `moderate-image`, `moderate-text` | Set to `true` to enable fail-closed behavior in production |
+| `EXPO_PUBLIC_SITE_URL` | Edge CORS helper | Canonical production web origin |
+| `APP_ALLOWED_ORIGINS` | Edge CORS helper | Additional allowed browser origins |
 | `SLACK_WEBHOOK_URL` | `notify-admin` (optional) | Slack webhook for critical security event alerts |
 
 ---

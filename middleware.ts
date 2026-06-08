@@ -2,6 +2,11 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 
 const AUTH_PATHS = /^\/(login|signup|reset-password|mfa-setup|mfa-verify|auth)/;
+const API_PATHS = /^\/api\//;
+const SENSITIVE_PATHS = /^\/(admin|architect|delete-account|profile|support-chat)/;
+const IS_PROD =
+  process.env.IS_PRODUCTION === "true" ||
+  process.env.NODE_ENV === "production";
 
 function buildLimiters() {
   if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
@@ -29,13 +34,31 @@ let limiters: ReturnType<typeof buildLimiters> | undefined;
 
 export default async function middleware(request: Request): Promise<Response | undefined> {
   if (!limiters) limiters = buildLimiters();
-  if (!limiters) return undefined;
-
   const { pathname } = new URL(request.url);
+  const sensitive = API_PATHS.test(pathname) || AUTH_PATHS.test(pathname) || SENSITIVE_PATHS.test(pathname);
+
+  if (!limiters) {
+    if (IS_PROD && sensitive) {
+      return serviceUnavailable();
+    }
+    if (!IS_PROD) {
+      console.warn("[middleware] Upstash env vars missing; rate limiting disabled in development.");
+    }
+    return undefined;
+  }
+
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "127.0.0.1";
 
   const limiter = AUTH_PATHS.test(pathname) ? limiters.auth : limiters.global;
-  const { success, limit, remaining, reset } = await limiter.limit(ip);
+  let result: Awaited<ReturnType<typeof limiter.limit>>;
+  try {
+    result = await limiter.limit(ip);
+  } catch (error) {
+    console.error("[middleware] rate limit error", error instanceof Error ? error.message : error);
+    return IS_PROD && sensitive ? serviceUnavailable() : undefined;
+  }
+
+  const { success, limit, reset } = result;
 
   if (!success) {
     return new Response(JSON.stringify({ error: "Too many requests. Please try again later." }), {
@@ -51,6 +74,16 @@ export default async function middleware(request: Request): Promise<Response | u
   }
 
   return undefined;
+}
+
+function serviceUnavailable() {
+  return new Response(JSON.stringify({ error: "Service temporarily unavailable. Please try again later." }), {
+    status: 503,
+    headers: {
+      "Content-Type": "application/json",
+      "Retry-After": "60",
+    },
+  });
 }
 
 export const config = {

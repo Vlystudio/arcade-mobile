@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { checkRateLimit } from "../_ratelimit";
+import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "../_cors";
+import { validateChatMessage } from "../../lib/validation";
 
 const BLOCKLIST = [
   "nigger","nigga","chink","spic","kike","wetback","beaner","gook",
@@ -32,14 +34,22 @@ async function openaiModeration(text: string): Promise<boolean> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCorsPreflight(req, res, "POST, OPTIONS")) return;
+  applyCors(req, res, "POST, OPTIONS");
+  if (rejectDisallowedOrigin(req, res)) return;
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
   if (!(await checkRateLimit(req, res))) return;
 
-  const { text } = req.body ?? {};
-  if (typeof text !== "string" || !text.trim()) return res.status(400).json({ error: "text required" });
+  const body = typeof req.body === "string" ? safeJson(req.body) : req.body;
+  const textCheck = validateChatMessage(body?.text);
+  if (!textCheck.ok) return res.status(400).json({ error: "invalid_text" });
 
-  if (hasBlocklisted(text)) return res.json({ flagged: true, reason: "hate_speech" });
+  if (hasBlocklisted(textCheck.value)) return res.json({ flagged: true, reason: "hate_speech" });
 
-  const flagged = await openaiModeration(text);
+  const flagged = await openaiModeration(textCheck.value);
   return res.json({ flagged, ...(flagged && { reason: "policy_violation" }) });
+}
+
+function safeJson(value: string) {
+  try { return JSON.parse(value); } catch { return {}; }
 }

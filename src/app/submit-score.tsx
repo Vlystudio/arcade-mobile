@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
+import { validateScoreValue } from "../../lib/validation";
 
 const SKEE_RINGS = [10, 20, 30, 40, 50, 100];
 const BALLS_PER_GAME = 9;
@@ -92,11 +93,12 @@ export default function SubmitScoreScreen() {
 
   async function handleSubmit() {
     setSubmitError(null);
-    const finalScore = isSkeeball ? total : parseInt(arcadeScore, 10);
-    if (isNaN(finalScore) || finalScore < 0) {
-      setSubmitError("Enter a valid score.");
+    const scoreCheck = validateScoreValue(isSkeeball ? total : arcadeScore);
+    if (!scoreCheck.ok) {
+      setSubmitError(scoreCheck.error);
       return;
     }
+    const finalScore = scoreCheck.value;
     if (!proofUri) {
       setSubmitError("Please add a photo proof of your score.");
       return;

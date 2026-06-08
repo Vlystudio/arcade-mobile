@@ -10,6 +10,8 @@
 //   OPENAI_API_KEY
 //   IS_PRODUCTION  — set to "true" in production
 
+import { corsHeaders, handleCors, rejectDisallowedOrigin } from "../_shared/cors.ts";
+
 const OPENAI_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
 const IS_PROD    = Deno.env.get("IS_PRODUCTION") === "true";
 const SUPA_URL   = Deno.env.get("SUPABASE_URL") ?? "";
@@ -29,11 +31,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   "violence/graphic":       "graphic violence",
 };
 
-const CORS = {
-  "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
 async function logFailure(reason: string, details: Record<string, unknown> = {}) {
   if (!SUPA_URL || !SUPA_SVC) return;
   try {
@@ -48,7 +45,12 @@ async function logFailure(reason: string, details: Record<string, unknown> = {})
 }
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
+  const rejectedOrigin = rejectDisallowedOrigin(req);
+  if (rejectedOrigin) return rejectedOrigin;
+  const CORS = corsHeaders(req);
+
   if (req.method !== "POST")
     return Response.json({ error: "method_not_allowed" }, { status: 405, headers: CORS });
 
@@ -68,7 +70,13 @@ Deno.serve(async (req: Request) => {
     return Response.json({ flagged: false, skipped: true }, { headers: CORS });
   }
 
-  const { text } = await req.json() as { text: string };
+  let text = "";
+  try {
+    const body = await req.json() as { text?: unknown };
+    text = typeof body.text === "string" ? body.text : "";
+  } catch {
+    return Response.json({ error: "invalid_json" }, { status: 400, headers: CORS });
+  }
   if (!text?.trim()) return Response.json({ flagged: false }, { headers: CORS });
 
   try {

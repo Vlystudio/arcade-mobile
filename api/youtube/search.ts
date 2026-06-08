@@ -1,14 +1,14 @@
 import { checkRateLimit } from "../_ratelimit";
+import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "../_cors";
 
 function sendJson(res: any, status: number, body: any) {
   res.status(status).json(body);
 }
 
 export default async function handler(req: any, res: any) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") { res.status(200).end(); return; }
+  if (handleCorsPreflight(req, res, "GET, OPTIONS")) return;
+  applyCors(req, res, "GET, OPTIONS");
+  if (rejectDisallowedOrigin(req, res)) return;
 
   if (req.method !== "GET") {
     return sendJson(res, 405, { error: "Method not allowed" });
@@ -35,12 +35,13 @@ export default async function handler(req: any, res: any) {
   try {
     const resp = await fetch(url.toString());
     if (!resp.ok) {
-      const text = await resp.text();
-      return sendJson(res, 502, { error: "YouTube API error", detail: text.slice(0, 200) });
+      console.error("[youtube-search] upstream error", resp.status);
+      return sendJson(res, 502, { error: "YouTube search failed" });
     }
     data = await resp.json();
   } catch (e: any) {
-    return sendJson(res, 502, { error: e?.message ?? "YouTube fetch failed" });
+    console.error("[youtube-search] fetch failed", e?.message ?? e);
+    return sendJson(res, 502, { error: "YouTube search failed" });
   }
 
   const items = (data.items ?? [])

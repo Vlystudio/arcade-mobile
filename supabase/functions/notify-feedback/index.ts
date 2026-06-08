@@ -1,22 +1,36 @@
+import { corsHeaders, handleCors, rejectDisallowedOrigin } from "../_shared/cors.ts";
+
 const RESEND_API_KEY  = Deno.env.get("RESEND_API_KEY")  ?? "";
 const NOTIFY_SECRET   = Deno.env.get("NOTIFY_SECRET")   ?? "";
 const TO_EMAIL        = "valeyardvisuals@gmail.com";
 const FROM_EMAIL      = "ArcadeTracker <noreply@vlystudios.com>";
 
 Deno.serve(async (req) => {
+  const preflight = handleCors(req);
+  if (preflight) return preflight;
+  const rejectedOrigin = rejectDisallowedOrigin(req);
+  if (rejectedOrigin) return rejectedOrigin;
+  const CORS = corsHeaders(req);
+
   if (req.method !== "POST") {
-    return new Response("Method Not Allowed", { status: 405 });
+    return Response.json({ error: "method_not_allowed" }, { status: 405, headers: CORS });
   }
 
   if (!NOTIFY_SECRET || req.headers.get("x-notify-secret") !== NOTIFY_SECRET) {
-    return new Response("Unauthorized", { status: 401 });
+    return Response.json({ error: "unauthorized" }, { status: 401, headers: CORS });
   }
 
   if (!RESEND_API_KEY) {
-    return new Response(JSON.stringify({ error: "RESEND_API_KEY not configured" }), { status: 500 });
+    return Response.json({ error: "email_unavailable" }, { status: 503, headers: CORS });
   }
 
-  const { category, message, rating, username, app_version } = await req.json();
+  let body: any;
+  try {
+    body = await req.json();
+  } catch {
+    return Response.json({ error: "invalid_json" }, { status: 400, headers: CORS });
+  }
+  const { category, message, rating, username, app_version } = body;
 
   const ratingLine  = rating   ? `Rating:   ${rating}/5\n`    : "";
   const versionLine = app_version ? `Version:  ${app_version}\n` : "";
@@ -48,9 +62,9 @@ Deno.serve(async (req) => {
 
   if (!res.ok) {
     console.error("Resend error:", JSON.stringify(resBody));
-    return new Response(JSON.stringify({ error: resBody }), { status: 502 });
+    return Response.json({ error: "email_send_failed" }, { status: 502, headers: CORS });
   }
 
   console.log("Resend accepted:", JSON.stringify(resBody));
-  return new Response(JSON.stringify({ ok: true, resend: resBody }), { status: 200 });
+  return Response.json({ ok: true }, { status: 200, headers: CORS });
 });

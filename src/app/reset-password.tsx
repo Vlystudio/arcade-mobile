@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { sendSecurityAlert } from "../../lib/security-notify";
+import { validatePasswordStrength } from "../../lib/validation";
 
 import { API_BASE } from "../../lib/api-base";
 
@@ -43,7 +44,8 @@ export default function ResetPasswordScreen() {
   async function handleReset() {
     setError(null);
     if (!password || !confirm) { setError("Fill in both fields."); return; }
-    if (password.length < 6)   { setError("Password must be at least 6 characters."); return; }
+    const passwordCheck = validatePasswordStrength(password);
+    if (!passwordCheck.ok)   { setError("Password must be at least 12 characters and include upper/lowercase letters and a number."); return; }
     if (password !== confirm)  { setError("Passwords don't match."); return; }
 
     setLoading(true);
