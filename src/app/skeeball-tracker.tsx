@@ -18,8 +18,11 @@ import { useRequireAuth } from "../hooks/use-require-auth";
 const LANE_COUNT = 6;
 const BALLS_PER_PLAYER = 3;
 const PLAYERS_PER_GAME = 3;
+const MIN_PLAYERS = 1;
+const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
+const INACTIVITY_CHECK_INTERVAL_MS = 30 * 1000; // check every 30 seconds
 
-type LaneSession = { id: string; team_id: string; lane_number: number; status: string; team_name?: string };
+type LaneSession = { id: string; team_id: string; lane_number: number; status: string; team_name?: string; last_activity_at?: string };
 type SessionPlayer = { session_id: string; player_user_id: string; username: string; avatar_url: string | null };
 type BallScore = { id: string; session_id: string; player_user_id: string; ball_number: number; score: number };
 type Member = { user_id: string; username: string; avatar_url: string | null; role: string };
@@ -92,6 +95,7 @@ export default function SkeeballTrackerScreen() {
         const sessions: LaneSession[] = (data ?? []).map((s: any) => ({
           id: s.id, team_id: s.team_id, lane_number: s.lane_number, status: s.status,
           team_name: Array.isArray(s.teams) ? s.teams[0]?.name : s.teams?.name,
+          last_activity_at: s.last_activity_at,
         }));
         setAllActiveSessions(sessions);
 
@@ -104,6 +108,39 @@ export default function SkeeballTrackerScreen() {
       .subscribe();
     return () => { ch.unsubscribe(); };
   }, [teamId, mySession]);
+
+  // Inactivity timeout — check every 30s; abandon sessions with no activity for 10 min
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      const now = Date.now();
+
+      // Abandon our own session if inactive
+      if (mySession?.status === "active" && mySession.last_activity_at) {
+        const idle = now - new Date(mySession.last_activity_at).getTime();
+        if (idle >= INACTIVITY_TIMEOUT_MS) {
+          await abandonSession(mySession.id);
+          return;
+        }
+      }
+
+      // Also clean up any other team's stale session (handles disconnected teams)
+      for (const s of allActiveSessions) {
+        if (s.team_id === teamId) continue;
+        if (s.last_activity_at) {
+          const idle = now - new Date(s.last_activity_at).getTime();
+          if (idle >= INACTIVITY_TIMEOUT_MS) {
+            await supabase
+              .from("skeeball_sessions")
+              .update({ status: "abandoned" })
+              .eq("id", s.id)
+              .eq("status", "active");
+          }
+        }
+      }
+    }, INACTIVITY_CHECK_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [mySession, allActiveSessions, teamId]);
 
   // Auto-complete when all 9 balls submitted
   useEffect(() => {
@@ -119,13 +156,14 @@ export default function SkeeballTrackerScreen() {
     setError(null);
     try {
       const [sessRes, memRes] = await Promise.all([
-        supabase.from("skeeball_sessions").select("id, team_id, lane_number, status, teams(name)").eq("status", "active"),
+        supabase.from("skeeball_sessions").select("id, team_id, lane_number, status, last_activity_at, teams(name)").eq("status", "active"),
         supabase.from("team_members").select("user_id, role, profiles(username, avatar_url)").eq("team_id", teamId),
       ]);
 
       const sessions: LaneSession[] = (sessRes.data ?? []).map((s: any) => ({
         id: s.id, team_id: s.team_id, lane_number: s.lane_number, status: s.status,
         team_name: Array.isArray(s.teams) ? s.teams[0]?.name : s.teams?.name,
+        last_activity_at: s.last_activity_at,
       }));
       setAllActiveSessions(sessions);
 
@@ -177,13 +215,13 @@ export default function SkeeballTrackerScreen() {
   }
 
   async function startSession() {
-    if (!user || !teamId || selectedPlayers.length !== PLAYERS_PER_GAME || !selectedLane) return;
+    if (!user || !teamId || selectedPlayers.length < MIN_PLAYERS || !selectedLane) return;
     setStarting(true);
     setError(null);
     try {
       const { data: session, error: sErr } = await supabase
         .from("skeeball_sessions")
-        .insert({ team_id: teamId, lane_number: selectedLane, week_of: getMondayDate(), created_by: user.id, status: "active" })
+        .insert({ team_id: teamId, lane_number: selectedLane, week_of: getMondayDate(), created_by: user.id, status: "active", last_activity_at: new Date().toISOString() })
         .select()
         .single();
       if (sErr) throw sErr;
@@ -193,7 +231,7 @@ export default function SkeeballTrackerScreen() {
         .insert(selectedPlayers.map((pid) => ({ session_id: session.id, player_user_id: pid })));
       if (pErr) throw pErr;
 
-      const newSession: LaneSession = { id: session.id, team_id: teamId, lane_number: selectedLane, status: "active" };
+      const newSession: LaneSession = { id: session.id, team_id: teamId, lane_number: selectedLane, status: "active", last_activity_at: new Date().toISOString() };
       setMySession(newSession);
       await loadSessionData(session.id);
     } catch (e: any) {
@@ -218,6 +256,11 @@ export default function SkeeballTrackerScreen() {
         .upsert(inserts, { onConflict: "session_id,player_user_id,ball_number" });
       if (error) throw error;
 
+      // Reset inactivity timer
+      const now = new Date().toISOString();
+      await supabase.from("skeeball_sessions").update({ last_activity_at: now }).eq("id", mySession.id);
+      setMySession((prev) => prev ? { ...prev, last_activity_at: now } : prev);
+
       setBallScores((prev) => [
         ...prev.filter((b) => b.player_user_id !== user.id),
         ...inserts.map((ins, i) => ({ ...ins, id: `local_${i}` })),
@@ -227,6 +270,18 @@ export default function SkeeballTrackerScreen() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function abandonSession(sessionId: string) {
+    await supabase
+      .from("skeeball_sessions")
+      .update({ status: "abandoned" })
+      .eq("id", sessionId)
+      .eq("status", "active");
+    setMySession(null);
+    setSessionPlayers([]);
+    setBallScores([]);
+    setAllActiveSessions((prev) => prev.filter((s) => s.id !== sessionId));
   }
 
   async function completeSession() {
@@ -453,8 +508,8 @@ export default function SkeeballTrackerScreen() {
         )}
 
         <Text style={s.sectionLabel}>
-          Select 3 Shooters{" "}
-          <Text style={{ color: selectedPlayers.length === PLAYERS_PER_GAME ? "#22c55e" : "#555" }}>
+          Select Shooters{" "}
+          <Text style={{ color: selectedPlayers.length >= MIN_PLAYERS ? "#22c55e" : "#555" }}>
             ({selectedPlayers.length}/{PLAYERS_PER_GAME})
           </Text>
         </Text>
@@ -506,9 +561,9 @@ export default function SkeeballTrackerScreen() {
         </View>
 
         <Pressable
-          style={[s.submitBtn, (selectedPlayers.length < PLAYERS_PER_GAME || !selectedLane || starting) && s.btnOff]}
+          style={[s.submitBtn, (selectedPlayers.length < MIN_PLAYERS || !selectedLane || starting) && s.btnOff]}
           onPress={startSession}
-          disabled={selectedPlayers.length < PLAYERS_PER_GAME || !selectedLane || starting}
+          disabled={selectedPlayers.length < MIN_PLAYERS || !selectedLane || starting}
         >
           {starting ? <ActivityIndicator size="small" color="#000" /> : <Ionicons name="play-circle-outline" size={22} color="#000" />}
           <Text style={s.submitBtnText}>{starting ? "Starting…" : "Start Game"}</Text>
