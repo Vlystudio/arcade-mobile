@@ -519,26 +519,27 @@ export default function AdminScreen() {
 
   async function loadReviews(tab: ReviewTab) {
     setReviewLoading(true);
-    const { data } = await supabase
-      .from("scores")
-      .select("id, user_id, score, photo_url, proof_storage_path, created_at, profiles(username, avatar_url), games(name)")
-      .eq("status", tab)
-      .order("created_at", { ascending: tab === "pending" });
+    const { data, error } = await supabase.rpc("rpc_admin_get_score_review_queue", {
+      p_status: tab,
+    });
 
-    setScores((data ?? []).map((row: any) => {
-      const profile = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-      const game    = Array.isArray(row.games)    ? row.games[0]    : row.games;
-      return {
-        id: row.id, user_id: row.user_id,
-        username:           profile?.username          ?? "Unknown",
-        avatar_url:         profile?.avatar_url        ?? null,
-        game_name:          game?.name                 ?? "Unknown Game",
-        score:              row.score,
-        photo_url:          row.photo_url              ?? null,
-        proof_storage_path: row.proof_storage_path     ?? null,
-        created_at:         row.created_at,
-      };
-    }));
+    if (error || !Array.isArray(data)) {
+      setScores([]);
+      setReviewLoading(false);
+      return;
+    }
+
+    setScores((data as any[]).map((row: any) => ({
+      id:                 row.id,
+      user_id:            row.user_id,
+      username:           row.username           ?? "Unknown",
+      avatar_url:         row.avatar_url         ?? null,
+      game_name:          row.game_name          ?? "Unknown Game",
+      score:              row.score,
+      photo_url:          row.photo_url          ?? null,
+      proof_storage_path: row.proof_storage_path ?? null,
+      created_at:         row.created_at,
+    })));
     setReviewLoading(false);
     setReviewRefreshing(false);
   }
@@ -567,9 +568,17 @@ export default function AdminScreen() {
   async function handlePhotoPress(score: ReviewScore) {
     if (score.proof_storage_path) {
       setProofUrlLoading(true);
+      const { data: pathData, error: pathErr } = await supabase.rpc(
+        "rpc_admin_create_score_proof_signed_url", { p_score_id: score.id }
+      );
+      if (pathErr || pathData?.error || !pathData?.path) {
+        setProofUrlLoading(false);
+        Alert.alert("Error", pathData?.message ?? "Could not access proof.");
+        return;
+      }
       const { data } = await supabase.storage
         .from("score-proofs")
-        .createSignedUrl(score.proof_storage_path, 3600);
+        .createSignedUrl(pathData.path as string, 3600);
       setProofUrlLoading(false);
       if (data?.signedUrl) setPhotoModal(data.signedUrl);
     } else if (score.photo_url) {

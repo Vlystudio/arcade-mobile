@@ -373,6 +373,199 @@ ROLLBACK;
 
 
 -- ════════════════════════════════════════════════════════════
+-- BLOCK 10: Venue cross-isolation
+-- Venue admin of venue A cannot access the score queue of venue B.
+-- ════════════════════════════════════════════════════════════
+BEGIN;
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_venue_a_admin uuid := gen_random_uuid();
+  v_venue_b_id    uuid := gen_random_uuid();
+  v_result        json;
+BEGIN
+  -- Simulate venue A admin with AAL2 JWT but no venue_admins row for venue B
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_venue_a_admin, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+
+  -- rpc_admin_get_score_review_queue for an unknown venue_b must return unauthorized
+  SELECT rpc_admin_get_score_review_queue(v_venue_b_id, 'pending') INTO v_result;
+  IF (v_result->>'error') = 'unauthorized' THEN
+    RAISE NOTICE 'PASS: venue cross-isolation — non-admin blocked from foreign venue score queue';
+  ELSE
+    RAISE NOTICE 'FAIL: venue cross-isolation — unexpected result: %', v_result;
+  END IF;
+
+  -- rpc_admin_review_score with a fake score_id must fail auth (not_found or unauthorized)
+  -- When the score doesn't exist, venue_id lookup returns NULL → is_venue_admin(NULL) = false
+  -- → unauthorized (not_found would also be acceptable)
+  SELECT rpc_admin_review_score(v_venue_b_id, 'approved') INTO v_result;
+  IF (v_result->>'error') IN ('unauthorized', 'not_found') THEN
+    RAISE NOTICE 'PASS: venue cross-isolation — non-admin blocked from score review';
+  ELSE
+    RAISE NOTICE 'FAIL: venue cross-isolation — rpc_admin_review_score unexpected: %', v_result;
+  END IF;
+END;
+$$;
+ROLLBACK;
+
+
+-- ════════════════════════════════════════════════════════════
+-- BLOCK 11: MFA enforcement
+-- Admin RPCs must raise P0003 when session AAL is not aal2.
+-- ════════════════════════════════════════════════════════════
+BEGIN;
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_uid    uuid := gen_random_uuid();
+  v_result json;
+BEGIN
+  -- AAL1 session (no MFA) — every admin RPC must reject this
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_uid, 'role', 'authenticated', 'aal', 'aal1')::text, true);
+
+  BEGIN
+    SELECT rpc_admin_review_score(gen_random_uuid(), 'approved') INTO v_result;
+    RAISE NOTICE 'FAIL: MFA enforcement — rpc_admin_review_score allowed AAL1 session';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE '%MFA%' OR SQLSTATE = 'P0003' THEN
+      RAISE NOTICE 'PASS: MFA enforcement — P0003 raised for AAL1 session on rpc_admin_review_score';
+    ELSE
+      RAISE NOTICE 'FAIL: MFA enforcement — unexpected exception: %', SQLERRM;
+    END IF;
+  END;
+
+  BEGIN
+    SELECT rpc_admin_get_score_review_queue(NULL, 'pending') INTO v_result;
+    RAISE NOTICE 'FAIL: MFA enforcement — rpc_admin_get_score_review_queue allowed AAL1 session';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE '%MFA%' OR SQLSTATE = 'P0003' THEN
+      RAISE NOTICE 'PASS: MFA enforcement — P0003 raised for AAL1 session on rpc_admin_get_score_review_queue';
+    ELSE
+      RAISE NOTICE 'FAIL: MFA enforcement — unexpected exception: %', SQLERRM;
+    END IF;
+  END;
+
+  BEGIN
+    SELECT rpc_admin_create_score_proof_signed_url(gen_random_uuid()) INTO v_result;
+    RAISE NOTICE 'FAIL: MFA enforcement — rpc_admin_create_score_proof_signed_url allowed AAL1 session';
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM LIKE '%MFA%' OR SQLSTATE = 'P0003' THEN
+      RAISE NOTICE 'PASS: MFA enforcement — P0003 raised for rpc_admin_create_score_proof_signed_url';
+    ELSE
+      RAISE NOTICE 'FAIL: MFA enforcement — unexpected exception: %', SQLERRM;
+    END IF;
+  END;
+END;
+$$;
+ROLLBACK;
+
+
+-- ════════════════════════════════════════════════════════════
+-- BLOCK 12: Score proof access control
+-- Only platform admins and venue admins may retrieve proof paths.
+-- Normal users get unauthorized; wrong venue admin gets unauthorized.
+-- ════════════════════════════════════════════════════════════
+BEGIN;
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_normal_uid uuid := gen_random_uuid();
+  v_result     json;
+BEGIN
+  -- Normal user with AAL2 (simulates passing MFA but not being admin)
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_normal_uid, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+
+  SELECT rpc_admin_create_score_proof_signed_url(gen_random_uuid()) INTO v_result;
+  IF (v_result->>'error') IN ('unauthorized', 'not_found') THEN
+    RAISE NOTICE 'PASS: score proof access — non-admin blocked (%)' , v_result->>'error';
+  ELSE
+    RAISE NOTICE 'FAIL: score proof access — non-admin got unexpected result: %', v_result;
+  END IF;
+END;
+$$;
+ROLLBACK;
+
+
+-- ════════════════════════════════════════════════════════════
+-- BLOCK 13: QR check-in decision tests
+-- ════════════════════════════════════════════════════════════
+BEGIN;
+SET LOCAL ROLE authenticated;
+DO $$
+DECLARE
+  v_uid    uuid := gen_random_uuid();
+  v_result json;
+BEGIN
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
+
+  -- Unknown token → lane_not_found
+  SELECT rpc_check_in('completely-invalid-qr-token-xyz-123') INTO v_result;
+  IF (v_result->>'error') = 'lane_not_found' THEN
+    RAISE NOTICE 'PASS: QR check-in — unknown token returns lane_not_found';
+  ELSE
+    RAISE NOTICE 'FAIL: QR check-in — unexpected result for unknown token: %', v_result;
+  END IF;
+END;
+$$;
+
+-- hash_lane_token stability (no auth required)
+SELECT * FROM test_result(
+  'QR: hash_lane_token is deterministic',
+  public.hash_lane_token('test-token') = public.hash_lane_token('test-token')
+);
+
+SELECT * FROM test_result(
+  'QR: different tokens produce different hashes',
+  public.hash_lane_token('token-a') <> public.hash_lane_token('token-b')
+);
+
+ROLLBACK;
+
+
+-- ════════════════════════════════════════════════════════════
+-- BLOCK 14: public_profiles column whitelist
+-- Confirms sensitive fields are not exposed through the view.
+-- ════════════════════════════════════════════════════════════
+BEGIN;
+
+SELECT * FROM test_result(
+  'public_profiles: no is_admin column',
+  NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name   = 'public_profiles'
+       AND column_name  = 'is_admin'
+  )
+);
+
+SELECT * FROM test_result(
+  'public_profiles: no email column',
+  NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name   = 'public_profiles'
+       AND column_name  = 'email'
+  )
+);
+
+SELECT * FROM test_result(
+  'public_profiles: no phone column',
+  NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND table_name   = 'public_profiles'
+       AND column_name  = 'phone'
+  )
+);
+
+ROLLBACK;
+
+
+-- ════════════════════════════════════════════════════════════
 -- SUMMARY
 -- ════════════════════════════════════════════════════════════
 SELECT
