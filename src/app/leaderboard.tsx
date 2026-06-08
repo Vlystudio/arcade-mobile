@@ -1,5 +1,12 @@
+import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
 import { useEffect, useState } from "react";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withDelay,
+} from "react-native-reanimated";
 import {
   ActivityIndicator,
   Modal,
@@ -18,7 +25,15 @@ import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 
-type LeaderEntry = { rank: number; user_id: string; username: string; game_name: string; score: number; created_at: string };
+type LeaderEntry = {
+  rank: number;
+  user_id: string;
+  username: string;
+  game_name: string;
+  game_type: string;
+  score: number;
+  created_at: string;
+};
 type TimeFilter = "alltime" | "season";
 type GameOption = { id: string; name: string; type: string };
 type ShareFriend = { id: string; username: string; avatar_url: string | null };
@@ -46,7 +61,6 @@ export default function LeaderboardScreen() {
   const [myRank, setMyRank] = useState<number | null>(null);
   const [myScore, setMyScore] = useState<number | null>(null);
 
-  // Score sharing
   const [shareEntry, setShareEntry] = useState<LeaderEntry | null>(null);
   const [shareFriends, setShareFriends] = useState<ShareFriend[]>([]);
   const [shareFriendsLoading, setShareFriendsLoading] = useState(false);
@@ -79,16 +93,15 @@ export default function LeaderboardScreen() {
       cutoff.setDate(cutoff.getDate() - 90);
       query = query.gte("created_at", cutoff.toISOString());
     }
-    if (gameId) {
-      query = query.eq("game_id", gameId);
-    }
+    if (gameId) query = query.eq("game_id", gameId);
 
     const { data } = await query;
-    const mapped: LeaderEntry[] = (data ?? []).map((row: any, i) => ({
+    const mapped: LeaderEntry[] = (data ?? []).map((row: any, i: number) => ({
       rank: i + 1,
       user_id: row.user_id,
       username: Array.isArray(row.profiles) ? (row.profiles[0]?.username ?? "Unknown") : (row.profiles?.username ?? "Unknown"),
       game_name: Array.isArray(row.games) ? (row.games[0]?.name ?? "Game") : (row.games?.name ?? "Game"),
+      game_type: Array.isArray(row.games) ? (row.games[0]?.type ?? "") : (row.games?.type ?? ""),
       score: row.score,
       created_at: row.created_at,
     }));
@@ -132,17 +145,25 @@ export default function LeaderboardScreen() {
     setSentTo(new Set());
     setShareFriendSearch("");
     setShareFriendsLoading(true);
-    // Load friends
     if (!user) return;
     const { data: fs } = await supabase
       .from("friendships")
       .select("requester_id, addressee_id")
       .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
       .eq("status", "accepted");
-    const ids = (fs ?? []).map((f: any) => f.requester_id === user.id ? f.addressee_id : f.requester_id);
+    const ids = (fs ?? []).map((f: any) =>
+      f.requester_id === user.id ? f.addressee_id : f.requester_id
+    );
     if (ids.length) {
-      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", ids);
-      setShareFriends((profiles ?? []).map((p: any) => ({ id: p.id, username: p.username ?? "Unknown", avatar_url: p.avatar_url ?? null })));
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, username, avatar_url")
+        .in("id", ids);
+      setShareFriends((profiles ?? []).map((p: any) => ({
+        id: p.id,
+        username: p.username ?? "Unknown",
+        avatar_url: p.avatar_url ?? null,
+      })));
     } else {
       setShareFriends([]);
     }
@@ -173,7 +194,10 @@ export default function LeaderboardScreen() {
 
     const content = `🏆 Check out my leaderboard score!\n#${shareEntry.rank} · ${shareEntry.score.toLocaleString()} pts\n${shareEntry.game_name}`;
     await supabase.from("messages").insert({ conversation_id: convId, sender_id: user.id, content });
-    await supabase.from("conversations").update({ last_message: `🏆 Shared a score`, last_message_at: new Date().toISOString() }).eq("id", convId);
+    await supabase.from("conversations").update({
+      last_message: `🏆 Shared a score`,
+      last_message_at: new Date().toISOString(),
+    }).eq("id", convId);
 
     setSendingTo(null);
     setSentTo((prev) => new Set([...prev, friend.id]));
@@ -197,127 +221,147 @@ export default function LeaderboardScreen() {
   const top3 = entries.slice(0, 3);
   const rest = entries.slice(3);
 
+  const listHeader = (
+    <>
+      {/* Page header */}
+      <View style={styles.pageHeaderRow}>
+        <View>
+          <Text style={styles.pageTitle}>Leaderboard</Text>
+          <Text style={styles.pageSub}>Top scores across the arcade</Text>
+        </View>
+        <View style={styles.podiumIcon}>
+          <Ionicons name="podium" size={22} color="#f59e0b" />
+        </View>
+      </View>
+
+      {/* Time filter */}
+      <View style={styles.filterRow}>
+        {(["alltime", "season"] as TimeFilter[]).map((tf) => (
+          <Pressable
+            key={tf}
+            style={[styles.filterBtn, timeFilter === tf && styles.filterBtnActive]}
+            onPress={() => switchTimeFilter(tf)}
+          >
+            <Text style={[styles.filterText, timeFilter === tf && styles.filterTextActive]}>
+              {tf === "alltime" ? "All Time" : "This Season"}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* Game selector */}
+      <Pressable style={styles.gameSelector} onPress={() => setGamePickerVisible(true)}>
+        {selectedGameId ? (
+          <View style={styles.gameSelectorLeft}>
+            <View style={[styles.gameDot, { backgroundColor: GAME_TYPE_COLORS[games.find(g => g.id === selectedGameId)?.type ?? ""] ?? "#555" }]} />
+            <Text style={styles.gameSelectorText}>{selectedGameName}</Text>
+          </View>
+        ) : (
+          <View style={styles.gameSelectorLeft}>
+            <Ionicons name="game-controller-outline" size={16} color="#555" />
+            <Text style={styles.gameSelectorPlaceholder}>All Games</Text>
+          </View>
+        )}
+        <Ionicons name="chevron-down" size={16} color="#444" />
+      </Pressable>
+
+      {/* My rank */}
+      {myRank && (
+        <View style={styles.myRankCard}>
+          <View>
+            <Text style={styles.myRankLabel}>YOUR RANK</Text>
+            <Text style={styles.myRankValue}>#{myRank}</Text>
+          </View>
+          <View style={styles.myRankDivider} />
+          {myScore && (
+            <View>
+              <Text style={styles.myScoreLabel}>YOUR BEST</Text>
+              <Text style={styles.myScoreValue}>{myScore.toLocaleString()}</Text>
+            </View>
+          )}
+        </View>
+      )}
+
+      {entries.length === 0 ? (
+        <View style={styles.emptyCard}>
+          <View style={styles.emptyIconWrap}>
+            <Ionicons name="podium-outline" size={32} color="#333" />
+          </View>
+          <Text style={styles.emptyTitle}>No scores yet</Text>
+          <Text style={styles.emptySub}>
+            {selectedGameId ? `No approved ${selectedGameName} scores found.` : "Be the first to submit a score!"}
+          </Text>
+        </View>
+      ) : (
+        <>
+          {top3.length > 0 && (
+            <View style={styles.podium}>
+              {[top3.find((e) => e.rank === 2), top3.find((e) => e.rank === 1), top3.find((e) => e.rank === 3)]
+                .filter(Boolean)
+                .map((entry, i) => (
+                  <PodiumCard
+                    key={entry!.rank}
+                    entry={entry!}
+                    isMe={entry!.user_id === user?.id}
+                    delay={i * 80}
+                    onShare={() => openShareModal(entry!)}
+                  />
+                ))}
+            </View>
+          )}
+          {rest.length > 0 && (
+            <View style={styles.listCard}>
+              <View style={styles.listHeader}>
+                <Text style={styles.listHeaderText}>RANKINGS</Text>
+              </View>
+            </View>
+          )}
+        </>
+      )}
+    </>
+  );
+
   return (
     <View style={styles.root}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
-        <ScrollView
-          contentContainerStyle={styles.content}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadLeaderboard(timeFilter, selectedGameId); }} tintColor="#06b6d4" />
-          }
-        >
-          {/* Page header */}
-          <View style={styles.pageHeaderRow}>
-            <View>
-              <Text style={styles.pageTitle}>Leaderboard</Text>
-              <Text style={styles.pageSub}>Top scores across the arcade</Text>
-            </View>
-            <View style={styles.podiumIcon}>
-              <Ionicons name="podium" size={22} color="#f59e0b" />
-            </View>
-          </View>
-
-          {/* Time filter pill */}
-          <View style={styles.filterRow}>
-            {(["alltime", "season"] as TimeFilter[]).map((tf) => (
-              <Pressable
-                key={tf}
-                style={[styles.filterBtn, timeFilter === tf && styles.filterBtnActive]}
-                onPress={() => switchTimeFilter(tf)}
-              >
-                <Text style={[styles.filterText, timeFilter === tf && styles.filterTextActive]}>
-                  {tf === "alltime" ? "All Time" : "This Season"}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {/* Game selector */}
-          <Pressable style={styles.gameSelector} onPress={() => setGamePickerVisible(true)}>
-            {selectedGameId ? (
-              <View style={styles.gameSelectorLeft}>
-                <View style={[styles.gameDot, { backgroundColor: GAME_TYPE_COLORS[games.find(g => g.id === selectedGameId)?.type ?? ""] ?? "#555" }]} />
-                <Text style={styles.gameSelectorText}>{selectedGameName}</Text>
-              </View>
-            ) : (
-              <View style={styles.gameSelectorLeft}>
-                <Ionicons name="game-controller-outline" size={16} color="#555" />
-                <Text style={styles.gameSelectorPlaceholder}>All Games</Text>
-              </View>
+        {rest.length > 0 ? (
+          <FlashList
+            data={rest}
+            keyExtractor={(item) => `${item.user_id}-${item.created_at}`}
+            ListHeaderComponent={listHeader}
+            renderItem={({ item, index }) => (
+              <RankRow
+                entry={item}
+                isLast={index === rest.length - 1}
+                isMe={item.user_id === user?.id}
+                onShare={() => openShareModal(item)}
+              />
             )}
-            <Ionicons name="chevron-down" size={16} color="#444" />
-          </Pressable>
-
-          {/* Your rank card */}
-          {myRank && (
-            <View style={styles.myRankCard}>
-              <View style={styles.myRankLeft}>
-                <Text style={styles.myRankLabel}>YOUR RANK</Text>
-                <Text style={styles.myRankValue}>#{myRank}</Text>
-              </View>
-              <View style={styles.myRankDivider} />
-              {myScore && (
-                <View style={styles.myScoreBlock}>
-                  <Text style={styles.myScoreLabel}>YOUR BEST</Text>
-                  <Text style={styles.myScoreValue}>{myScore.toLocaleString()}</Text>
-                </View>
-              )}
-            </View>
-          )}
-
-          {entries.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <View style={styles.emptyIconWrap}>
-                <Ionicons name="podium-outline" size={32} color="#333" />
-              </View>
-              <Text style={styles.emptyTitle}>No scores yet</Text>
-              <Text style={styles.emptySub}>
-                {selectedGameId ? `No approved ${selectedGameName} scores found.` : "Be the first to submit a score!"}
-              </Text>
-            </View>
-          ) : (
-            <>
-              {top3.length > 0 && (
-                <View style={styles.podium}>
-                  {[top3.find((e) => e.rank === 2), top3.find((e) => e.rank === 1), top3.find((e) => e.rank === 3)]
-                    .filter(Boolean)
-                    .map((entry) => (
-                      <PodiumCard key={entry!.rank} entry={entry!} isMe={entry!.user_id === user?.id} onShare={() => openShareModal(entry!)} />
-                    ))}
-                </View>
-              )}
-              {rest.length > 0 && (
-                <View style={styles.listCard}>
-                  <View style={styles.listHeader}>
-                    <Text style={styles.listHeaderText}>RANKINGS</Text>
-                  </View>
-                  {rest.map((entry, i) => (
-                    <View
-                      key={`${entry.user_id}-${entry.created_at}`}
-                      style={[styles.listRow, i < rest.length - 1 && styles.listRowBorder]}
-                    >
-                      <Text style={styles.listRank}>#{entry.rank}</Text>
-                      <View style={styles.listInfo}>
-                        <Text style={styles.listUsername}>
-                          {entry.username}
-                          {entry.user_id === user?.id ? <Text style={styles.listYou}> · you</Text> : ""}
-                        </Text>
-                        <Text style={styles.listGame}>{entry.game_name}</Text>
-                      </View>
-                      <Text style={styles.listScore}>{entry.score.toLocaleString()}</Text>
-                      {entry.user_id === user?.id && (
-                        <Pressable style={styles.listShareBtn} onPress={() => openShareModal(entry)}>
-                          <Ionicons name="share-outline" size={16} color="#06b6d4" />
-                        </Pressable>
-                      )}
-                    </View>
-                  ))}
-                </View>
-              )}
-            </>
-          )}
-        </ScrollView>
+            contentContainerStyle={styles.flashContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => { setRefreshing(true); loadLeaderboard(timeFilter, selectedGameId); }}
+                tintColor="#06b6d4"
+              />
+            }
+          />
+        ) : (
+          <ScrollView
+            contentContainerStyle={styles.content}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => { setRefreshing(true); loadLeaderboard(timeFilter, selectedGameId); }}
+                tintColor="#06b6d4"
+              />
+            }
+          >
+            {listHeader}
+          </ScrollView>
+        )}
       </SafeAreaView>
       <BottomTabBar />
 
@@ -326,8 +370,6 @@ export default function LeaderboardScreen() {
         <Pressable style={styles.pickerBg} onPress={() => setShareEntry(null)}>
           <Pressable style={styles.shareSheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.pickerHandle} />
-
-            {/* Score preview */}
             <View style={styles.shareScorePreview}>
               <Text style={styles.shareScoreRank}>#{shareEntry?.rank}</Text>
               <View style={{ flex: 1 }}>
@@ -335,8 +377,6 @@ export default function LeaderboardScreen() {
                 <Text style={styles.shareScoreGame}>{shareEntry?.game_name}</Text>
               </View>
             </View>
-
-            {/* Friends section */}
             <Text style={styles.shareSectionLabel}>Send to a Friend</Text>
             <View style={styles.shareFriendSearch}>
               <Ionicons name="search-outline" size={14} color="#444" />
@@ -350,7 +390,6 @@ export default function LeaderboardScreen() {
                 autoCorrect={false}
               />
             </View>
-
             {shareFriendsLoading ? (
               <ActivityIndicator color="#06b6d4" style={{ marginVertical: 20 }} />
             ) : shareFriends.length === 0 ? (
@@ -394,8 +433,6 @@ export default function LeaderboardScreen() {
                   })}
               </ScrollView>
             )}
-
-            {/* External share */}
             <Pressable style={styles.shareExternalBtn} onPress={() => shareEntry && shareScore(shareEntry)}>
               <Ionicons name="link-outline" size={16} color="#888" />
               <Text style={styles.shareExternalBtnText}>Share as Link</Text>
@@ -411,8 +448,6 @@ export default function LeaderboardScreen() {
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHandle} />
             <Text style={styles.pickerTitle}>Select Game</Text>
-
-            {/* Search input */}
             <View style={styles.searchWrap}>
               <Ionicons name="search-outline" size={16} color="#444" />
               <TextInput
@@ -430,9 +465,7 @@ export default function LeaderboardScreen() {
                 </Pressable>
               )}
             </View>
-
             <ScrollView style={styles.gameList} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-              {/* All Games option */}
               <Pressable
                 style={[styles.gameOption, !selectedGameId && styles.gameOptionActive]}
                 onPress={() => selectGame(null)}
@@ -443,7 +476,6 @@ export default function LeaderboardScreen() {
                 </View>
                 {!selectedGameId && <Ionicons name="checkmark-circle" size={20} color="#06b6d4" />}
               </Pressable>
-
               {filteredGames.length === 0 && gameSearch.length > 0 ? (
                 <View style={styles.noResults}>
                   <Text style={styles.noResultsText}>No games match "{gameSearch}"</Text>
@@ -464,7 +496,6 @@ export default function LeaderboardScreen() {
                 ))
               )}
             </ScrollView>
-
             <Pressable style={styles.pickerCancel} onPress={() => { setGamePickerVisible(false); setGameSearch(""); }}>
               <Text style={styles.pickerCancelText}>Cancel</Text>
             </Pressable>
@@ -475,18 +506,64 @@ export default function LeaderboardScreen() {
   );
 }
 
-function PodiumCard({ entry, isMe, onShare }: { entry: LeaderEntry; isMe: boolean; onShare: () => void }) {
+function RankRow({ entry, isLast, isMe, onShare }: { entry: LeaderEntry; isLast: boolean; isMe: boolean; onShare: () => void }) {
+  const typeColor = GAME_TYPE_COLORS[entry.game_type] ?? "#333";
+  return (
+    <View style={[styles.listRowWrap, !isLast && styles.listRowBorder]}>
+      <Text style={styles.listRank}>#{entry.rank}</Text>
+      <View style={[styles.listTypeDot, { backgroundColor: typeColor }]} />
+      <View style={styles.listInfo}>
+        <Text style={styles.listUsername}>
+          {entry.username}
+          {isMe ? <Text style={styles.listYou}> · you</Text> : ""}
+        </Text>
+        <Text style={styles.listGame}>{entry.game_name}</Text>
+      </View>
+      <Text style={styles.listScore}>{entry.score.toLocaleString()}</Text>
+      {isMe && (
+        <Pressable style={styles.listShareBtn} onPress={onShare}>
+          <Ionicons name="share-outline" size={16} color="#06b6d4" />
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+function PodiumCard({ entry, isMe, delay, onShare }: { entry: LeaderEntry; isMe: boolean; delay: number; onShare: () => void }) {
   const isFirst = entry.rank === 1;
   const medals = ["🥇", "🥈", "🥉"];
   const accents = ["#f59e0b", "#94a3b8", "#b45309"];
   const accent = accents[entry.rank - 1] ?? "#555";
   const avatarSize = isFirst ? 72 : 58;
 
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(20);
+
+  useEffect(() => {
+    opacity.value = withDelay(delay, withSpring(1, { damping: 18, stiffness: 160 }));
+    translateY.value = withDelay(delay, withSpring(0, { damping: 18, stiffness: 160 }));
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
   return (
-    <View style={[styles.podiumCard, isMe && styles.podiumCardMe, isFirst && styles.podiumCardFirst, { flex: isFirst ? 1.2 : 1 }]}>
+    <Animated.View style={[
+      styles.podiumCard,
+      isMe && styles.podiumCardMe,
+      isFirst && styles.podiumCardFirst,
+      { flex: isFirst ? 1.2 : 1 },
+      animStyle,
+    ]}>
       {isFirst && <View style={styles.crownRow}><Text style={styles.crownText}>👑</Text></View>}
       <Text style={styles.podiumMedal}>{medals[entry.rank - 1]}</Text>
-      <View style={[styles.podiumAvatar, { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, borderColor: accent, ...(isFirst && { shadowColor: accent, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 0 } }) }]}>
+      <View style={[
+        styles.podiumAvatar,
+        { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, borderColor: accent },
+        isFirst && { shadowColor: accent, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 0 } },
+      ]}>
         <Text style={[styles.podiumAvatarText, { fontSize: avatarSize * 0.38 }]}>{entry.username[0].toUpperCase()}</Text>
       </View>
       <Text style={styles.podiumUsername} numberOfLines={1}>{entry.username}</Text>
@@ -498,7 +575,7 @@ function PodiumCard({ entry, isMe, onShare }: { entry: LeaderEntry; isMe: boolea
           <Text style={styles.shareBtnText}>Share</Text>
         </Pressable>
       )}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -507,6 +584,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   loader: { flex: 1, backgroundColor: "#0a0a0a", alignItems: "center", justifyContent: "center" },
   content: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28 },
+  flashContent: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28 },
 
   pageHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 },
   pageTitle: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5, marginBottom: 4 },
@@ -517,7 +595,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(245,158,11,0.2)",
   },
 
-  // Time filter pill
   filterRow: {
     flexDirection: "row", backgroundColor: "#141414", borderRadius: 14,
     padding: 4, gap: 4, marginBottom: 12, borderWidth: 1, borderColor: "#222",
@@ -527,7 +604,6 @@ const styles = StyleSheet.create({
   filterText: { color: "#505050", fontWeight: "600", fontSize: 13 },
   filterTextActive: { color: "#fff", fontWeight: "800" },
 
-  // Game selector button
   gameSelector: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: "#111", borderRadius: 14, padding: 14,
@@ -543,11 +619,9 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     borderWidth: 1, borderColor: "rgba(6,182,212,0.2)", marginBottom: 24, gap: 20,
   },
-  myRankLeft: {},
   myRankLabel: { color: "#06b6d4", fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 },
   myRankValue: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -1 },
   myRankDivider: { width: 1, height: 40, backgroundColor: "rgba(6,182,212,0.2)" },
-  myScoreBlock: {},
   myScoreLabel: { color: "#444", fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 },
   myScoreValue: { color: "#22c55e", fontSize: 24, fontWeight: "900" },
 
@@ -556,7 +630,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
   emptySub: { color: "#555", fontSize: 14, textAlign: "center" },
 
-  podium: { flexDirection: "row", gap: 10, marginBottom: 22, alignItems: "flex-end" },
+  podium: { flexDirection: "row", gap: 10, marginBottom: 10, alignItems: "flex-end" },
   podiumCard: { flex: 1, backgroundColor: "#111", borderRadius: 20, padding: 14, alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#1e1e1e" },
   podiumCardFirst: { backgroundColor: "#131208", borderColor: "rgba(245,158,11,0.35)", paddingTop: 18 },
   podiumCardMe: { borderColor: "rgba(6,182,212,0.35)" },
@@ -569,19 +643,26 @@ const styles = StyleSheet.create({
   podiumScore: { fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
   podiumGame: { color: "#444", fontSize: 10, textAlign: "center" },
 
-  listCard: { backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden" },
+  // Rankings list (FlashList items wrap in a card via outer margins)
+  listCard: { backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden", marginBottom: 0 },
   listHeader: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
   listHeaderText: { color: "#333", fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2 },
-  listRow: { flexDirection: "row", alignItems: "center", padding: 14, gap: 12 },
+
+  listRowWrap: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 10, backgroundColor: "#111" },
   listRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   listRank: { color: "#3a3a3a", fontSize: 13, fontWeight: "800", width: 32, textAlign: "center" },
+  listTypeDot: { width: 8, height: 8, borderRadius: 4 },
   listInfo: { flex: 1 },
   listUsername: { color: "#fff", fontSize: 14, fontWeight: "700" },
   listYou: { color: "#555", fontWeight: "500" },
   listGame: { color: "#444", fontSize: 11, marginTop: 2 },
   listScore: { color: "#22c55e", fontSize: 17, fontWeight: "900" },
+  listShareBtn: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.15)",
+  },
 
-  // Game picker modal
   pickerBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   pickerDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   pickerSheet: {
@@ -623,13 +704,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(6,182,212,0.2)",
   },
   shareBtnText: { color: "#06b6d4", fontSize: 11, fontWeight: "700" },
-  listShareBtn: {
-    width: 32, height: 32, borderRadius: 10,
-    backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "rgba(6,182,212,0.15)",
-  },
 
-  // Score share modal
   shareSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
@@ -655,7 +730,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 10,
   },
   shareFriendSearchInput: { flex: 1, color: "#fff", fontSize: 14 },
-
   shareFriendList: { maxHeight: 260 },
   shareFriendRow: {
     flexDirection: "row", alignItems: "center", gap: 12,
@@ -670,7 +744,6 @@ const styles = StyleSheet.create({
   },
   shareFriendAvatarText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   shareFriendName: { flex: 1, color: "#fff", fontSize: 14, fontWeight: "700" },
-
   shareSendBtn: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: "#06b6d4", borderRadius: 10,
@@ -684,10 +757,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(34,197,94,0.2)",
   },
   shareSentText: { color: "#22c55e", fontSize: 12, fontWeight: "700" },
-
   shareNoFriends: { alignItems: "center", paddingVertical: 24, gap: 8 },
   shareNoFriendsText: { color: "#444", fontSize: 13, textAlign: "center" },
-
   shareExternalBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     marginTop: 16, backgroundColor: "#0d0d0d", borderRadius: 14,

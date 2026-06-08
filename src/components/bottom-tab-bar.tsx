@@ -1,6 +1,12 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect } from "react";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+} from "react-native-reanimated";
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAdmin } from "../context/admin-context";
 
@@ -27,17 +33,49 @@ const ADMIN_TAB: Tab = {
   route: "/admin",
 };
 
+const SPRING_CONFIG = { damping: 20, stiffness: 200, mass: 0.6 };
+
 export default function BottomTabBar() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { isAdmin } = useAdmin();
+  const { width: windowWidth } = useWindowDimensions();
 
   const tabs: Tab[] = isAdmin
     ? [...BASE_TABS.slice(0, BASE_TABS.length - 1), ADMIN_TAB, BASE_TABS[BASE_TABS.length - 1]]
     : BASE_TABS;
 
+  const activeIndex = tabs.findIndex((t) => t.route === pathname);
+  const tabWidth = windowWidth / tabs.length;
+
+  const pillX = useSharedValue(Math.max(activeIndex, 0) * tabWidth);
+
+  useEffect(() => {
+    const idx = tabs.findIndex((t) => t.route === pathname);
+    if (idx >= 0) {
+      pillX.value = withSpring(idx * tabWidth, SPRING_CONFIG);
+    }
+  }, [pathname, tabWidth, tabs.length]);
+
+  const isAdminActive = pathname === "/admin";
+  const pillColor = isAdminActive ? "rgba(245,158,11,0.18)" : "rgba(6,182,212,0.14)";
+
+  const pillStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: pillX.value }],
+  }));
+
   return (
     <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+      {/* sliding active pill */}
+      <Animated.View
+        style={[
+          styles.pill,
+          { width: tabWidth, backgroundColor: pillColor },
+          pillStyle,
+        ]}
+        pointerEvents="none"
+      />
+
       {tabs.map((tab) => {
         const active = pathname === tab.route;
         const isAdminTab = tab.route === "/admin";
@@ -49,16 +87,11 @@ export default function BottomTabBar() {
               if (pathname !== tab.route) router.replace(tab.route as any);
             }}
           >
-            <View style={[
-              styles.iconWrap,
-              active && (isAdminTab ? styles.iconWrapAdmin : styles.iconWrapActive),
-            ]}>
-              <Ionicons
-                name={active ? tab.iconActive : tab.icon}
-                size={22}
-                color={active ? (isAdminTab ? "#f59e0b" : "#06b6d4") : "#484848"}
-              />
-            </View>
+            <Ionicons
+              name={active ? tab.iconActive : tab.icon}
+              size={22}
+              color={active ? (isAdminTab ? "#f59e0b" : "#06b6d4") : "#484848"}
+            />
             <Text style={[
               styles.label,
               active && (isAdminTab ? styles.labelAdmin : styles.labelActive),
@@ -80,14 +113,15 @@ const styles = StyleSheet.create({
     borderTopColor: "#222",
     paddingTop: 6,
   },
-  tab: { flex: 1, alignItems: "center", gap: 3, paddingTop: 2 },
-  tabPressed: { opacity: 0.45 },
-  iconWrap: {
-    width: 44, height: 30, borderRadius: 15,
-    alignItems: "center", justifyContent: "center",
+  pill: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    height: "100%",
+    borderRadius: 0,
   },
-  iconWrapActive: { backgroundColor: "rgba(6,182,212,0.12)" },
-  iconWrapAdmin:  { backgroundColor: "rgba(245,158,11,0.12)" },
+  tab: { flex: 1, alignItems: "center", gap: 3, paddingTop: 4, paddingBottom: 2 },
+  tabPressed: { opacity: 0.45 },
   label:       { fontSize: 10, fontWeight: "500", color: "#484848" },
   labelActive: { color: "#06b6d4", fontWeight: "700" },
   labelAdmin:  { color: "#f59e0b", fontWeight: "700" },

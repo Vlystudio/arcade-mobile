@@ -1,13 +1,18 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   Modal,
-  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -38,6 +43,8 @@ type FriendResult = {
   online_status: string;
 };
 
+const SWIPE_SPRING = { damping: 22, stiffness: 220, mass: 0.7 };
+
 export default function ChatScreen() {
   const { user, loading: authLoading } = useRequireAuth();
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -52,7 +59,6 @@ export default function ChatScreen() {
   async function loadConversations() {
     if (!user) return;
 
-    // Step 1: fetch conversations (no join — more reliable cross-platform)
     const { data: convData } = await supabase
       .from("conversations")
       .select("id, participant_1, participant_2, last_message, last_message_at")
@@ -65,7 +71,6 @@ export default function ChatScreen() {
       return;
     }
 
-    // Step 2: fetch profiles for the other participants
     const otherIds = convData.map((c: any) =>
       c.participant_1 === user.id ? c.participant_2 : c.participant_1
     );
@@ -99,7 +104,6 @@ export default function ChatScreen() {
     setConversations(mapped);
     setLoading(false);
 
-    // Load unread status from AsyncStorage
     const entries = await Promise.all(
       mapped.map(async (c) => {
         const lastRead = await AsyncStorage.getItem(`read_${c.id}`);
@@ -153,7 +157,9 @@ export default function ChatScreen() {
       return;
     }
 
-    const ids = fs.map((f: any) => f.requester_id === user.id ? f.addressee_id : f.requester_id);
+    const ids = fs.map((f: any) =>
+      f.requester_id === user.id ? f.addressee_id : f.requester_id
+    );
 
     const { data: profiles } = await supabase
       .from("profiles")
@@ -180,7 +186,6 @@ export default function ChatScreen() {
       .maybeSingle();
 
     let convId: string;
-
     if (existing) {
       convId = existing.id;
     } else {
@@ -216,22 +221,12 @@ export default function ChatScreen() {
 
   useEffect(() => {
     if (!user) return;
-
     loadConversations();
 
-    // Live updates: re-fetch when any conversation involving this user changes
     const channel = supabase
       .channel(`chats:${user.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "conversations", filter: `participant_1=eq.${user.id}` },
-        () => loadConversations()
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "conversations", filter: `participant_2=eq.${user.id}` },
-        () => loadConversations()
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations", filter: `participant_1=eq.${user.id}` }, () => loadConversations())
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations", filter: `participant_2=eq.${user.id}` }, () => loadConversations())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -258,8 +253,8 @@ export default function ChatScreen() {
           </Pressable>
         </View>
 
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={conversations.length === 0 ? styles.emptyWrap : undefined}>
-          {conversations.length === 0 ? (
+        {conversations.length === 0 ? (
+          <ScrollView contentContainerStyle={styles.emptyWrap}>
             <View style={styles.empty}>
               <Ionicons name="chatbubbles-outline" size={52} color="#222" />
               <Text style={styles.emptyTitle}>No messages yet</Text>
@@ -268,27 +263,31 @@ export default function ChatScreen() {
                 <Text style={styles.emptyBtnText}>New Message</Text>
               </Pressable>
             </View>
-          ) : (
-            conversations.map((c) => (
+          </ScrollView>
+        ) : (
+          <FlashList
+            data={conversations}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
               <SwipeableConvRow
-                key={c.id}
-                conv={c}
-                isUnread={!!unreadMap[c.id]}
-                onOpen={() => openConversation(c)}
+                conv={item}
+                isUnread={!!unreadMap[item.id]}
+                onOpen={() => openConversation(item)}
                 onDelete={() =>
                   Alert.alert(
                     "Delete conversation",
                     "This will remove the chat for both you and the other person.",
                     [
                       { text: "Cancel", style: "cancel" },
-                      { text: "Delete", style: "destructive", onPress: () => deleteConversation(c.id) },
+                      { text: "Delete", style: "destructive", onPress: () => deleteConversation(item.id) },
                     ]
                   )
                 }
               />
-            ))
-          )}
-        </ScrollView>
+            )}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
       </SafeAreaView>
       <BottomTabBar />
 
@@ -373,90 +372,80 @@ function SwipeableConvRow({
   onOpen: () => void;
   onDelete: () => void;
 }) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const isOpen = useRef(false);
+  const translateX = useSharedValue(0);
+  const isOpen = useSharedValue(false);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, { dx, dy }) =>
-        Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8,
-      onPanResponderMove: (_, { dx }) => {
-        if (dx < 0 && !isOpen.current) {
-          translateX.setValue(Math.max(dx, -80));
-        } else if (isOpen.current) {
-          translateX.setValue(Math.min(-80 + dx, 0));
-        }
-      },
-      onPanResponderRelease: (_, { dx }) => {
-        const shouldOpen = dx < -40 && !isOpen.current;
-        const shouldClose = dx > 30 && isOpen.current;
-        if (shouldOpen) {
-          Animated.spring(translateX, { toValue: -80, useNativeDriver: true }).start();
-          isOpen.current = true;
-        } else if (shouldClose) {
-          Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-          isOpen.current = false;
-        } else {
-          Animated.spring(translateX, {
-            toValue: isOpen.current ? -80 : 0,
-            useNativeDriver: true,
-          }).start();
-        }
-      },
+  const panGesture = Gesture.Pan()
+    .activeOffsetX([-8, 8])
+    .failOffsetY([-15, 15])
+    .onUpdate((e) => {
+      if (e.translationX < 0 && !isOpen.value) {
+        translateX.value = Math.max(e.translationX, -80);
+      } else if (isOpen.value) {
+        translateX.value = Math.min(-80 + e.translationX, 0);
+      }
     })
-  ).current;
+    .onEnd((e) => {
+      const shouldOpen = e.translationX < -40 && !isOpen.value;
+      const shouldClose = e.translationX > 30 && isOpen.value;
+      if (shouldOpen) {
+        translateX.value = withSpring(-80, SWIPE_SPRING);
+        isOpen.value = true;
+      } else if (shouldClose) {
+        translateX.value = withSpring(0, SWIPE_SPRING);
+        isOpen.value = false;
+      } else {
+        translateX.value = withSpring(isOpen.value ? -80 : 0, SWIPE_SPRING);
+      }
+    });
 
   function close() {
-    Animated.spring(translateX, { toValue: 0, useNativeDriver: true }).start();
-    isOpen.current = false;
+    translateX.value = withSpring(0, SWIPE_SPRING);
+    isOpen.value = false;
   }
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
 
   return (
     <View style={styles.swipeContainer}>
-      {/* Delete action revealed on swipe */}
       <View style={styles.deleteAction}>
-        <Pressable
-          style={styles.deleteBtn}
-          onPress={() => { close(); onDelete(); }}
-        >
+        <Pressable style={styles.deleteBtn} onPress={() => { close(); onDelete(); }}>
           <Ionicons name="trash-outline" size={20} color="#fff" />
           <Text style={styles.deleteBtnText}>Delete</Text>
         </Pressable>
       </View>
 
-      <Animated.View
-        style={{ transform: [{ translateX }] }}
-        {...panResponder.panHandlers}
-      >
-        <Pressable
-          style={({ pressed }) => [
-            styles.convRow,
-            pressed && !isOpen.current && { backgroundColor: "#0d0d0d" },
-          ]}
-          onPress={() => {
-            if (isOpen.current) { close(); } else { onOpen(); }
-          }}
-        >
-          <Avatar uri={conv.other_avatar_url} name={conv.other_username} size={46} />
-          <View style={styles.convBody}>
-            <Text style={[styles.convName, isUnread && styles.convNameUnread]}>
-              {conv.other_username}
-            </Text>
-            <Text
-              style={[styles.convLast, isUnread && styles.convLastUnread]}
-              numberOfLines={1}
-            >
-              {conv.last_message ?? "No messages yet"}
-            </Text>
-          </View>
-          <View style={styles.convMeta}>
-            {conv.last_message_at && (
-              <Text style={styles.convTime}>{relTime(conv.last_message_at)}</Text>
-            )}
-            {isUnread && <View style={styles.unreadDot} />}
-          </View>
-        </Pressable>
-      </Animated.View>
+      <GestureDetector gesture={panGesture}>
+        <Animated.View style={animStyle}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.convRow,
+              pressed && !isOpen.value && { backgroundColor: "#0d0d0d" },
+            ]}
+            onPress={() => {
+              if (isOpen.value) { close(); } else { onOpen(); }
+            }}
+          >
+            <Avatar uri={conv.other_avatar_url} name={conv.other_username} size={46} />
+            <View style={styles.convBody}>
+              <Text style={[styles.convName, isUnread && styles.convNameUnread]}>
+                {conv.other_username}
+              </Text>
+              <Text style={[styles.convLast, isUnread && styles.convLastUnread]} numberOfLines={1}>
+                {conv.last_message ?? "No messages yet"}
+              </Text>
+            </View>
+            <View style={styles.convMeta}>
+              {conv.last_message_at && (
+                <Text style={styles.convTime}>{relTime(conv.last_message_at)}</Text>
+              )}
+              {isUnread && <View style={styles.unreadDot} />}
+            </View>
+          </Pressable>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -516,10 +505,7 @@ const styles = StyleSheet.create({
   convLastUnread: { color: "#888", fontWeight: "600" },
   convMeta: { alignItems: "flex-end", gap: 5 },
   convTime: { color: "#444", fontSize: 12 },
-  unreadDot: {
-    width: 9, height: 9, borderRadius: 5,
-    backgroundColor: "#06b6d4",
-  },
+  unreadDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#06b6d4" },
 
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   modalSheet: {

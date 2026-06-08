@@ -1,10 +1,15 @@
 ﻿import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   Modal,
   Pressable,
   ScrollView,
@@ -75,9 +80,14 @@ export default function TriviaScreen() {
   const [joining, setJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
 
-  const slideAnim = useRef(new Animated.Value(0)).current;
-  const fadeAnim = useRef(new Animated.Value(1)).current;
+  const slideY = useSharedValue(0);
+  const cardOpacity = useSharedValue(1);
   const prevQuestionId = useRef<string | null>(null);
+
+  const questionCardStyle = useAnimatedStyle(() => ({
+    opacity: cardOpacity.value,
+    transform: [{ translateY: slideY.value }],
+  }));
 
   useEffect(() => { if (user) { loadGames(); loadMyTeams(); } }, [user]);
 
@@ -243,12 +253,10 @@ export default function TriviaScreen() {
   }
 
   function animateQuestionIn() {
-    slideAnim.setValue(40);
-    fadeAnim.setValue(0);
-    Animated.parallel([
-      Animated.spring(slideAnim, { toValue: 0, useNativeDriver: true, tension: 80, friction: 10 }),
-      Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
-    ]).start();
+    slideY.value = 40;
+    cardOpacity.value = 0;
+    slideY.value = withSpring(0, { damping: 14, stiffness: 120 });
+    cardOpacity.value = withTiming(1, { duration: 280 });
   }
 
   if (authLoading) {
@@ -314,7 +322,7 @@ export default function TriviaScreen() {
           )}
 
           {selectedGame.status === "active" && currentQuestion && (
-            <Animated.View style={[s.questionCard, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <Animated.View style={[s.questionCard, questionCardStyle]}>
               <View style={s.questionHeader}>
                 {currentQuestion.category && (
                   <View style={s.categoryTag}>

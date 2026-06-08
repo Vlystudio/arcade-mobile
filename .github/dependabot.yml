@@ -22,9 +22,13 @@ updates:
         patterns:
           - "@vercel/*"
     ignore:
-      # Skip major version bumps for Expo — coordinate manually
+      # Expo ecosystem must be upgraded together manually via `npx expo install --fix`
       - dependency-name: "expo"
-        update-types: ["version-update:semver-major"]
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "expo-*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+      - dependency-name: "@expo/*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
 
   # GitHub Actions
   - package-ecosystem: github-actions
