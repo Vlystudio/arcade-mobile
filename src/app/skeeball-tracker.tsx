@@ -373,6 +373,31 @@ export default function SkeeballTrackerScreen() {
     router.canGoBack() ? router.back() : router.replace("/teams" as any);
   }
 
+  // ─── Inactivity warning modal (shown over any active session view) ───────────
+
+  const warningModal = (
+    <Modal visible={showWarning} transparent animationType="fade" statusBarTranslucent>
+      <View style={s.warningOverlay}>
+        <View style={s.warningCard}>
+          <View style={s.warningIconWrap}>
+            <Ionicons name="warning" size={36} color="#ef4444" />
+          </View>
+          <Text style={s.warningTitle}>Inactivity Detected</Text>
+          <Text style={s.warningSub}>
+            You will be removed from Lane {mySession?.lane_number} due to inactivity in
+          </Text>
+          <Text style={s.warningCountdown}>
+            {String(Math.floor(warningCountdown / 60)).padStart(2, "0")}:{String(warningCountdown % 60).padStart(2, "0")}
+          </Text>
+          <Pressable style={s.warningBtn} onPress={stayActive}>
+            <Ionicons name="checkmark-circle-outline" size={20} color="#000" />
+            <Text style={s.warningBtnText}>I'm Still Here</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+
   // ─── Not Monday ───────────────────────────────────────────────────────────────
 
   if (!isMonday()) {
@@ -548,31 +573,6 @@ export default function SkeeballTrackerScreen() {
       </SafeAreaView>
     );
   }
-
-  // ─── Inactivity warning modal (shown over any active session view) ───────────
-
-  const warningModal = (
-    <Modal visible={showWarning} transparent animationType="fade" statusBarTranslucent>
-      <View style={s.warningOverlay}>
-        <View style={s.warningCard}>
-          <View style={s.warningIconWrap}>
-            <Ionicons name="warning" size={36} color="#ef4444" />
-          </View>
-          <Text style={s.warningTitle}>Inactivity Detected</Text>
-          <Text style={s.warningSub}>
-            You will be removed from Lane {mySession?.lane_number} due to inactivity in
-          </Text>
-          <Text style={s.warningCountdown}>
-            {String(Math.floor(warningCountdown / 60)).padStart(2, "0")}:{String(warningCountdown % 60).padStart(2, "0")}
-          </Text>
-          <Pressable style={s.warningBtn} onPress={stayActive}>
-            <Ionicons name="checkmark-circle-outline" size={20} color="#000" />
-            <Text style={s.warningBtnText}>I'm Still Here</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
 
   // ─── Setup (no active session) ────────────────────────────────────────────────
 
