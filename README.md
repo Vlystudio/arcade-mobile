@@ -38,7 +38,7 @@ React Native (Expo SDK 55) arcade venue companion app backed by Supabase (Postgr
 | Screen | What it does |
 |--------|-------------|
 | **Food Menu** | Location-aware menu browsing by category (accessible without login) |
-| **Cart & Checkout** | Cart management, tax calculation, Square-hosted checkout (no account required) |
+| **Cart & Checkout** | Cart management, Square-hosted final total and checkout (no account required) |
 
 ### Profile & Account
 | Screen | What it does |
@@ -242,7 +242,7 @@ BEFORE INSERT triggers on `posts` (10/h), `messages` (60/min), `team_messages` (
 `venue_admins` table allows per-venue admin scoping. `is_venue_admin(venue_id)` returns true for global admins or explicit venue-admin entries.
 
 ### Square / payments
-Square prices are **never derived from the client**. The server-side `/api/square/orders` route fetches prices directly from the Square Catalog API using `SQUARE_ACCESS_TOKEN`. The client only sends variation IDs; the server resolves prices and creates the order. A client cannot submit an arbitrary amount.
+Square prices are **never derived from the client**. The server-side `/api/square/orders` route fetches prices directly from the Square Catalog API using `SQUARE_ACCESS_TOKEN`. The client only sends variation IDs and quantities; the server resolves prices and creates the order. Taxes, tips, fees, and the final payable total are shown by Square at hosted checkout, so the cart only displays an item subtotal.
 
 ### Security testing
 Run `scripts/security-verification-tests.sql` in the Supabase SQL Editor after every migration. It uses `SET LOCAL ROLE` to simulate anonymous, authenticated, and admin callers across 9 test blocks. Every row should return `result = 'PASS'`.

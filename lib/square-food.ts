@@ -15,10 +15,8 @@ export type SquareFoodItem = {
 };
 
 export type SquareCartItem = {
-  name: string;
-  price: number;
   quantity: number;
-  squareVariationId?: string;
+  squareVariationId: string;
 };
 
 function getApiUrl(path: string) {

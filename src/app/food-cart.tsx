@@ -16,17 +16,16 @@ import { useCart } from "../context/cart-context";
 import { useLocation } from "../context/location-context";
 import { createSquareCheckoutLink } from "../../lib/square-food";
 
-const TAX_RATE = 0.08;
-
 export default function FoodCartScreen() {
-  const { items, updateQuantity, removeItem, clearCart, total, itemCount } = useCart();
+  const { items, updateQuantity, clearCart, total, itemCount } = useCart();
   const { location } = useLocation();
 
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const tax = total * TAX_RATE;
-  const grandTotal = total + tax;
+  const hasNonSquareItems = items.some((item) => !item.squareVariationId);
+  const checkoutBlocked = items.length === 0 || hasNonSquareItems;
+  const checkoutDisabled = placing || checkoutBlocked;
 
   async function handlePlaceOrder() {
     if (items.length === 0) return;
@@ -39,6 +38,12 @@ export default function FoodCartScreen() {
       return;
     }
 
+    if (hasNonSquareItems) {
+      setPlacing(false);
+      setError("This cart has items that are not linked to Square yet. Refresh the menu and add Square catalog items before checkout.");
+      return;
+    }
+
     const localOrderId = createUuid();
 
     try {
@@ -46,10 +51,8 @@ export default function FoodCartScreen() {
         locationSlug: location.slug,
         localOrderId,
         items: items.map((item) => ({
-          name: item.name,
-          price: item.price,
           quantity: item.quantity,
-          squareVariationId: item.squareVariationId,
+          squareVariationId: item.squareVariationId!,
         })),
       });
 
@@ -127,19 +130,22 @@ export default function FoodCartScreen() {
           <Text style={styles.sectionLabel}>Summary</Text>
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal</Text>
+              <Text style={styles.summaryLabel}>Item subtotal</Text>
               <Text style={styles.summaryValue}>${total.toFixed(2)}</Text>
             </View>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Tax (8%)</Text>
-              <Text style={styles.summaryValue}>${tax.toFixed(2)}</Text>
+              <Text style={styles.summaryLabel}>Taxes, tips, and fees</Text>
+              <Text style={styles.summaryValueMuted}>Shown in Square</Text>
             </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryRow}>
-              <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>${grandTotal.toFixed(2)}</Text>
-            </View>
+            <Text style={styles.summaryNote}>Square calculates the final total using the restaurant catalog and checkout settings.</Text>
           </View>
+
+          {hasNonSquareItems && (
+            <View style={styles.warningBox}>
+              <Ionicons name="information-circle-outline" size={15} color="#f59e0b" />
+              <Text style={styles.warningText}>Checkout is available after these items are added from the live Square menu.</Text>
+            </View>
+          )}
 
           {error && (
             <View style={styles.errorBox}>
@@ -150,15 +156,15 @@ export default function FoodCartScreen() {
 
           {/* Place order */}
           <Pressable
-            style={[styles.placeBtn, (placing || items.length === 0) && styles.placeBtnOff]}
+            style={[styles.placeBtn, checkoutBlocked && styles.placeBtnOff]}
             onPress={handlePlaceOrder}
-            disabled={placing || items.length === 0}
+            disabled={checkoutDisabled}
           >
             {placing
               ? <ActivityIndicator size="small" color="#000" />
-              : <Ionicons name="checkmark-circle-outline" size={20} color="#000" />
+              : <Ionicons name="checkmark-circle-outline" size={20} color={checkoutBlocked ? "#555" : "#000"} />
             }
-            <Text style={styles.placeBtnText}>{placing ? "Placing order…" : `Place Order · $${grandTotal.toFixed(2)}`}</Text>
+            <Text style={[styles.placeBtnText, checkoutBlocked && styles.placeBtnTextOff]}>{placing ? "Opening Square..." : "Continue to Square checkout"}</Text>
           </Pressable>
 
           <Pressable style={styles.clearBtn} onPress={() => clearCart()}>
@@ -243,9 +249,8 @@ const styles = StyleSheet.create({
   summaryRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
   summaryLabel: { color: "#555", fontSize: 14 },
   summaryValue: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  summaryDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#2a2a2a", marginVertical: 8 },
-  totalLabel: { color: "#fff", fontSize: 16, fontWeight: "900" },
-  totalValue: { color: "#06b6d4", fontSize: 20, fontWeight: "900" },
+  summaryValueMuted: { color: "#777", fontSize: 14, fontWeight: "700" },
+  summaryNote: { color: "#555", fontSize: 12, lineHeight: 18, marginTop: 4 },
 
   errorBox: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -254,6 +259,13 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(239,68,68,0.2)",
   },
   errorText: { color: "#ef4444", fontSize: 13, flex: 1 },
+  warningBox: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "rgba(245,158,11,0.08)", borderRadius: 12,
+    padding: 12, marginBottom: 14,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.2)",
+  },
+  warningText: { color: "#f59e0b", fontSize: 13, flex: 1 },
 
   placeBtn: {
     backgroundColor: "#06b6d4", borderRadius: 18,
@@ -262,6 +274,7 @@ const styles = StyleSheet.create({
   },
   placeBtnOff: { backgroundColor: "#141414" },
   placeBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
+  placeBtnTextOff: { color: "#555" },
 
   clearBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
