@@ -49,6 +49,7 @@ type SkeeballTrackerProps = {
   initialTeamId?: string;
   initialTeamName?: string;
   initialSessionId?: string;
+  initialLaneToken?: string;
   initialFromQr?: boolean;
   onBack?: () => void;
 };
@@ -69,13 +70,15 @@ export default function SkeeballTrackerScreen({
   initialTeamId,
   initialTeamName,
   initialSessionId,
+  initialLaneToken,
   initialFromQr,
   onBack,
 }: SkeeballTrackerProps = {}) {
-  const { teamId: routeTeamId, teamName: routeTeamName, sessionId, fromQr } = useLocalSearchParams<{
+  const { teamId: routeTeamId, teamName: routeTeamName, sessionId, laneToken, fromQr } = useLocalSearchParams<{
     teamId?: string;
     teamName?: string;
     sessionId?: string;
+    laneToken?: string;
     fromQr?: string;
   }>();
   const teamId = initialTeamId ?? routeTeamId;
@@ -114,7 +117,8 @@ export default function SkeeballTrackerScreen({
   const sessionDone = mySession?.status === "completed";
   const takenLanes = new Set(allActiveSessions.map((s) => s.lane_number));
   const qrSessionId = initialSessionId ?? (typeof sessionId === "string" ? sessionId : undefined);
-  const cameFromQr = initialFromQr === true || fromQr === "1" || !!qrSessionId;
+  const qrLaneToken = initialLaneToken ?? (typeof laneToken === "string" ? laneToken : undefined);
+  const cameFromQr = initialFromQr === true || fromQr === "1" || !!qrSessionId || !!qrLaneToken;
 
   const playerProgress = sessionPlayers.map((sp, i) => ({
     ...sp,
@@ -124,7 +128,7 @@ export default function SkeeballTrackerScreen({
 
   useEffect(() => {
     if (user && teamId) loadData();
-  }, [user, teamId, qrSessionId]);
+  }, [user, teamId, qrSessionId, qrLaneToken]);
 
   useEffect(() => {
     return () => { channelRef.current?.unsubscribe(); };
@@ -237,7 +241,19 @@ export default function SkeeballTrackerScreen({
       // Pre-select all members (up to 3) so the user just needs to pick a lane
       setSelectedPlayers(members.slice(0, PLAYERS_PER_GAME).map((m) => m.user_id));
 
-      const mine = sessions.find((s) => qrSessionId && s.id === qrSessionId) ?? sessions.find((s) => s.team_id === teamId) ?? null;
+      let mine = sessions.find((s) => qrSessionId && s.id === qrSessionId) ?? sessions.find((s) => s.team_id === teamId) ?? null;
+
+      if (!mine && qrLaneToken && teamId) {
+        const session = await startQrSession(qrLaneToken, teamId);
+        if (session) {
+          mine = session;
+          setAllActiveSessions((prev) => [
+            ...prev.filter((s) => s.id !== session.id),
+            session,
+          ]);
+        }
+      }
+
       setMySession(mine);
 
       if (mine) await loadSessionData(mine.id, members);
@@ -246,6 +262,44 @@ export default function SkeeballTrackerScreen({
     } finally {
       setLoading(false);
     }
+  }
+
+  async function startQrSession(token: string, checkInTeamId: string): Promise<LaneSession | null> {
+    const rpc = supabase.rpc("rpc_skeeball_start_qr_session", {
+      p_token: token,
+      p_team_id: checkInTeamId,
+    });
+    const timeout = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Lane check-in timed out. Try scanning again or ask staff to refresh the QR code.")), 15000);
+    });
+
+    const { data, error } = await Promise.race([rpc, timeout]);
+    if (error) throw error;
+
+    const result = data as {
+      ok?: boolean;
+      error?: string;
+      message?: string;
+      session_id?: string;
+      lane_number?: number;
+      team_id?: string;
+      team_name?: string;
+      league_match_id?: string | null;
+    };
+
+    if (!result?.ok || !result.session_id) {
+      throw new Error(result?.message ?? "Could not check in to this lane.");
+    }
+
+    return {
+      id: result.session_id,
+      team_id: result.team_id ?? checkInTeamId,
+      lane_number: result.lane_number ?? 0,
+      status: "active",
+      team_name: result.team_name ?? teamName ?? "Team",
+      league_match_id: result.league_match_id ?? null,
+      last_activity_at: new Date().toISOString(),
+    };
   }
 
   async function loadSessionData(sessionId: string, members?: Member[]) {

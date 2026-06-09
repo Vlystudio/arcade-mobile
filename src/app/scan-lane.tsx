@@ -33,8 +33,7 @@ type MyTeam = {
 };
 
 type ActiveSkeeballSession = {
-  sessionId: string;
-  laneNumber: number;
+  laneToken: string;
   teamId: string;
   teamName: string;
 };
@@ -215,72 +214,31 @@ export default function ScanLaneScreen() {
       return;
     }
 
-    setOpeningScoring(true);
     setPendingTokenWithoutTeam(null);
     if (teamOverride) {
       setSelectedTeamId(teamOverride.id);
       setSelectedTeamName(checkInTeamName ?? teamOverride.name);
     }
-    try {
-      const { data, error } = await supabase.rpc("rpc_skeeball_start_qr_session", {
-        p_token: token,
-        p_team_id: checkInTeamId,
-      });
-      if (error) throw error;
-
-      const result = data as {
-        ok?: boolean;
-        error?: string;
-        message?: string;
-        session_id?: string;
-        lane_number?: number;
-        team_id?: string;
-        team_name?: string;
-      };
-
-      if (!result?.ok) {
-        Alert.alert("Can't check in", result?.message ?? "This lane is not available.");
-        setOpeningScoring(false);
-        setScanned(false);
-        return;
-      }
-
-      if (!result.session_id) {
-        Alert.alert("Check-in failed", "The lane session was created, but no session ID was returned. Please scan again.");
-        setOpeningScoring(false);
-        setScanned(false);
-        return;
-      }
-
-      openSkeeballSession({
-        sessionId: result.session_id,
-        laneNumber: result.lane_number ?? 0,
-        teamId: result.team_id ?? checkInTeamId,
-        teamName: result.team_name ?? checkInTeamName ?? "Team",
-      });
-    } catch (err) {
-      Alert.alert("Check-in failed", err instanceof Error ? err.message : "Something went wrong.");
-      setOpeningScoring(false);
-      setScanned(false);
-    }
+    openSkeeballScoring({
+      laneToken: token,
+      teamId: checkInTeamId,
+      teamName: checkInTeamName ?? "Team",
+    });
   };
 
-  const openSkeeballSession = ({
-    sessionId,
-    laneNumber,
+  const openSkeeballScoring = ({
+    laneToken,
     teamId,
     teamName,
   }: {
-    sessionId: string;
-    laneNumber: number;
+    laneToken: string;
     teamId: string;
     teamName: string;
   }) => {
     const params = new URLSearchParams({
       teamId,
       teamName,
-      sessionId,
-      laneNumber: String(laneNumber),
+      laneToken,
       fromQr: "1",
     });
     const href = `/skeeball-tracker?${params.toString()}`;
@@ -288,7 +246,7 @@ export default function ScanLaneScreen() {
     setOpeningScoring(true);
     setPendingTokenWithoutTeam(null);
     setScanned(true);
-    setActiveSkeeballSession({ sessionId, laneNumber, teamId, teamName });
+    setActiveSkeeballSession({ laneToken, teamId, teamName });
 
     const webGlobal = globalThis as typeof globalThis & {
       history?: { replaceState: (data: unknown, unused: string, url?: string | URL | null) => void };
@@ -338,7 +296,7 @@ export default function ScanLaneScreen() {
       <SkeeballTrackerScreen
         initialTeamId={activeSkeeballSession.teamId}
         initialTeamName={activeSkeeballSession.teamName}
-        initialSessionId={activeSkeeballSession.sessionId}
+        initialLaneToken={activeSkeeballSession.laneToken}
         initialFromQr
         onBack={handleScanAgain}
       />
