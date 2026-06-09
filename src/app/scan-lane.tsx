@@ -1,14 +1,16 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -33,20 +35,43 @@ type SkeeballLanePreview = {
   venue_id: string;
 };
 
+type MyTeam = {
+  id: string;
+  name: string;
+};
+
 export default function ScanLaneScreen() {
-  const { mode, teamId, teamName } = useLocalSearchParams<{
+  const { mode, teamId, teamName, lane_token, token: routeToken } = useLocalSearchParams<{
     mode?: string;
     teamId?: string;
     teamName?: string;
+    lane_token?: string;
+    token?: string;
   }>();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [showScanHelp, setShowScanHelp] = useState(false);
+  const [manualToken, setManualToken] = useState("");
+  const [pendingTokenWithoutTeam, setPendingTokenWithoutTeam] = useState<string | null>(null);
+  const [myTeams, setMyTeams] = useState<MyTeam[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
+  const [selectedTeamName, setSelectedTeamName] = useState<string | null>(null);
+  const [handledRouteToken, setHandledRouteToken] = useState(false);
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null);
   const [pendingSkeeballLane, setPendingSkeeballLane] = useState<SkeeballLanePreview | null>(null);
 
-  const isSkeeballMode = mode === "skeeball" || !!teamId;
+  const routeLaneToken = useMemo(() => {
+    const raw = lane_token ?? routeToken;
+    return Array.isArray(raw) ? raw[0] : raw;
+  }, [lane_token, routeToken]);
+  const activeTeamId = selectedTeamId ?? teamId;
+  const activeTeamName = selectedTeamName ?? teamName;
+  const isSkeeballMode = mode === "skeeball" || !!activeTeamId || !!routeLaneToken;
 
   const extractToken = (data: string) => {
     try {
@@ -55,6 +80,37 @@ export default function ScanLaneScreen() {
       if (t) return t;
     } catch { /* not a URL */ }
     return data.trim();
+  };
+
+  const loadMyTeams = async () => {
+    setTeamsLoading(true);
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        Alert.alert("Not logged in", "Please log in before checking in.");
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("team_members")
+        .select("team_id, teams(id, name)")
+        .eq("user_id", user.id);
+
+      if (error) throw error;
+
+      const teams = (data ?? [])
+        .map((row: any) => {
+          const team = Array.isArray(row.teams) ? row.teams[0] : row.teams;
+          return team?.id ? { id: team.id, name: team.name ?? "Team" } : null;
+        })
+        .filter(Boolean) as MyTeam[];
+
+      setMyTeams(teams);
+    } catch {
+      Alert.alert("Teams unavailable", "Could not load your teams. Open the scanner from your team page or try again.");
+    } finally {
+      setTeamsLoading(false);
+    }
   };
 
   const handleCheckIn = async (qrData: string) => {
@@ -113,8 +169,13 @@ export default function ScanLaneScreen() {
     }
   };
 
-  const handleBarcodeScanned = ({ data }: { data: string }) => {
+  const handleBarcodeScanned = (scan: { data?: string; rawValue?: string; nativeEvent?: { data?: string; rawValue?: string } }) => {
     if (scanned) return;
+    const data = scan.data ?? scan.rawValue ?? scan.nativeEvent?.data ?? scan.nativeEvent?.rawValue;
+    if (!data) {
+      setCameraError("The camera saw a code but could not read its contents. Try moving closer or use the link fallback below.");
+      return;
+    }
     setScanned(true);
     handleCheckIn(data);
   };
@@ -122,12 +183,17 @@ export default function ScanLaneScreen() {
   const handleScanAgain = () => {
     setCheckInResult(null);
     setPendingSkeeballLane(null);
+    setPendingTokenWithoutTeam(null);
+    setManualToken("");
     setScanned(false);
   };
 
-  const previewSkeeballLane = async (token: string) => {
-    if (!teamId) {
-      Alert.alert("Choose a team", "Open the scanner from your team page before checking into league play.");
+  const previewSkeeballLane = async (token: string, teamOverride?: MyTeam) => {
+    const checkInTeamId = teamOverride?.id ?? activeTeamId;
+    const checkInTeamName = teamOverride?.name ?? activeTeamName;
+    if (!checkInTeamId) {
+      setPendingTokenWithoutTeam(token);
+      await loadMyTeams();
       setScanned(false);
       return;
     }
@@ -169,15 +235,20 @@ export default function ScanLaneScreen() {
       game_name: result.game_name ?? "Skee-Ball",
       venue_id: result.venue_id ?? "",
     });
+    setPendingTokenWithoutTeam(null);
+    if (teamOverride) {
+      setSelectedTeamId(teamOverride.id);
+      setSelectedTeamName(checkInTeamName ?? teamOverride.name);
+    }
   };
 
   const confirmSkeeballCheckIn = async () => {
-    if (!pendingSkeeballLane || !teamId) return;
+    if (!pendingSkeeballLane || !activeTeamId) return;
     setConfirming(true);
     try {
       const { data, error } = await supabase.rpc("rpc_skeeball_start_qr_session", {
         p_token: pendingSkeeballLane.token,
-        p_team_id: teamId,
+        p_team_id: activeTeamId,
       });
       if (error) throw error;
 
@@ -207,10 +278,10 @@ export default function ScanLaneScreen() {
   };
 
   const tryResumeSkeeballSession = async (token: string) => {
-    if (!teamId) return false;
+    if (!activeTeamId) return false;
     const { data, error } = await supabase.rpc("rpc_skeeball_start_qr_session", {
       p_token: token,
-      p_team_id: teamId,
+      p_team_id: activeTeamId,
     });
     if (error) return false;
     const result = data as { ok?: boolean; session_id?: string; lane_number?: number };
@@ -223,8 +294,8 @@ export default function ScanLaneScreen() {
     router.replace({
       pathname: "/skeeball-tracker" as any,
       params: {
-        teamId,
-        teamName: teamName ?? "Team",
+        teamId: activeTeamId,
+        teamName: activeTeamName ?? "Team",
         sessionId,
         laneNumber: String(laneNumber),
         fromQr: "1",
@@ -233,6 +304,35 @@ export default function ScanLaneScreen() {
   };
 
   // ── Check-in success screen ───────────────────────────────────────────────
+
+  const handleManualSubmit = () => {
+    const value = manualToken.trim();
+    if (!value) return;
+    setScanned(true);
+    handleCheckIn(value);
+  };
+
+  const handleTeamForPendingToken = async (team: MyTeam) => {
+    if (!pendingTokenWithoutTeam) return;
+    setSelectedTeamId(team.id);
+    setSelectedTeamName(team.name);
+    setScanned(true);
+    await previewSkeeballLane(pendingTokenWithoutTeam, team);
+  };
+
+  useEffect(() => {
+    if (!routeLaneToken || handledRouteToken) return;
+    setHandledRouteToken(true);
+    setManualToken(routeLaneToken);
+    setScanned(true);
+    handleCheckIn(routeLaneToken);
+  }, [handledRouteToken, routeLaneToken]);
+
+  useEffect(() => {
+    if (!permission?.granted || scanned || checkInResult || pendingSkeeballLane) return;
+    const timeout = setTimeout(() => setShowScanHelp(true), 8000);
+    return () => clearTimeout(timeout);
+  }, [permission?.granted, scanned, checkInResult, pendingSkeeballLane]);
 
   if (checkInResult) {
     return (
@@ -278,7 +378,7 @@ export default function ScanLaneScreen() {
 
   // ── Permission gates ──────────────────────────────────────────────────────
 
-  if (!permission) {
+  if (!permission && !routeLaneToken) {
     return (
       <SafeAreaView style={styles.centerPage}>
         <ActivityIndicator color="#06b6d4" />
@@ -286,7 +386,7 @@ export default function ScanLaneScreen() {
     );
   }
 
-  if (!permission.granted) {
+  if (!permission?.granted && !routeLaneToken) {
     return (
       <SafeAreaView style={styles.centerPage}>
         <View style={styles.permCard}>
@@ -308,13 +408,28 @@ export default function ScanLaneScreen() {
   return (
     <SafeAreaView style={styles.root} edges={["bottom"]}>
       <View style={styles.cameraSection}>
-        <CameraView
-          style={styles.camera}
-          facing="back"
-          barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-          onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
-        />
-        <View style={styles.overlay}>
+        {permission?.granted ? (
+          <CameraView
+            style={styles.camera}
+            facing="back"
+            barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+            onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+            onCameraReady={() => {
+              setCameraReady(true);
+              setCameraError(null);
+            }}
+            onMountError={(event) => {
+              setCameraError(event.message || "The camera could not start.");
+            }}
+          />
+        ) : (
+          <View style={styles.cameraFallback}>
+            <Ionicons name="qr-code-outline" size={48} color="#06b6d4" />
+            <Text style={styles.cameraFallbackTitle}>QR link opened</Text>
+            <Text style={styles.cameraFallbackText}>Choose your team below to continue checking in.</Text>
+          </View>
+        )}
+        {permission?.granted && <View style={styles.overlay}>
           <View style={styles.overlayTop} />
           <View style={styles.overlayMiddle}>
             <View style={styles.overlaySide} />
@@ -327,14 +442,14 @@ export default function ScanLaneScreen() {
             <View style={styles.overlaySide} />
           </View>
           <View style={styles.overlayBottom} />
-        </View>
+        </View>}
       </View>
 
       <View style={styles.panel}>
         <Text style={styles.panelTitle}>{isSkeeballMode ? "Scan Skee-Ball Lane" : "Scan Lane QR Code"}</Text>
         <Text style={styles.panelSub}>
           {isSkeeballMode
-            ? `Point at your lane QR code${teamName ? ` for ${teamName}` : ""}`
+            ? `Point at your lane QR code${activeTeamName ? ` for ${activeTeamName}` : ""}`
             : "Point at the QR code posted on your lane"}
         </Text>
 
@@ -342,6 +457,27 @@ export default function ScanLaneScreen() {
           <View style={styles.statusRow}>
             <ActivityIndicator color="#06b6d4" size="small" />
             <Text style={styles.statusText}>Checking in…</Text>
+          </View>
+        )}
+
+        {!routeLaneToken && !loading && !cameraReady && !cameraError && (
+          <View style={styles.statusRow}>
+            <ActivityIndicator color="#06b6d4" size="small" />
+            <Text style={styles.statusText}>Starting camera...</Text>
+          </View>
+        )}
+
+        {cameraError && (
+          <View style={styles.inlineNotice}>
+            <Ionicons name="alert-circle-outline" size={16} color="#f59e0b" />
+            <Text style={styles.inlineNoticeText}>{cameraError}</Text>
+          </View>
+        )}
+
+        {showScanHelp && !scanned && !loading && (
+          <View style={styles.inlineNotice}>
+            <Ionicons name="bulb-outline" size={16} color="#06b6d4" />
+            <Text style={styles.inlineNoticeText}>If the web scanner does not react, open the QR with your phone camera or paste the QR link below.</Text>
           </View>
         )}
 
@@ -368,7 +504,62 @@ export default function ScanLaneScreen() {
             </View>
           </View>
         )}
+
+        <View style={styles.manualBox}>
+          <Text style={styles.manualLabel}>QR Link Fallback</Text>
+          <TextInput
+            style={styles.manualInput}
+            placeholder="Paste QR link or lane token"
+            placeholderTextColor="#444"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={manualToken}
+            onChangeText={setManualToken}
+            onSubmitEditing={handleManualSubmit}
+          />
+          <Pressable
+            style={[styles.manualBtn, (!manualToken.trim() || loading) && styles.manualBtnOff]}
+            onPress={handleManualSubmit}
+            disabled={!manualToken.trim() || loading}
+          >
+            <Ionicons name="log-in-outline" size={16} color="#000" />
+            <Text style={styles.manualBtnText}>Use QR Link</Text>
+          </Pressable>
+        </View>
       </View>
+
+      <Modal visible={!!pendingTokenWithoutTeam} transparent animationType="fade" onRequestClose={handleScanAgain}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIconWrap}>
+              <Ionicons name="people-outline" size={30} color="#06b6d4" />
+            </View>
+            <Text style={styles.confirmEyebrow}>Choose team</Text>
+            <Text style={styles.confirmTitle}>Pick the team checking in</Text>
+            <Text style={styles.confirmSub}>
+              QR links identify the lane. Your team tells the league who owns it for this game.
+            </Text>
+            {teamsLoading ? (
+              <ActivityIndicator color="#06b6d4" style={{ marginVertical: 12 }} />
+            ) : (
+              <ScrollView style={styles.teamPickerList}>
+                {myTeams.map((team) => (
+                  <Pressable key={team.id} style={styles.teamPickerRow} onPress={() => handleTeamForPendingToken(team)}>
+                    <Text style={styles.teamPickerName}>{team.name}</Text>
+                    <Ionicons name="chevron-forward" size={18} color="#555" />
+                  </Pressable>
+                ))}
+                {myTeams.length === 0 && (
+                  <Text style={styles.noTeamsText}>You are not on a team yet. Join or create a team before lane check-in.</Text>
+                )}
+              </ScrollView>
+            )}
+            <Pressable style={styles.fullCancelBtn} onPress={handleScanAgain}>
+              <Text style={styles.confirmCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={!!pendingSkeeballLane} transparent animationType="fade" onRequestClose={handleScanAgain}>
         <View style={styles.confirmOverlay}>
@@ -381,7 +572,7 @@ export default function ScanLaneScreen() {
               You are checking into Lane {pendingSkeeballLane?.lane_number}
             </Text>
             <Text style={styles.confirmSub}>
-              {teamName ?? "Your team"} will own this lane until all 9 balls are submitted and the game is finalized.
+              {activeTeamName ?? "Your team"} will own this lane until all 9 balls are submitted and the game is finalized.
             </Text>
             <View style={styles.confirmActions}>
               <Pressable style={styles.confirmCancelBtn} onPress={handleScanAgain} disabled={confirming}>
@@ -410,6 +601,9 @@ const styles = StyleSheet.create({
 
   cameraSection: { flex: 1, position: "relative" },
   camera: { flex: 1 },
+  cameraFallback: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 28, backgroundColor: "#050505" },
+  cameraFallbackTitle: { color: "#fff", fontSize: 22, fontWeight: "900", marginTop: 14, marginBottom: 6, textAlign: "center" },
+  cameraFallbackText: { color: "#777", fontSize: 14, lineHeight: 20, textAlign: "center" },
   overlay: { ...StyleSheet.absoluteFill, flexDirection: "column" },
   overlayTop: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)" },
   overlayMiddle: { height: 240, flexDirection: "row" },
@@ -428,6 +622,8 @@ const styles = StyleSheet.create({
 
   statusRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   statusText: { color: "#888", fontSize: 14 },
+  inlineNotice: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "#101010", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#222", marginBottom: 12 },
+  inlineNoticeText: { color: "#aaa", fontSize: 13, lineHeight: 18, flex: 1 },
 
   rescanBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -446,6 +642,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e",
   },
   testBtnText: { color: "#888", fontWeight: "700", fontSize: 13 },
+  manualBox: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", paddingTop: 14, marginTop: 4 },
+  manualLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 },
+  manualInput: { backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#222", borderRadius: 12, color: "#fff", fontSize: 14, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 10 },
+  manualBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#06b6d4", borderRadius: 12, paddingVertical: 13 },
+  manualBtnOff: { opacity: 0.45 },
+  manualBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
 
   permCard: { backgroundColor: "#111", borderRadius: 24, padding: 28, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", width: "100%" },
   permIcon: { width: 64, height: 64, borderRadius: 18, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 16 },
@@ -491,7 +693,12 @@ const styles = StyleSheet.create({
   confirmSub: { color: "#777", fontSize: 14, lineHeight: 20, marginBottom: 22 },
   confirmActions: { flexDirection: "row", gap: 10 },
   confirmCancelBtn: { flex: 1, borderRadius: 16, backgroundColor: "#181818", borderWidth: 1, borderColor: "#242424", alignItems: "center", justifyContent: "center", paddingVertical: 15 },
+  fullCancelBtn: { borderRadius: 16, backgroundColor: "#181818", borderWidth: 1, borderColor: "#242424", alignItems: "center", justifyContent: "center", paddingVertical: 15, marginTop: 12 },
   confirmCancelText: { color: "#888", fontSize: 14, fontWeight: "800" },
   confirmStartBtn: { flex: 1, borderRadius: 16, backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center", paddingVertical: 15, flexDirection: "row", gap: 8 },
   confirmStartText: { color: "#000", fontSize: 14, fontWeight: "900" },
+  teamPickerList: { maxHeight: 260, marginBottom: 4 },
+  teamPickerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#181818", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 14, borderWidth: 1, borderColor: "#242424", marginBottom: 8 },
+  teamPickerName: { color: "#fff", fontSize: 15, fontWeight: "800", flex: 1 },
+  noTeamsText: { color: "#777", fontSize: 14, lineHeight: 20, marginBottom: 8 },
 });
