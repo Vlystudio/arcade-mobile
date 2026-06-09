@@ -214,7 +214,6 @@ DECLARE
   v_existing record;
   v_match_id uuid;
   v_session_id uuid;
-  v_check_in_id uuid;
   v_week date := public.skeeball_current_week();
   v_active_count int;
 BEGIN
@@ -294,10 +293,6 @@ BEGIN
     RETURNING id INTO v_match_id;
   END IF;
 
-  INSERT INTO public.check_ins (user_id, lane_id, venue_id, status)
-  VALUES (v_uid, v_lane.lane_id, v_lane.venue_id, 'active')
-  RETURNING id INTO v_check_in_id;
-
   INSERT INTO public.skeeball_sessions (
     team_id, lane_number, week_of, created_by, status, last_activity_at, league_match_id
   ) VALUES (
@@ -322,7 +317,6 @@ BEGIN
   RETURN json_build_object(
     'ok', true,
     'session_id', v_session_id,
-    'check_in_id', v_check_in_id,
     'lane_id', v_lane.lane_id,
     'lane_number', v_lane.lane_number,
     'game_id', v_lane.game_id,
