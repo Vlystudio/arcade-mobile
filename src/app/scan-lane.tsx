@@ -27,17 +27,6 @@ type CheckInResult = {
   venue_id: string;
 };
 
-type SkeeballLanePreview = {
-  token: string;
-  lane_id: string;
-  lane_number: number;
-  game_id: string;
-  game_name: string;
-  venue_id: string;
-  team_id: string;
-  team_name: string;
-};
-
 type MyTeam = {
   id: string;
   name: string;
@@ -61,7 +50,6 @@ export default function ScanLaneScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [confirming, setConfirming] = useState(false);
   const [cameraReady, setCameraReady] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [showScanHelp, setShowScanHelp] = useState(false);
@@ -73,7 +61,6 @@ export default function ScanLaneScreen() {
   const [selectedTeamName, setSelectedTeamName] = useState<string | null>(null);
   const [handledRouteToken, setHandledRouteToken] = useState(false);
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null);
-  const [pendingSkeeballLane, setPendingSkeeballLane] = useState<SkeeballLanePreview | null>(null);
   const [cameraZoom, setCameraZoom] = useState(0);
   const [openingScoring, setOpeningScoring] = useState(false);
   const [scoringHref, setScoringHref] = useState<string | null>(null);
@@ -141,7 +128,7 @@ export default function ScanLaneScreen() {
       }
 
       if (isSkeeballMode) {
-        await previewSkeeballLane(token);
+        await startSkeeballCheckIn(token);
         return;
       }
 
@@ -195,7 +182,6 @@ export default function ScanLaneScreen() {
 
   const handleScanAgain = () => {
     setCheckInResult(null);
-    setPendingSkeeballLane(null);
     setPendingTokenWithoutTeam(null);
     setManualToken("");
     setOpeningScoring(false);
@@ -219,7 +205,7 @@ export default function ScanLaneScreen() {
     });
   };
 
-  const previewSkeeballLane = async (token: string, teamOverride?: MyTeam) => {
+  const startSkeeballCheckIn = async (token: string, teamOverride?: MyTeam) => {
     const checkInTeamId = teamOverride?.id ?? activeTeamId;
     const checkInTeamName = teamOverride?.name ?? activeTeamName;
     if (!checkInTeamId) {
@@ -229,59 +215,16 @@ export default function ScanLaneScreen() {
       return;
     }
 
-    const { data, error } = await supabase.rpc("rpc_skeeball_preview_lane_qr", { p_token: token });
-    if (error) {
-      Alert.alert("Lane scan failed", error.message);
-      setScanned(false);
-      return;
-    }
-
-    const result = data as {
-      ok?: boolean;
-      error?: string;
-      message?: string;
-      lane_id?: string;
-      lane_number?: number;
-      game_id?: string;
-      game_name?: string;
-      venue_id?: string;
-      team_name?: string;
-    };
-
-    if (!result?.ok) {
-      if (result?.error === "lane_occupied") {
-        const resumed = await tryResumeSkeeballSession(token);
-        if (resumed) return;
-      }
-      Alert.alert("Can't check in", result?.message ?? "This lane is not available.");
-      setScanned(false);
-      return;
-    }
-
-    setPendingSkeeballLane({
-      token,
-      lane_id: result.lane_id ?? "",
-      lane_number: result.lane_number ?? 0,
-      game_id: result.game_id ?? "",
-      game_name: result.game_name ?? "Skee-Ball",
-      venue_id: result.venue_id ?? "",
-      team_id: checkInTeamId,
-      team_name: checkInTeamName ?? "Team",
-    });
+    setOpeningScoring(true);
     setPendingTokenWithoutTeam(null);
     if (teamOverride) {
       setSelectedTeamId(teamOverride.id);
       setSelectedTeamName(checkInTeamName ?? teamOverride.name);
     }
-  };
-
-  const confirmSkeeballCheckIn = async () => {
-    if (!pendingSkeeballLane) return;
-    setConfirming(true);
     try {
       const { data, error } = await supabase.rpc("rpc_skeeball_start_qr_session", {
-        p_token: pendingSkeeballLane.token,
-        p_team_id: pendingSkeeballLane.team_id,
+        p_token: token,
+        p_team_id: checkInTeamId,
       });
       if (error) throw error;
 
@@ -297,51 +240,29 @@ export default function ScanLaneScreen() {
 
       if (!result?.ok) {
         Alert.alert("Can't check in", result?.message ?? "This lane is not available.");
-        setPendingSkeeballLane(null);
+        setOpeningScoring(false);
         setScanned(false);
         return;
       }
 
       if (!result.session_id) {
         Alert.alert("Check-in failed", "The lane session was created, but no session ID was returned. Please scan again.");
-        setPendingSkeeballLane(null);
+        setOpeningScoring(false);
         setScanned(false);
         return;
       }
 
-      setPendingSkeeballLane(null);
       openSkeeballSession({
         sessionId: result.session_id,
-        laneNumber: result.lane_number ?? pendingSkeeballLane.lane_number,
-        teamId: result.team_id ?? pendingSkeeballLane.team_id,
-        teamName: result.team_name ?? pendingSkeeballLane.team_name,
+        laneNumber: result.lane_number ?? 0,
+        teamId: result.team_id ?? checkInTeamId,
+        teamName: result.team_name ?? checkInTeamName ?? "Team",
       });
     } catch (err) {
       Alert.alert("Check-in failed", err instanceof Error ? err.message : "Something went wrong.");
-      setPendingSkeeballLane(null);
+      setOpeningScoring(false);
       setScanned(false);
-    } finally {
-      setConfirming(false);
     }
-  };
-
-  const tryResumeSkeeballSession = async (token: string) => {
-    if (!activeTeamId) return false;
-    const { data, error } = await supabase.rpc("rpc_skeeball_start_qr_session", {
-      p_token: token,
-      p_team_id: activeTeamId,
-    });
-    if (error) return false;
-    const result = data as { ok?: boolean; session_id?: string; lane_number?: number; team_id?: string; team_name?: string };
-    if (!result?.ok) return false;
-    if (!result.session_id) return false;
-    openSkeeballSession({
-      sessionId: result.session_id,
-      laneNumber: result.lane_number ?? 0,
-      teamId: result.team_id ?? activeTeamId,
-      teamName: result.team_name ?? activeTeamName ?? "Team",
-    });
-    return true;
   };
 
   const openSkeeballSession = ({
@@ -365,7 +286,6 @@ export default function ScanLaneScreen() {
     const href = `/skeeball-tracker?${params.toString()}`;
     setScoringHref(href);
     setOpeningScoring(true);
-    setPendingSkeeballLane(null);
     setPendingTokenWithoutTeam(null);
     setScanned(true);
     setActiveSkeeballSession({ sessionId, laneNumber, teamId, teamName });
@@ -396,7 +316,7 @@ export default function ScanLaneScreen() {
     setSelectedTeamId(team.id);
     setSelectedTeamName(team.name);
     setScanned(true);
-    await previewSkeeballLane(pendingTokenWithoutTeam, team);
+    await startSkeeballCheckIn(pendingTokenWithoutTeam, team);
   };
 
   useEffect(() => {
@@ -408,10 +328,10 @@ export default function ScanLaneScreen() {
   }, [handledRouteToken, routeLaneToken]);
 
   useEffect(() => {
-    if (!permission?.granted || scanned || checkInResult || pendingSkeeballLane) return;
+    if (!permission?.granted || scanned || checkInResult) return;
     const timeout = setTimeout(() => setShowScanHelp(true), 8000);
     return () => clearTimeout(timeout);
-  }, [permission?.granted, scanned, checkInResult, pendingSkeeballLane]);
+  }, [permission?.granted, scanned, checkInResult]);
 
   if (activeSkeeballSession) {
     return (
@@ -677,33 +597,6 @@ export default function ScanLaneScreen() {
         </View>
       </Modal>
 
-      <Modal visible={!!pendingSkeeballLane && !openingScoring} transparent animationType="fade" onRequestClose={handleScanAgain}>
-        <View style={styles.confirmOverlay}>
-          <View style={styles.confirmCard}>
-            <View style={styles.confirmIconWrap}>
-              <Ionicons name="qr-code-outline" size={30} color="#06b6d4" />
-            </View>
-            <Text style={styles.confirmEyebrow}>League check-in</Text>
-            <Text style={styles.confirmTitle}>
-              You are checking into Lane {pendingSkeeballLane?.lane_number}
-            </Text>
-            <Text style={styles.confirmSub}>
-              {activeTeamName ?? "Your team"} will own this lane until all 9 balls are submitted and the game is finalized.
-            </Text>
-            <View style={styles.confirmActions}>
-              <Pressable style={styles.confirmCancelBtn} onPress={handleScanAgain} disabled={confirming || openingScoring}>
-                <Text style={styles.confirmCancelText}>Cancel</Text>
-              </Pressable>
-              <Pressable style={[styles.confirmStartBtn, (confirming || openingScoring) && { opacity: 0.6 }]} onPress={confirmSkeeballCheckIn} disabled={confirming || openingScoring}>
-                {confirming || openingScoring
-                  ? <ActivityIndicator size="small" color="#000" />
-                  : <Ionicons name="checkmark-circle-outline" size={18} color="#000" />}
-                <Text style={styles.confirmStartText}>{openingScoring ? "Opening..." : confirming ? "Checking in..." : "Check In"}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
     </SafeAreaView>
   );
 }
