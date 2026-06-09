@@ -487,7 +487,7 @@ export default function TeamDetailScreen() {
             {members.length} {members.length === 1 ? "member" : "members"}
             {seasons.length > 0 ? `  ·  ${seasons.length} season${seasons.length !== 1 ? "s" : ""}` : ""}
           </Text>
-          {isTeamMember && (isMonday || isAdmin) && (
+          {isTeamMember && (
             <View style={styles.trackActions}>
               <Pressable
                 style={styles.trackBtn}
@@ -496,13 +496,15 @@ export default function TeamDetailScreen() {
                 <Ionicons name="qr-code-outline" size={16} color="#000" />
                 <Text style={styles.trackBtnText}>Scan Lane QR</Text>
               </Pressable>
-              <Pressable
-                style={[styles.trackBtn, styles.trackManualBtn]}
-                onPress={() => router.push({ pathname: "/skeeball-tracker" as any, params: { teamId, teamName } })}
-              >
-                <Ionicons name="bowling-ball-outline" size={16} color="#06b6d4" />
-                <Text style={styles.trackManualBtnText}>Manual Entry</Text>
-              </Pressable>
+              {(isMonday || isAdmin) && (
+                <Pressable
+                  style={[styles.trackBtn, styles.trackManualBtn]}
+                  onPress={() => router.push({ pathname: "/skeeball-tracker" as any, params: { teamId, teamName } })}
+                >
+                  <Ionicons name="bowling-ball-outline" size={16} color="#06b6d4" />
+                  <Text style={styles.trackManualBtnText}>Manual Entry</Text>
+                </Pressable>
+              )}
             </View>
           )}
           <View style={styles.slotPrefRow}>
