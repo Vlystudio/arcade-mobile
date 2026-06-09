@@ -151,8 +151,7 @@ export default function ScanLaneScreen() {
         return;
       }
 
-      // Show the success UI in-screen — no Alert navigation
-      setCheckInResult({
+      openSubmitScore({
         check_in_id: result.check_in_id ?? "",
         lane_id:     result.lane_id     ?? "",
         lane_number: result.lane_number ?? 0,
@@ -186,6 +185,21 @@ export default function ScanLaneScreen() {
     setPendingTokenWithoutTeam(null);
     setManualToken("");
     setScanned(false);
+  };
+
+  const openSubmitScore = (result: CheckInResult) => {
+    router.replace({
+      pathname: "/submit-score",
+      params: {
+        lane_id: result.lane_id,
+        lane_number: String(result.lane_number),
+        game_id: result.game_id,
+        game_name: result.game_name,
+        game_type: result.game_type,
+        check_in_id: result.check_in_id,
+        venue_id: result.venue_id,
+      },
+    });
   };
 
   const previewSkeeballLane = async (token: string, teamOverride?: MyTeam) => {
@@ -349,20 +363,7 @@ export default function ScanLaneScreen() {
         <View style={styles.successActions}>
           <Pressable
             style={styles.submitScoreBtn}
-            onPress={() =>
-              router.push({
-                pathname: "/submit-score",
-                params: {
-                  lane_id:     checkInResult.lane_id,
-                  lane_number: String(checkInResult.lane_number),
-                  game_id:     checkInResult.game_id,
-                  game_name:   checkInResult.game_name,
-                  game_type:   checkInResult.game_type,
-                  check_in_id: checkInResult.check_in_id,
-                  venue_id:    checkInResult.venue_id,
-                },
-              })
-            }
+            onPress={() => openSubmitScore(checkInResult)}
           >
             <Ionicons name="trophy" size={20} color="#000" />
             <Text style={styles.submitScoreBtnText}>Submit Score</Text>
