@@ -168,16 +168,19 @@ export default function TeamsScreen() {
     if (!user || !requestJoinTeam) return;
     setRequestError(null);
     setSubmittingRequest(true);
-    const { error } = await supabase.from("team_requests").insert({
-      team_id: requestJoinTeam.id,
-      user_id: user.id,
-      direction: "request",
-      status: "pending",
-      message: requestMessage.trim() || null,
-    });
+    const { error } = await supabase.from("team_requests").upsert(
+      {
+        team_id: requestJoinTeam.id,
+        user_id: user.id,
+        direction: "request",
+        status: "pending",
+        message: requestMessage.trim() || null,
+      },
+      { onConflict: "team_id,user_id" }
+    );
     setSubmittingRequest(false);
     if (error) {
-      setRequestError(error.message);
+      setRequestError("Could not send request. Please try again.");
     } else {
       setRequestJoinTeam(null);
       setRequestMessage("");
