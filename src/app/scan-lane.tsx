@@ -1,10 +1,11 @@
 import { Ionicons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   StyleSheet,
   Text,
@@ -23,16 +24,34 @@ type CheckInResult = {
   venue_id: string;
 };
 
+type SkeeballLanePreview = {
+  token: string;
+  lane_id: string;
+  lane_number: number;
+  game_id: string;
+  game_name: string;
+  venue_id: string;
+};
+
 export default function ScanLaneScreen() {
+  const { mode, teamId, teamName } = useLocalSearchParams<{
+    mode?: string;
+    teamId?: string;
+    teamName?: string;
+  }>();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null);
+  const [pendingSkeeballLane, setPendingSkeeballLane] = useState<SkeeballLanePreview | null>(null);
+
+  const isSkeeballMode = mode === "skeeball" || !!teamId;
 
   const extractToken = (data: string) => {
     try {
       const url = new URL(data);
-      const t = url.searchParams.get("lane_token");
+      const t = url.searchParams.get("lane_token") ?? url.searchParams.get("token");
       if (t) return t;
     } catch { /* not a URL */ }
     return data.trim();
@@ -48,6 +67,11 @@ export default function ScanLaneScreen() {
       if (userError || !user) {
         Alert.alert("Not logged in", "Please log in before checking in.");
         setScanned(false);
+        return;
+      }
+
+      if (isSkeeballMode) {
+        await previewSkeeballLane(token);
         return;
       }
 
@@ -97,7 +121,115 @@ export default function ScanLaneScreen() {
 
   const handleScanAgain = () => {
     setCheckInResult(null);
+    setPendingSkeeballLane(null);
     setScanned(false);
+  };
+
+  const previewSkeeballLane = async (token: string) => {
+    if (!teamId) {
+      Alert.alert("Choose a team", "Open the scanner from your team page before checking into league play.");
+      setScanned(false);
+      return;
+    }
+
+    const { data, error } = await supabase.rpc("rpc_skeeball_preview_lane_qr", { p_token: token });
+    if (error) {
+      Alert.alert("Lane scan failed", error.message);
+      setScanned(false);
+      return;
+    }
+
+    const result = data as {
+      ok?: boolean;
+      error?: string;
+      message?: string;
+      lane_id?: string;
+      lane_number?: number;
+      game_id?: string;
+      game_name?: string;
+      venue_id?: string;
+      team_name?: string;
+    };
+
+    if (!result?.ok) {
+      if (result?.error === "lane_occupied") {
+        const resumed = await tryResumeSkeeballSession(token);
+        if (resumed) return;
+      }
+      Alert.alert("Can't check in", result?.message ?? "This lane is not available.");
+      setScanned(false);
+      return;
+    }
+
+    setPendingSkeeballLane({
+      token,
+      lane_id: result.lane_id ?? "",
+      lane_number: result.lane_number ?? 0,
+      game_id: result.game_id ?? "",
+      game_name: result.game_name ?? "Skee-Ball",
+      venue_id: result.venue_id ?? "",
+    });
+  };
+
+  const confirmSkeeballCheckIn = async () => {
+    if (!pendingSkeeballLane || !teamId) return;
+    setConfirming(true);
+    try {
+      const { data, error } = await supabase.rpc("rpc_skeeball_start_qr_session", {
+        p_token: pendingSkeeballLane.token,
+        p_team_id: teamId,
+      });
+      if (error) throw error;
+
+      const result = data as {
+        ok?: boolean;
+        error?: string;
+        message?: string;
+        session_id?: string;
+        lane_number?: number;
+      };
+
+      if (!result?.ok) {
+        Alert.alert("Can't check in", result?.message ?? "This lane is not available.");
+        setPendingSkeeballLane(null);
+        setScanned(false);
+        return;
+      }
+
+      openSkeeballSession(result.session_id ?? "", result.lane_number ?? pendingSkeeballLane.lane_number);
+    } catch (err) {
+      Alert.alert("Check-in failed", err instanceof Error ? err.message : "Something went wrong.");
+      setPendingSkeeballLane(null);
+      setScanned(false);
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const tryResumeSkeeballSession = async (token: string) => {
+    if (!teamId) return false;
+    const { data, error } = await supabase.rpc("rpc_skeeball_start_qr_session", {
+      p_token: token,
+      p_team_id: teamId,
+    });
+    if (error) return false;
+    const result = data as { ok?: boolean; session_id?: string; lane_number?: number };
+    if (!result?.ok) return false;
+    openSkeeballSession(result.session_id ?? "", result.lane_number ?? 0);
+    return true;
+  };
+
+  const openSkeeballSession = (sessionId: string, laneNumber: number) => {
+    router.replace({
+      pathname: "/skeeball-tracker" as any,
+      params: {
+        teamId,
+        teamName: teamName ?? "Team",
+        sessionId,
+        laneNumber: String(laneNumber),
+        fromQr: "1",
+      },
+    });
   };
 
   // ── Check-in success screen ───────────────────────────────────────────────
@@ -199,8 +331,12 @@ export default function ScanLaneScreen() {
       </View>
 
       <View style={styles.panel}>
-        <Text style={styles.panelTitle}>Scan Lane QR Code</Text>
-        <Text style={styles.panelSub}>Point at the QR code posted on your lane</Text>
+        <Text style={styles.panelTitle}>{isSkeeballMode ? "Scan Skee-Ball Lane" : "Scan Lane QR Code"}</Text>
+        <Text style={styles.panelSub}>
+          {isSkeeballMode
+            ? `Point at your lane QR code${teamName ? ` for ${teamName}` : ""}`
+            : "Point at the QR code posted on your lane"}
+        </Text>
 
         {loading && (
           <View style={styles.statusRow}>
@@ -233,6 +369,34 @@ export default function ScanLaneScreen() {
           </View>
         )}
       </View>
+
+      <Modal visible={!!pendingSkeeballLane} transparent animationType="fade" onRequestClose={handleScanAgain}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <View style={styles.confirmIconWrap}>
+              <Ionicons name="qr-code-outline" size={30} color="#06b6d4" />
+            </View>
+            <Text style={styles.confirmEyebrow}>League check-in</Text>
+            <Text style={styles.confirmTitle}>
+              You are checking into Lane {pendingSkeeballLane?.lane_number}
+            </Text>
+            <Text style={styles.confirmSub}>
+              {teamName ?? "Your team"} will own this lane until all 9 balls are submitted and the game is finalized.
+            </Text>
+            <View style={styles.confirmActions}>
+              <Pressable style={styles.confirmCancelBtn} onPress={handleScanAgain} disabled={confirming}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.confirmStartBtn, confirming && { opacity: 0.6 }]} onPress={confirmSkeeballCheckIn} disabled={confirming}>
+                {confirming
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <Ionicons name="checkmark-circle-outline" size={18} color="#000" />}
+                <Text style={styles.confirmStartText}>{confirming ? "Checking in..." : "Check In"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -318,4 +482,16 @@ const styles = StyleSheet.create({
     alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e",
   },
   notNowText: { color: "#555", fontWeight: "700", fontSize: 15 },
+
+  confirmOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.82)", alignItems: "center", justifyContent: "center", padding: 24 },
+  confirmCard: { width: "100%", backgroundColor: "#111", borderRadius: 24, padding: 24, borderWidth: 1, borderColor: "#1f2937" },
+  confirmIconWrap: { width: 58, height: 58, borderRadius: 18, backgroundColor: "rgba(6,182,212,0.12)", borderWidth: 1, borderColor: "rgba(6,182,212,0.25)", alignItems: "center", justifyContent: "center", marginBottom: 16 },
+  confirmEyebrow: { color: "#06b6d4", fontSize: 11, fontWeight: "900", textTransform: "uppercase", letterSpacing: 1.1, marginBottom: 8 },
+  confirmTitle: { color: "#fff", fontSize: 24, fontWeight: "900", lineHeight: 30, marginBottom: 10 },
+  confirmSub: { color: "#777", fontSize: 14, lineHeight: 20, marginBottom: 22 },
+  confirmActions: { flexDirection: "row", gap: 10 },
+  confirmCancelBtn: { flex: 1, borderRadius: 16, backgroundColor: "#181818", borderWidth: 1, borderColor: "#242424", alignItems: "center", justifyContent: "center", paddingVertical: 15 },
+  confirmCancelText: { color: "#888", fontSize: 14, fontWeight: "800" },
+  confirmStartBtn: { flex: 1, borderRadius: 16, backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center", paddingVertical: 15, flexDirection: "row", gap: 8 },
+  confirmStartText: { color: "#000", fontSize: 14, fontWeight: "900" },
 });

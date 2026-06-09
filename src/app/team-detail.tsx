@@ -490,10 +490,10 @@ export default function TeamDetailScreen() {
           {isTeamMember && (isMonday || isAdmin) && (
             <Pressable
               style={styles.trackBtn}
-              onPress={() => router.push({ pathname: "/skeeball-tracker" as any, params: { teamId, teamName } })}
+              onPress={() => router.push({ pathname: "/scan-lane" as any, params: { mode: "skeeball", teamId, teamName } })}
             >
-              <Ionicons name="bowling-ball-outline" size={16} color="#000" />
-              <Text style={styles.trackBtnText}>Track Scores</Text>
+              <Ionicons name="qr-code-outline" size={16} color="#000" />
+              <Text style={styles.trackBtnText}>Scan Lane QR</Text>
             </Pressable>
           )}
           <View style={styles.slotPrefRow}>

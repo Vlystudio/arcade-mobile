@@ -409,41 +409,33 @@ export default function SkeeballTrackerScreen() {
   async function completeSession() {
     if (!mySession || mySession.status !== "active") return;
 
-    const { data: updated } = await supabase
-      .from("skeeball_sessions")
-      .update({ status: "completed", completed_at: new Date().toISOString() })
-      .eq("id", mySession.id).eq("status", "active")
-      .select().single();
-    if (!updated) return; // another client already completed it
-
-    const { data: game } = await supabase.from("games").select("id").eq("type", "skeeball").maybeSingle();
-    if (game?.id) {
-      await supabase.from("scores").insert(
-        sessionPlayers.map((sp) => {
-          const total = ballScores.filter((b) => b.player_user_id === sp.player_user_id).reduce((s, b) => s + b.score, 0);
-          return { user_id: sp.player_user_id, game_id: game.id, score: total, status: "pending" };
-        })
-      );
+    const { data, error } = await supabase.rpc("rpc_skeeball_complete_session", {
+      p_session_id: mySession.id,
+    });
+    if (error) {
+      setSubmitError(error.message);
+      return;
     }
-    setMySession((prev) => prev ? { ...prev, status: "completed" } : prev);
+
+    const result = data as {
+      ok?: boolean;
+      error?: string;
+      message?: string;
+      placement?: number | null;
+      league_points?: number | null;
+    };
+    if (!result?.ok) {
+      setSubmitError(result?.message ?? "Could not finalize this game.");
+      return;
+    }
+    setMySession((prev) => prev ? {
+      ...prev,
+      status: "completed",
+      placement: result.placement ?? prev.placement,
+      league_points: result.league_points ?? prev.league_points,
+    } : prev);
 
     // Try to finalize the league match — awards placement + league_points to all teams
-    if (mySession.league_match_id) {
-      const { data: finalizeResult } = await supabase.rpc("rpc_skeeball_finalize_match", {
-        p_match_id: mySession.league_match_id,
-      });
-      if ((finalizeResult as any)?.ok) {
-        // Reload this session to get placement and league_points
-        const { data: updatedSession } = await supabase
-          .from("skeeball_sessions")
-          .select("placement, league_points")
-          .eq("id", mySession.id)
-          .single();
-        if (updatedSession) {
-          setMySession((prev) => prev ? { ...prev, placement: updatedSession.placement, league_points: updatedSession.league_points } : prev);
-        }
-      }
-    }
   }
 
   function togglePlayer(uid: string) {

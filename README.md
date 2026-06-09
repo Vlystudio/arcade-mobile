@@ -118,11 +118,12 @@ Run these SQL scripts **in order** in the Supabase SQL Editor:
 | 11 | `scripts/security-events.sql` | Structured security audit log (`security_events` table, `log_security_event` RPC) |
 | 12 | `scripts/venue-role-hardening.sql` | Venue role hierarchy (`owner`/`admin`/`staff`), scoped helper functions |
 | 13 | `scripts/qr-token-hardening.sql` | Hashed QR tokens with expiry, revocation, and backfill migration |
-| 14 | `scripts/storage-security.sql` | Storage bucket RLS policies, including private media quarantine + cleanup queue |
-| 15 | `scripts/square-webhook-events.sql` | Square webhook idempotency and payment/order status tables |
-| 16 | `scripts/input-validation-hardening.sql` | Database check constraints for user-generated inputs |
-| 17 | `scripts/security-hardening-3.sql` | Venue-scoped score review queue, score proof signed URL RPC, lane token rotation fix |
-| 18 | `scripts/security-cleanup.sql` | Production hardening: remove QR legacy fallback, fix storage cleanup RPC auth, deprecate `lanes.lane_qr_token` |
+| 14 | `scripts/skeeball-qr-lane-checkin.sql` | Monday Skee-Ball league QR lane check-in, checkout, and server-side finalization |
+| 15 | `scripts/storage-security.sql` | Storage bucket RLS policies, including private media quarantine + cleanup queue |
+| 16 | `scripts/square-webhook-events.sql` | Square webhook idempotency and payment/order status tables |
+| 17 | `scripts/input-validation-hardening.sql` | Database check constraints for user-generated inputs |
+| 18 | `scripts/security-hardening-3.sql` | Venue-scoped score review queue, score proof signed URL RPC, lane token rotation fix |
+| 19 | `scripts/security-cleanup.sql` | Production hardening: remove QR legacy fallback, fix storage cleanup RPC auth, deprecate `lanes.lane_qr_token` |
 
 > **Verification:** After all scripts are applied, run `scripts/security-verification-tests.sql` in the SQL Editor. Every row should return `result = 'PASS'`.
 
@@ -262,6 +263,12 @@ BEFORE INSERT triggers on `posts` (10/h), `messages` (60/min), `team_messages` (
 Square prices are **never derived from the client**. The server-side `/api/square/orders` route fetches prices directly from the Square Catalog API using `SQUARE_ACCESS_TOKEN`. The client only sends variation IDs and quantities; the server resolves prices and creates the order. Taxes, tips, fees, and the final payable total are shown by Square at hosted checkout, so the cart only displays an item subtotal.
 
 Payment/order status must come from `/api/square/webhook`, which verifies Square's HMAC signature, deduplicates event IDs, and stores status server-side. Do not trust client redirects as proof of payment.
+
+### Skee-Ball league QR lanes
+Monday league lane QR codes should point to the scan route with the active lane token:
+`https://your-live-site.example.com/scan-lane?lane_token=<raw-token>` or `arcadetracker://scan-lane?lane_token=<raw-token>`.
+
+Generate or rotate lane tokens with `rpc_admin_generate_lane_qr_token(lane_id, expires_hours)` / `rpc_admin_rotate_lane_token(lane_id)`. The raw token is returned once; print one QR for each Skee-Ball lane. The scanner previews the lane number, asks the team to confirm check-in, locks the lane while the 9-ball game is active, and frees it when `rpc_skeeball_complete_session` finalizes the game.
 
 ### Security testing
 Run `scripts/security-verification-tests.sql` in the Supabase SQL Editor after every migration. It uses `SET LOCAL ROLE` to simulate anonymous, authenticated, and admin callers across 19 test blocks. RAISE NOTICE outputs appear in the Messages pane; SELECT results (Blocks 1, 3, 5, 6, 8, 9, 13, 14) return `result = 'PASS'` rows.

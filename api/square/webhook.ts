@@ -35,10 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (typeof signature !== "string" || !verifySquareSignature(rawBody, signature, signatureKey, notificationUrl)) {
     console.warn("[square-webhook] invalid signature");
     // Log security event (fire-and-forget; do not block the 401 response)
-    supabase.rpc("log_payment_security_event", {
-      p_event_type: "payment_webhook_invalid_sig",
-      p_details: { endpoint: req.url },
-    }).catch(() => {});
+    logPaymentSecurityEvent("payment_webhook_invalid_sig", { endpoint: req.url });
     return res.status(401).json({ error: "unauthorized" });
   }
 
@@ -65,10 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (eventError) {
     if (eventError.code === "23505") {
       // Duplicate event_id — log as replay attempt (fire-and-forget)
-      supabase.rpc("log_payment_security_event", {
-        p_event_type: "payment_webhook_replay",
-        p_details: { event_id: eventId },
-      }).catch(() => {});
+      logPaymentSecurityEvent("payment_webhook_replay", { event_id: eventId });
       return res.status(200).json({ ok: true, duplicate: true });
     }
     console.error("[square-webhook] event insert failed", eventError.message);
@@ -115,6 +109,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(200).json({ ok: true });
+}
+
+function logPaymentSecurityEvent(eventType: string, details: Record<string, unknown>) {
+  void (async () => {
+    try {
+      await supabase.rpc("log_payment_security_event", {
+        p_event_type: eventType,
+        p_details: details,
+      });
+    } catch {
+      // Best-effort security logging must not change webhook response semantics.
+    }
+  })();
 }
 
 async function readRawBody(req: VercelRequest): Promise<string> {
