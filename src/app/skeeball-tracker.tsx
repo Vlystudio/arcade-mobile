@@ -9,7 +9,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -21,10 +20,15 @@ const LANE_COUNT = 6;
 const BALLS_PER_PLAYER = 3;
 const PLAYERS_PER_GAME = 3;
 const MIN_PLAYERS = 1;
-const INACTIVITY_WARNING_MS  = 8 * 60 * 1000;  // show warning after 8 min
-const INACTIVITY_TIMEOUT_MS  = 10 * 60 * 1000; // abandon after 10 min
-const INACTIVITY_CHECK_MS    = 30 * 1000;       // check every 30 seconds
-const WARNING_DURATION_S     = 120;             // 2-minute countdown
+const INACTIVITY_WARNING_MS  = 8 * 60 * 1000;
+const INACTIVITY_TIMEOUT_MS  = 10 * 60 * 1000;
+const INACTIVITY_CHECK_MS    = 30 * 1000;
+const WARNING_DURATION_S     = 120;
+
+const SKEE_RINGS = [10, 20, 30, 40, 50, 100];
+const RING_COLORS: Record<number, string> = {
+  10: "#555", 20: "#555", 30: "#3b82f6", 40: "#8b5cf6", 50: "#22c55e", 100: "#06b6d4",
+};
 
 type LaneSession = { id: string; team_id: string; lane_number: number; status: string; team_name?: string; last_activity_at?: string };
 type SessionPlayer = { session_id: string; player_user_id: string; username: string; avatar_url: string | null };
@@ -61,8 +65,9 @@ export default function SkeeballTrackerScreen() {
   const [selectedLane, setSelectedLane] = useState<number | null>(null);
   const [starting, setStarting] = useState(false);
 
-  // Scoring state — keyed by player_user_id, each value is [ball1, ball2, ball3]
-  const [allBalls, setAllBalls] = useState<Record<string, string[]>>({});
+  // Scoring state — keyed by player_user_id, value is array of ring scores tapped so far
+  const [playerBalls, setPlayerBalls] = useState<Record<string, number[]>>({});
+  const [currentPlayerIdx, setCurrentPlayerIdx] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -224,14 +229,17 @@ export default function SkeeballTrackerScreen() {
     const scores: BallScore[] = scoresRes.data ?? [];
     setBallScores(scores);
 
-    const initialBalls: Record<string, string[]> = {};
+    const initialBalls: Record<string, number[]> = {};
     for (const sp of players) {
-      initialBalls[sp.player_user_id] = [1, 2, 3].map((bn) => {
-        const ball = scores.find((b) => b.player_user_id === sp.player_user_id && b.ball_number === bn);
-        return ball ? String(ball.score) : "";
-      });
+      initialBalls[sp.player_user_id] = scores
+        .filter((b) => b.player_user_id === sp.player_user_id)
+        .sort((a, b) => a.ball_number - b.ball_number)
+        .map((b) => b.score);
     }
-    setAllBalls(initialBalls);
+    setPlayerBalls(initialBalls);
+    // Resume at first player who hasn't finished all balls
+    const firstIdx = players.findIndex((sp) => (initialBalls[sp.player_user_id]?.length ?? 0) < BALLS_PER_PLAYER);
+    setCurrentPlayerIdx(firstIdx >= 0 ? firstIdx : 0);
 
     // Realtime for this session's ball scores
     if (channelRef.current) channelRef.current.unsubscribe();
@@ -278,38 +286,76 @@ export default function SkeeballTrackerScreen() {
 
   async function submitBalls() {
     if (!user || !mySession) return;
-    const allFilled = sessionPlayers.every((sp) =>
-      (allBalls[sp.player_user_id] ?? []).length === 3 &&
-      (allBalls[sp.player_user_id] ?? []).every((b) => b !== "")
+    const allLocalDone = sessionPlayers.every(
+      (sp) => (playerBalls[sp.player_user_id] ?? []).length >= BALLS_PER_PLAYER
     );
-    if (!allFilled) { setSubmitError("Enter a score for every ball before submitting."); return; }
+    if (!allLocalDone) { setSubmitError("Enter all ball scores before submitting."); return; }
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const inserts = sessionPlayers.flatMap((sp) =>
-        (allBalls[sp.player_user_id] ?? ["0", "0", "0"]).map((score, i) => ({
+      const balls = sessionPlayers.flatMap((sp) =>
+        (playerBalls[sp.player_user_id] ?? []).map((score, i) => ({
+          player_user_id: sp.player_user_id,
+          ball_number: i + 1,
+          score,
+        }))
+      );
+      const { data, error } = await supabase.rpc("rpc_skeeball_submit_balls", {
+        p_session_id: mySession!.id,
+        p_balls: balls,
+      });
+      if (error) throw error;
+      if ((data as any)?.error) {
+        setSubmitError((data as any).message ?? "Failed to submit scores.");
+        return;
+      }
+      const asBallScores: BallScore[] = sessionPlayers.flatMap((sp) =>
+        (playerBalls[sp.player_user_id] ?? []).map((score, i) => ({
+          id: `local_${sp.player_user_id}_${i}`,
           session_id: mySession!.id,
           player_user_id: sp.player_user_id,
           ball_number: i + 1,
-          score: parseInt(score) || 0,
+          score,
         }))
       );
-      const { error } = await supabase
-        .from("skeeball_ball_scores")
-        .upsert(inserts, { onConflict: "session_id,player_user_id,ball_number" });
-      if (error) throw error;
-
-      const now = new Date().toISOString();
-      await supabase.from("skeeball_sessions").update({ last_activity_at: now }).eq("id", mySession!.id);
-      setMySession((prev) => prev ? { ...prev, last_activity_at: now } : prev);
+      setBallScores(asBallScores);
       setShowWarning(false);
       setWarningCountdown(WARNING_DURATION_S);
-
-      setBallScores(inserts.map((ins, i) => ({ ...ins, id: `local_${i}` })));
     } catch (e: any) {
       setSubmitError(e?.message ?? "Failed to submit scores");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function addBall(pts: number) {
+    const sp = sessionPlayers[currentPlayerIdx];
+    if (!sp) return;
+    const current = playerBalls[sp.player_user_id] ?? [];
+    if (current.length >= BALLS_PER_PLAYER) return;
+    const updated = [...current, pts];
+    setPlayerBalls((prev) => ({ ...prev, [sp.player_user_id]: updated }));
+    if (updated.length >= BALLS_PER_PLAYER && currentPlayerIdx < sessionPlayers.length - 1) {
+      setCurrentPlayerIdx((idx) => idx + 1);
+    }
+  }
+
+  function undoLastBall() {
+    const sp = sessionPlayers[currentPlayerIdx];
+    if (!sp) return;
+    const current = playerBalls[sp.player_user_id] ?? [];
+    if (current.length === 0) {
+      if (currentPlayerIdx > 0) {
+        const prevIdx = currentPlayerIdx - 1;
+        setCurrentPlayerIdx(prevIdx);
+        const prevSp = sessionPlayers[prevIdx];
+        setPlayerBalls((prev) => ({
+          ...prev,
+          [prevSp.player_user_id]: (prev[prevSp.player_user_id] ?? []).slice(0, -1),
+        }));
+      }
+    } else {
+      setPlayerBalls((prev) => ({ ...prev, [sp.player_user_id]: current.slice(0, -1) }));
     }
   }
 
@@ -376,14 +422,6 @@ export default function SkeeballTrackerScreen() {
       );
     }
     setMySession((prev) => prev ? { ...prev, status: "completed" } : prev);
-  }
-
-  function updateBall(uid: string, index: number, value: string) {
-    setAllBalls((prev) => {
-      const updated = [...(prev[uid] ?? ["", "", ""])];
-      updated[index] = value.replace(/[^0-9]/g, "");
-      return { ...prev, [uid]: updated };
-    });
   }
 
   function togglePlayer(uid: string) {
@@ -531,16 +569,22 @@ export default function SkeeballTrackerScreen() {
     );
   }
 
-  // ─── Scoring (my turn) ────────────────────────────────────────────────────────
+  // ─── Scoring (ring-tap) ───────────────────────────────────────────────────────
 
   if (mySession && iAmPlayer && !allBallsSubmitted) {
-    const grandTotal = sessionPlayers.reduce((sum, sp) =>
-      sum + (allBalls[sp.player_user_id] ?? []).reduce((s, b) => s + (parseInt(b) || 0), 0), 0
+    const allLocalDone = sessionPlayers.every(
+      (sp) => (playerBalls[sp.player_user_id] ?? []).length >= BALLS_PER_PLAYER
     );
-    const allFilled = sessionPlayers.every((sp) =>
-      (allBalls[sp.player_user_id] ?? []).length === 3 &&
-      (allBalls[sp.player_user_id] ?? []).every((b) => b !== "")
+    const currentSp = sessionPlayers[currentPlayerIdx];
+    const currentBalls = playerBalls[currentSp?.player_user_id] ?? [];
+    const currentTotal = currentBalls.reduce((s, b) => s + b, 0);
+    const globalBallStart = sessionPlayers
+      .slice(0, currentPlayerIdx)
+      .reduce((sum) => sum + BALLS_PER_PLAYER, 0);
+    const grandTotal = sessionPlayers.reduce(
+      (sum, sp) => sum + (playerBalls[sp.player_user_id] ?? []).reduce((s, b) => s + b, 0), 0
     );
+
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         {warningModal}
@@ -550,52 +594,97 @@ export default function SkeeballTrackerScreen() {
           <View style={{ width: 40 }} />
         </View>
         <ScrollView contentContainerStyle={s.scroll}>
-          <View style={s.laneChip}>
-            <Ionicons name="location" size={15} color="#06b6d4" />
-            <Text style={s.laneChipText}>Lane {mySession.lane_number}</Text>
-          </View>
-          <Text style={s.scoreTitle}>Enter Ball Scores</Text>
-          <Text style={s.scoreSub}>
-            {sessionPlayers.length === 1
-              ? "Enter scores for 3 balls"
-              : `Track all ${sessionPlayers.length * 3} balls for your team`}
-          </Text>
 
+          {/* ── Active player — ring tap ──────────────────────── */}
+          {!allLocalDone && currentSp && (
+            <View style={s.playerSection}>
+              <View style={s.playerSectionHeader}>
+                <Avatar uri={currentSp.avatar_url} name={currentSp.username} size={32} radius={10} />
+                <Text style={s.playerSectionName}>{currentSp.username}</Text>
+                {currentSp.player_user_id === user?.id && (
+                  <View style={s.youChip}><Text style={s.youChipText}>You</Text></View>
+                )}
+                <Text style={s.playerSectionTotal}>{currentTotal} pts</Text>
+              </View>
+
+              {currentBalls.length < BALLS_PER_PLAYER ? (
+                <>
+                  <Text style={s.ringHint}>
+                    Ball {globalBallStart + currentBalls.length + 1} — pick ring
+                  </Text>
+                  <View style={s.ringGrid}>
+                    {SKEE_RINGS.map((pts) => (
+                      <Pressable
+                        key={pts}
+                        style={[s.ringBtn, pts === 100 && s.ringBtnCenter, { borderColor: RING_COLORS[pts] + "55" }]}
+                        onPress={() => addBall(pts)}
+                      >
+                        <Text style={[s.ringBtnText, { color: RING_COLORS[pts] }, pts === 100 && s.ringBtnTextCenter]}>
+                          {pts}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  {currentBalls.length > 0 && (
+                    <View style={s.historyRow}>
+                      <View style={s.historyChips}>
+                        {currentBalls.map((pts, i) => (
+                          <View key={i} style={[s.chip, { borderColor: RING_COLORS[pts] + "44", backgroundColor: RING_COLORS[pts] + "18" }]}>
+                            <Text style={[s.chipText, { color: RING_COLORS[pts] }]}>{pts}</Text>
+                          </View>
+                        ))}
+                      </View>
+                      <Pressable style={s.undoBtn} onPress={undoLastBall}>
+                        <Ionicons name="arrow-undo-outline" size={13} color="#555" />
+                        <Text style={s.undoText}>Undo</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </>
+              ) : (
+                <View style={s.completeRow}>
+                  <Ionicons name="checkmark-circle" size={18} color="#22c55e" />
+                  <Text style={s.completeText}>Done!</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* ── Other players — done or up next ──────────────── */}
           {sessionPlayers.map((sp, playerIdx) => {
-            const playerBalls = allBalls[sp.player_user_id] ?? ["", "", ""];
-            const playerTotal = playerBalls.reduce((s, b) => s + (parseInt(b) || 0), 0);
+            const isActive = playerIdx === currentPlayerIdx && !allLocalDone;
+            if (isActive) return null;
+            const spBalls = playerBalls[sp.player_user_id] ?? [];
+            const isDone = spBalls.length >= BALLS_PER_PLAYER;
+            const spTotal = spBalls.reduce((s, b) => s + b, 0);
             return (
-              <View key={sp.player_user_id} style={s.playerSection}>
+              <View key={sp.player_user_id} style={[s.playerSection, !isDone && s.playerSectionDim]}>
                 <View style={s.playerSectionHeader}>
                   <Avatar uri={sp.avatar_url} name={sp.username} size={32} radius={10} />
                   <Text style={s.playerSectionName}>{sp.username}</Text>
                   {sp.player_user_id === user?.id && (
                     <View style={s.youChip}><Text style={s.youChipText}>You</Text></View>
                   )}
-                  <Text style={s.playerSectionTotal}>{playerTotal} pts</Text>
+                  <Text style={s.playerSectionTotal}>{isDone ? `${spTotal} pts` : "—"}</Text>
                 </View>
-                {[0, 1, 2].map((i) => {
-                  const ballNum = playerIdx * 3 + i + 1;
-                  return (
-                    <View key={i} style={s.ballRow}>
-                      <Text style={s.ballLabel}>Ball {ballNum}</Text>
-                      <TextInput
-                        style={s.ballInput}
-                        value={playerBalls[i]}
-                        onChangeText={(v) => updateBall(sp.player_user_id, i, v)}
-                        keyboardType="number-pad"
-                        placeholder="0"
-                        placeholderTextColor="#333"
-                        maxLength={3}
-                      />
-                      <Text style={s.ballUnit}>pts</Text>
+                {isDone ? (
+                  <View style={s.historyRow}>
+                    <View style={s.historyChips}>
+                      {spBalls.map((pts, i) => (
+                        <View key={i} style={[s.chip, { borderColor: RING_COLORS[pts] + "44", backgroundColor: RING_COLORS[pts] + "18" }]}>
+                          <Text style={[s.chipText, { color: RING_COLORS[pts] }]}>{pts}</Text>
+                        </View>
+                      ))}
                     </View>
-                  );
-                })}
+                  </View>
+                ) : (
+                  <Text style={s.upNextText}>Up next</Text>
+                )}
               </View>
             );
           })}
 
+          {/* ── Team total + submit ───────────────────────────── */}
           {sessionPlayers.length > 1 && (
             <View style={s.totalRow}>
               <Text style={s.totalLabel}>Team total</Text>
@@ -610,14 +699,18 @@ export default function SkeeballTrackerScreen() {
             </View>
           )}
 
-          <Pressable
-            style={[s.submitBtn, (!allFilled || submitting) && s.btnOff]}
-            onPress={submitBalls}
-            disabled={!allFilled || submitting}
-          >
-            {submitting ? <ActivityIndicator size="small" color="#000" /> : <Ionicons name="checkmark-circle-outline" size={20} color="#000" />}
-            <Text style={s.submitBtnText}>Submit All Scores</Text>
-          </Pressable>
+          {allLocalDone && (
+            <Pressable
+              style={[s.submitBtn, submitting && s.btnOff]}
+              onPress={submitBalls}
+              disabled={submitting}
+            >
+              {submitting
+                ? <ActivityIndicator size="small" color="#000" />
+                : <Ionicons name="checkmark-circle-outline" size={20} color="#000" />}
+              <Text style={s.submitBtnText}>Submit All Scores</Text>
+            </Pressable>
+          )}
         </ScrollView>
       </SafeAreaView>
     );
@@ -820,6 +913,29 @@ const s = StyleSheet.create({
   ballDotFilled: { backgroundColor: "#22c55e", borderColor: "#22c55e" },
 
   kickBtn: { position: "absolute", top: 4, right: 4, padding: 2 },
+
+  // Ring-tap scoring
+  ringHint: { color: "#555", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 12 },
+  ringGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  ringBtn: {
+    width: "30%", paddingVertical: 18, borderRadius: 14, backgroundColor: "#111",
+    borderWidth: 1.5, alignItems: "center", justifyContent: "center",
+  },
+  ringBtnCenter: { width: "100%", paddingVertical: 14 },
+  ringBtnText: { fontSize: 22, fontWeight: "900" },
+  ringBtnTextCenter: { fontSize: 20 },
+
+  historyRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 4 },
+  historyChips: { flexDirection: "row", flexWrap: "wrap", gap: 6, flex: 1 },
+  chip: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1 },
+  chipText: { fontSize: 14, fontWeight: "900" },
+  undoBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 6, paddingHorizontal: 10 },
+  undoText: { color: "#555", fontSize: 12 },
+
+  completeRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 4 },
+  completeText: { color: "#22c55e", fontSize: 14, fontWeight: "800" },
+  playerSectionDim: { opacity: 0.5 },
+  upNextText: { color: "#444", fontSize: 12, fontStyle: "italic", paddingTop: 4 },
 
   warningOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", alignItems: "center", justifyContent: "center", padding: 32 },
   warningCard: { width: "100%", backgroundColor: "#111", borderRadius: 24, padding: 28, alignItems: "center", borderWidth: 1.5, borderColor: "rgba(239,68,68,0.4)" },
