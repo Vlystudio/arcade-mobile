@@ -132,7 +132,7 @@ export default function SkeeballTrackerScreen() {
         }));
         setAllActiveSessions(sessions);
 
-        const mine = sessions.find((s) => s.team_id === teamId);
+        const mine = sessions.find((s) => qrSessionId && s.id === qrSessionId) ?? sessions.find((s) => s.team_id === teamId);
         if (mine && !mySession) {
           setMySession(mine);
           await loadSessionData(mine.id);
@@ -140,7 +140,7 @@ export default function SkeeballTrackerScreen() {
       })
       .subscribe();
     return () => { ch.unsubscribe(); };
-  }, [teamId, mySession]);
+  }, [teamId, mySession, qrSessionId]);
 
   // Inactivity check — every 30s, show warning at 8 min, abandon at 10 min
   useEffect(() => {

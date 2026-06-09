@@ -54,6 +54,7 @@ export default function RootLayout() {
             name="submit-score"
             options={{ title: "Submit Score", headerBackTitle: "Back" }}
           />
+          <Stack.Screen name="skeeball-tracker" options={{ headerShown: false }} />
           <Stack.Screen name="demo" options={{ headerShown: false }} />
           <Stack.Screen name="food" options={{ headerShown: false }} />
           <Stack.Screen name="food-cart" options={{ headerShown: false }} />

@@ -67,6 +67,7 @@ export default function ScanLaneScreen() {
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null);
   const [pendingSkeeballLane, setPendingSkeeballLane] = useState<SkeeballLanePreview | null>(null);
   const [cameraZoom, setCameraZoom] = useState(0);
+  const [openingScoring, setOpeningScoring] = useState(false);
 
   const routeLaneToken = useMemo(() => {
     const raw = lane_token ?? routeToken;
@@ -187,6 +188,7 @@ export default function ScanLaneScreen() {
     setPendingSkeeballLane(null);
     setPendingTokenWithoutTeam(null);
     setManualToken("");
+    setOpeningScoring(false);
     setScanned(false);
   };
 
@@ -341,16 +343,30 @@ export default function ScanLaneScreen() {
     teamId: string;
     teamName: string;
   }) => {
-    router.replace({
-      pathname: "/skeeball-tracker" as any,
-      params: {
-        teamId,
-        teamName,
-        sessionId,
-        laneNumber: String(laneNumber),
-        fromQr: "1",
-      },
+    const params = new URLSearchParams({
+      teamId,
+      teamName,
+      sessionId,
+      laneNumber: String(laneNumber),
+      fromQr: "1",
     });
+    const href = `/skeeball-tracker?${params.toString()}`;
+    setOpeningScoring(true);
+    setPendingSkeeballLane(null);
+    setPendingTokenWithoutTeam(null);
+    setScanned(true);
+    router.replace(href as any);
+
+    if (process.env.EXPO_OS === "web") {
+      setTimeout(() => {
+        const webGlobal = globalThis as typeof globalThis & {
+          location?: { pathname: string; assign: (url: string) => void };
+        };
+        if (webGlobal.location?.pathname.includes("scan-lane")) {
+          webGlobal.location.assign(href);
+        }
+      }, 300);
+    }
   };
 
   const setZoomPreset = (value: number) => {
@@ -513,14 +529,14 @@ export default function ScanLaneScreen() {
             : "Point at the QR code posted on your lane"}
         </Text>
 
-        {loading && (
+        {(loading || openingScoring) && (
           <View style={styles.statusRow}>
             <ActivityIndicator color="#06b6d4" size="small" />
-            <Text style={styles.statusText}>Checking in…</Text>
+            <Text style={styles.statusText}>{openingScoring ? "Opening scoring..." : "Checking in..."}</Text>
           </View>
         )}
 
-        {!routeLaneToken && !loading && !cameraReady && !cameraError && (
+        {!routeLaneToken && !loading && !openingScoring && !cameraReady && !cameraError && (
           <View style={styles.statusRow}>
             <ActivityIndicator color="#06b6d4" size="small" />
             <Text style={styles.statusText}>Starting camera...</Text>
@@ -534,14 +550,14 @@ export default function ScanLaneScreen() {
           </View>
         )}
 
-        {showScanHelp && !scanned && !loading && (
+        {showScanHelp && !scanned && !loading && !openingScoring && (
           <View style={styles.inlineNotice}>
             <Ionicons name="bulb-outline" size={16} color="#06b6d4" />
             <Text style={styles.inlineNoticeText}>If the web scanner does not react, open the QR with your phone camera or paste the QR link below.</Text>
           </View>
         )}
 
-        {scanned && !loading && (
+        {scanned && !loading && !openingScoring && (
           <Pressable style={styles.rescanBtn} onPress={handleScanAgain}>
             <Ionicons name="refresh-outline" size={16} color="#fff" />
             <Text style={styles.rescanText}>Scan Again</Text>
@@ -621,7 +637,7 @@ export default function ScanLaneScreen() {
         </View>
       </Modal>
 
-      <Modal visible={!!pendingSkeeballLane} transparent animationType="fade" onRequestClose={handleScanAgain}>
+      <Modal visible={!!pendingSkeeballLane && !openingScoring} transparent animationType="fade" onRequestClose={handleScanAgain}>
         <View style={styles.confirmOverlay}>
           <View style={styles.confirmCard}>
             <View style={styles.confirmIconWrap}>
@@ -635,14 +651,14 @@ export default function ScanLaneScreen() {
               {activeTeamName ?? "Your team"} will own this lane until all 9 balls are submitted and the game is finalized.
             </Text>
             <View style={styles.confirmActions}>
-              <Pressable style={styles.confirmCancelBtn} onPress={handleScanAgain} disabled={confirming}>
+              <Pressable style={styles.confirmCancelBtn} onPress={handleScanAgain} disabled={confirming || openingScoring}>
                 <Text style={styles.confirmCancelText}>Cancel</Text>
               </Pressable>
-              <Pressable style={[styles.confirmStartBtn, confirming && { opacity: 0.6 }]} onPress={confirmSkeeballCheckIn} disabled={confirming}>
-                {confirming
+              <Pressable style={[styles.confirmStartBtn, (confirming || openingScoring) && { opacity: 0.6 }]} onPress={confirmSkeeballCheckIn} disabled={confirming || openingScoring}>
+                {confirming || openingScoring
                   ? <ActivityIndicator size="small" color="#000" />
                   : <Ionicons name="checkmark-circle-outline" size={18} color="#000" />}
-                <Text style={styles.confirmStartText}>{confirming ? "Checking in..." : "Check In"}</Text>
+                <Text style={styles.confirmStartText}>{openingScoring ? "Opening..." : confirming ? "Checking in..." : "Check In"}</Text>
               </Pressable>
             </View>
           </View>
