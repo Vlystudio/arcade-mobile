@@ -33,6 +33,8 @@ type SkeeballLanePreview = {
   game_id: string;
   game_name: string;
   venue_id: string;
+  team_id: string;
+  team_name: string;
 };
 
 type MyTeam = {
@@ -64,6 +66,7 @@ export default function ScanLaneScreen() {
   const [handledRouteToken, setHandledRouteToken] = useState(false);
   const [checkInResult, setCheckInResult] = useState<CheckInResult | null>(null);
   const [pendingSkeeballLane, setPendingSkeeballLane] = useState<SkeeballLanePreview | null>(null);
+  const [cameraZoom, setCameraZoom] = useState(0);
 
   const routeLaneToken = useMemo(() => {
     const raw = lane_token ?? routeToken;
@@ -248,6 +251,8 @@ export default function ScanLaneScreen() {
       game_id: result.game_id ?? "",
       game_name: result.game_name ?? "Skee-Ball",
       venue_id: result.venue_id ?? "",
+      team_id: checkInTeamId,
+      team_name: checkInTeamName ?? "Team",
     });
     setPendingTokenWithoutTeam(null);
     if (teamOverride) {
@@ -257,12 +262,12 @@ export default function ScanLaneScreen() {
   };
 
   const confirmSkeeballCheckIn = async () => {
-    if (!pendingSkeeballLane || !activeTeamId) return;
+    if (!pendingSkeeballLane) return;
     setConfirming(true);
     try {
       const { data, error } = await supabase.rpc("rpc_skeeball_start_qr_session", {
         p_token: pendingSkeeballLane.token,
-        p_team_id: activeTeamId,
+        p_team_id: pendingSkeeballLane.team_id,
       });
       if (error) throw error;
 
@@ -272,6 +277,8 @@ export default function ScanLaneScreen() {
         message?: string;
         session_id?: string;
         lane_number?: number;
+        team_id?: string;
+        team_name?: string;
       };
 
       if (!result?.ok) {
@@ -281,7 +288,20 @@ export default function ScanLaneScreen() {
         return;
       }
 
-      openSkeeballSession(result.session_id ?? "", result.lane_number ?? pendingSkeeballLane.lane_number);
+      if (!result.session_id) {
+        Alert.alert("Check-in failed", "The lane session was created, but no session ID was returned. Please scan again.");
+        setPendingSkeeballLane(null);
+        setScanned(false);
+        return;
+      }
+
+      setPendingSkeeballLane(null);
+      openSkeeballSession({
+        sessionId: result.session_id,
+        laneNumber: result.lane_number ?? pendingSkeeballLane.lane_number,
+        teamId: result.team_id ?? pendingSkeeballLane.team_id,
+        teamName: result.team_name ?? pendingSkeeballLane.team_name,
+      });
     } catch (err) {
       Alert.alert("Check-in failed", err instanceof Error ? err.message : "Something went wrong.");
       setPendingSkeeballLane(null);
@@ -298,23 +318,43 @@ export default function ScanLaneScreen() {
       p_team_id: activeTeamId,
     });
     if (error) return false;
-    const result = data as { ok?: boolean; session_id?: string; lane_number?: number };
+    const result = data as { ok?: boolean; session_id?: string; lane_number?: number; team_id?: string; team_name?: string };
     if (!result?.ok) return false;
-    openSkeeballSession(result.session_id ?? "", result.lane_number ?? 0);
+    if (!result.session_id) return false;
+    openSkeeballSession({
+      sessionId: result.session_id,
+      laneNumber: result.lane_number ?? 0,
+      teamId: result.team_id ?? activeTeamId,
+      teamName: result.team_name ?? activeTeamName ?? "Team",
+    });
     return true;
   };
 
-  const openSkeeballSession = (sessionId: string, laneNumber: number) => {
+  const openSkeeballSession = ({
+    sessionId,
+    laneNumber,
+    teamId,
+    teamName,
+  }: {
+    sessionId: string;
+    laneNumber: number;
+    teamId: string;
+    teamName: string;
+  }) => {
     router.replace({
       pathname: "/skeeball-tracker" as any,
       params: {
-        teamId: activeTeamId,
-        teamName: activeTeamName ?? "Team",
+        teamId,
+        teamName,
         sessionId,
         laneNumber: String(laneNumber),
         fromQr: "1",
       },
     });
+  };
+
+  const setZoomPreset = (value: number) => {
+    setCameraZoom(Math.max(0, Math.min(1, value)));
   };
 
   // ── Check-in success screen ───────────────────────────────────────────────
@@ -413,6 +453,7 @@ export default function ScanLaneScreen() {
           <CameraView
             style={styles.camera}
             facing="back"
+            zoom={cameraZoom}
             barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
             onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
             onCameraReady={() => {
@@ -444,6 +485,24 @@ export default function ScanLaneScreen() {
           </View>
           <View style={styles.overlayBottom} />
         </View>}
+        {permission?.granted && (
+          <View style={styles.zoomControls}>
+            {[0, 0.25, 0.5].map((zoom) => {
+              const selected = Math.abs(cameraZoom - zoom) < 0.01;
+              return (
+                <Pressable
+                  key={zoom}
+                  style={[styles.zoomBtn, selected && styles.zoomBtnSelected]}
+                  onPress={() => setZoomPreset(zoom)}
+                >
+                  <Text style={[styles.zoomBtnText, selected && styles.zoomBtnTextSelected]}>
+                    {zoom === 0 ? "1x" : zoom === 0.25 ? "2x" : "3x"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
       </View>
 
       <View style={styles.panel}>
@@ -616,6 +675,28 @@ const styles = StyleSheet.create({
   cornerTR: { top: 0, right: 0, borderTopWidth: CORNER_WIDTH, borderRightWidth: CORNER_WIDTH, borderColor: "#06b6d4", borderTopRightRadius: 4 },
   cornerBL: { bottom: 0, left: 0, borderBottomWidth: CORNER_WIDTH, borderLeftWidth: CORNER_WIDTH, borderColor: "#06b6d4", borderBottomLeftRadius: 4 },
   cornerBR: { bottom: 0, right: 0, borderBottomWidth: CORNER_WIDTH, borderRightWidth: CORNER_WIDTH, borderColor: "#06b6d4", borderBottomRightRadius: 4 },
+  zoomControls: {
+    position: "absolute",
+    bottom: 18,
+    alignSelf: "center",
+    flexDirection: "row",
+    gap: 8,
+    backgroundColor: "rgba(0,0,0,0.62)",
+    borderRadius: 18,
+    padding: 5,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+  },
+  zoomBtn: {
+    minWidth: 42,
+    height: 34,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  zoomBtnSelected: { backgroundColor: "#06b6d4" },
+  zoomBtnText: { color: "#fff", fontSize: 13, fontWeight: "900" },
+  zoomBtnTextSelected: { color: "#000" },
 
   panel: { backgroundColor: "#000", padding: 24, paddingBottom: 12 },
   panelTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },

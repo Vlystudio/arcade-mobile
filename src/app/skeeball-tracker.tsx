@@ -59,7 +59,12 @@ function getMondayDate() {
 }
 
 export default function SkeeballTrackerScreen() {
-  const { teamId, teamName } = useLocalSearchParams<{ teamId: string; teamName: string }>();
+  const { teamId, teamName, sessionId, fromQr } = useLocalSearchParams<{
+    teamId: string;
+    teamName: string;
+    sessionId?: string;
+    fromQr?: string;
+  }>();
   const { user } = useRequireAuth();
 
   const [loading, setLoading] = useState(true);
@@ -93,6 +98,8 @@ export default function SkeeballTrackerScreen() {
   );
   const sessionDone = mySession?.status === "completed";
   const takenLanes = new Set(allActiveSessions.map((s) => s.lane_number));
+  const qrSessionId = typeof sessionId === "string" ? sessionId : undefined;
+  const cameFromQr = fromQr === "1" || !!qrSessionId;
 
   const playerProgress = sessionPlayers.map((sp, i) => ({
     ...sp,
@@ -102,7 +109,7 @@ export default function SkeeballTrackerScreen() {
 
   useEffect(() => {
     if (user && teamId) loadData();
-  }, [user, teamId]);
+  }, [user, teamId, qrSessionId]);
 
   useEffect(() => {
     return () => { channelRef.current?.unsubscribe(); };
@@ -215,7 +222,7 @@ export default function SkeeballTrackerScreen() {
       // Pre-select all members (up to 3) so the user just needs to pick a lane
       setSelectedPlayers(members.slice(0, PLAYERS_PER_GAME).map((m) => m.user_id));
 
-      const mine = sessions.find((s) => s.team_id === teamId) ?? null;
+      const mine = sessions.find((s) => qrSessionId && s.id === qrSessionId) ?? sessions.find((s) => s.team_id === teamId) ?? null;
       setMySession(mine);
 
       if (mine) await loadSessionData(mine.id, members);
@@ -473,9 +480,20 @@ export default function SkeeballTrackerScreen() {
     </Modal>
   );
 
-  // ─── Not Monday (admins can always access for testing) ───────────────────────
+  // ─── Loading ──────────────────────────────────────────────────────────────────
 
-  if (!isMonday() && !isAdmin) {
+  if (loading) {
+    return (
+      <SafeAreaView style={s.safe} edges={["top"]}>
+        <View style={s.topBar}><Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable></View>
+        <View style={s.centered}><ActivityIndicator size="large" color="#06b6d4" /></View>
+      </SafeAreaView>
+    );
+  }
+
+  // ─── Not Monday (admins and QR sessions can always access) ───────────────────
+
+  if (!isMonday() && !isAdmin && !cameFromQr) {
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         <View style={s.topBar}><Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable></View>
@@ -484,17 +502,6 @@ export default function SkeeballTrackerScreen() {
           <Text style={s.bigTitle}>League Night is Monday</Text>
           <Text style={s.bigSub}>Score tracking opens on Mondays only.</Text>
         </View>
-      </SafeAreaView>
-    );
-  }
-
-  // ─── Loading ──────────────────────────────────────────────────────────────────
-
-  if (loading) {
-    return (
-      <SafeAreaView style={s.safe} edges={["top"]}>
-        <View style={s.topBar}><Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable></View>
-        <View style={s.centered}><ActivityIndicator size="large" color="#06b6d4" /></View>
       </SafeAreaView>
     );
   }
