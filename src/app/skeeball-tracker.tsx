@@ -45,6 +45,13 @@ type LaneSession = { id: string; team_id: string; lane_number: number; status: s
 type SessionPlayer = { session_id: string; player_user_id: string; username: string; avatar_url: string | null };
 type BallScore = { id: string; session_id: string; player_user_id: string; ball_number: number; score: number };
 type Member = { user_id: string; username: string; avatar_url: string | null; role: string };
+type SkeeballTrackerProps = {
+  initialTeamId?: string;
+  initialTeamName?: string;
+  initialSessionId?: string;
+  initialFromQr?: boolean;
+  onBack?: () => void;
+};
 
 function isMonday() {
   return new Date().getDay() === 1;
@@ -58,13 +65,21 @@ function getMondayDate() {
   return m.toISOString().split("T")[0];
 }
 
-export default function SkeeballTrackerScreen() {
-  const { teamId, teamName, sessionId, fromQr } = useLocalSearchParams<{
-    teamId: string;
-    teamName: string;
+export default function SkeeballTrackerScreen({
+  initialTeamId,
+  initialTeamName,
+  initialSessionId,
+  initialFromQr,
+  onBack,
+}: SkeeballTrackerProps = {}) {
+  const { teamId: routeTeamId, teamName: routeTeamName, sessionId, fromQr } = useLocalSearchParams<{
+    teamId?: string;
+    teamName?: string;
     sessionId?: string;
     fromQr?: string;
   }>();
+  const teamId = initialTeamId ?? routeTeamId;
+  const teamName = initialTeamName ?? routeTeamName;
   const { user } = useRequireAuth();
 
   const [loading, setLoading] = useState(true);
@@ -98,8 +113,8 @@ export default function SkeeballTrackerScreen() {
   );
   const sessionDone = mySession?.status === "completed";
   const takenLanes = new Set(allActiveSessions.map((s) => s.lane_number));
-  const qrSessionId = typeof sessionId === "string" ? sessionId : undefined;
-  const cameFromQr = fromQr === "1" || !!qrSessionId;
+  const qrSessionId = initialSessionId ?? (typeof sessionId === "string" ? sessionId : undefined);
+  const cameFromQr = initialFromQr === true || fromQr === "1" || !!qrSessionId;
 
   const playerProgress = sessionPlayers.map((sp, i) => ({
     ...sp,
@@ -452,6 +467,10 @@ export default function SkeeballTrackerScreen() {
   }
 
   function goBack() {
+    if (onBack) {
+      onBack();
+      return;
+    }
     router.canGoBack() ? router.back() : router.replace("/teams" as any);
   }
 

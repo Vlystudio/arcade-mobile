@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
+import SkeeballTrackerScreen from "./skeeball-tracker";
 
 type CheckInResult = {
   check_in_id: string;
@@ -40,6 +41,13 @@ type SkeeballLanePreview = {
 type MyTeam = {
   id: string;
   name: string;
+};
+
+type ActiveSkeeballSession = {
+  sessionId: string;
+  laneNumber: number;
+  teamId: string;
+  teamName: string;
 };
 
 export default function ScanLaneScreen() {
@@ -69,6 +77,7 @@ export default function ScanLaneScreen() {
   const [cameraZoom, setCameraZoom] = useState(0);
   const [openingScoring, setOpeningScoring] = useState(false);
   const [scoringHref, setScoringHref] = useState<string | null>(null);
+  const [activeSkeeballSession, setActiveSkeeballSession] = useState<ActiveSkeeballSession | null>(null);
 
   const routeLaneToken = useMemo(() => {
     const raw = lane_token ?? routeToken;
@@ -191,6 +200,7 @@ export default function ScanLaneScreen() {
     setManualToken("");
     setOpeningScoring(false);
     setScoringHref(null);
+    setActiveSkeeballSession(null);
     setScanned(false);
   };
 
@@ -358,16 +368,14 @@ export default function ScanLaneScreen() {
     setPendingSkeeballLane(null);
     setPendingTokenWithoutTeam(null);
     setScanned(true);
+    setActiveSkeeballSession({ sessionId, laneNumber, teamId, teamName });
 
     const webGlobal = globalThis as typeof globalThis & {
-      location?: { assign: (url: string) => void };
+      history?: { replaceState: (data: unknown, unused: string, url?: string | URL | null) => void };
     };
-    if (webGlobal.location?.assign) {
-      webGlobal.location.assign(href);
-      return;
+    if (webGlobal.history?.replaceState) {
+      webGlobal.history.replaceState(null, "", href);
     }
-
-    router.replace(href as any);
   };
 
   const setZoomPreset = (value: number) => {
@@ -404,6 +412,18 @@ export default function ScanLaneScreen() {
     const timeout = setTimeout(() => setShowScanHelp(true), 8000);
     return () => clearTimeout(timeout);
   }, [permission?.granted, scanned, checkInResult, pendingSkeeballLane]);
+
+  if (activeSkeeballSession) {
+    return (
+      <SkeeballTrackerScreen
+        initialTeamId={activeSkeeballSession.teamId}
+        initialTeamName={activeSkeeballSession.teamName}
+        initialSessionId={activeSkeeballSession.sessionId}
+        initialFromQr
+        onBack={handleScanAgain}
+      />
+    );
+  }
 
   if (checkInResult) {
     return (
