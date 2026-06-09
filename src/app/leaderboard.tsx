@@ -37,6 +37,8 @@ type LeaderEntry = {
 type TimeFilter = "alltime" | "season";
 type GameOption = { id: string; name: string; type: string };
 type ShareFriend = { id: string; username: string; avatar_url: string | null };
+type TeamScore = { rank: number; team_id: string; team_name: string; total_score: number; week_of: string };
+type BoardTab = "players" | "teams";
 
 const GAME_TYPE_COLORS: Record<string, string> = {
   skeeball:   "#06b6d4",
@@ -49,6 +51,7 @@ const GAME_TYPE_COLORS: Record<string, string> = {
 
 export default function LeaderboardScreen() {
   const { user, loading: authLoading } = useRequireAuth();
+  const [boardTab, setBoardTab] = useState<BoardTab>("players");
   const [entries, setEntries] = useState<LeaderEntry[]>([]);
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("alltime");
   const [selectedGameId, setSelectedGameId] = useState<string | null>(null);
@@ -60,6 +63,8 @@ export default function LeaderboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [myRank, setMyRank] = useState<number | null>(null);
   const [myScore, setMyScore] = useState<number | null>(null);
+  const [teamScores, setTeamScores] = useState<TeamScore[]>([]);
+  const [teamScoresLoading, setTeamScoresLoading] = useState(false);
 
   const [shareEntry, setShareEntry] = useState<LeaderEntry | null>(null);
   const [shareFriends, setShareFriends] = useState<ShareFriend[]>([]);
@@ -127,10 +132,54 @@ export default function LeaderboardScreen() {
     setRefreshing(false);
   }
 
+  async function loadTeamScores() {
+    setTeamScoresLoading(true);
+    const { data: sessions } = await supabase
+      .from("skeeball_sessions")
+      .select("id, team_id, week_of, completed_at, teams(name)")
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false })
+      .limit(100);
+
+    const sessionIds = (sessions ?? []).map((s: any) => s.id);
+    let scoreSums: Record<string, number> = {};
+    if (sessionIds.length > 0) {
+      const { data: balls } = await supabase
+        .from("skeeball_ball_scores")
+        .select("session_id, score")
+        .in("session_id", sessionIds);
+      for (const b of balls ?? []) {
+        scoreSums[b.session_id] = (scoreSums[b.session_id] ?? 0) + b.score;
+      }
+    }
+
+    const raw: Omit<TeamScore, "rank">[] = (sessions ?? []).map((s: any) => ({
+      team_id: s.team_id,
+      team_name: Array.isArray(s.teams) ? (s.teams[0]?.name ?? "Unknown Team") : (s.teams?.name ?? "Unknown Team"),
+      total_score: scoreSums[s.id] ?? 0,
+      week_of: s.week_of ?? (s.completed_at ? s.completed_at.split("T")[0] : ""),
+    }));
+
+    // Aggregate by team — keep their highest session score
+    const byTeam: Record<string, Omit<TeamScore, "rank">> = {};
+    for (const t of raw) {
+      if (!byTeam[t.team_id] || t.total_score > byTeam[t.team_id].total_score) {
+        byTeam[t.team_id] = t;
+      }
+    }
+    const ranked: TeamScore[] = Object.values(byTeam)
+      .sort((a, b) => b.total_score - a.total_score)
+      .map((t, i) => ({ ...t, rank: i + 1 }));
+
+    setTeamScores(ranked);
+    setTeamScoresLoading(false);
+  }
+
   useEffect(() => {
     if (user) {
       loadGames();
       loadLeaderboard(timeFilter, selectedGameId);
+      loadTeamScores();
     }
   }, [user]);
 
@@ -247,6 +296,58 @@ export default function LeaderboardScreen() {
         </View>
       </View>
 
+      {/* Board tab — Players / Teams */}
+      <View style={styles.filterRow}>
+        {(["players", "teams"] as BoardTab[]).map((tab) => (
+          <Pressable
+            key={tab}
+            style={[styles.filterBtn, boardTab === tab && styles.filterBtnActive]}
+            onPress={() => setBoardTab(tab)}
+          >
+            <Text style={[styles.filterText, boardTab === tab && styles.filterTextActive]}>
+              {tab === "players" ? "Players" : "Teams"}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {boardTab === "teams" ? (
+        /* ── Teams leaderboard ── */
+        <>
+          {teamScoresLoading ? (
+            <ActivityIndicator color="#06b6d4" style={{ marginVertical: 40 }} />
+          ) : teamScores.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconWrap}>
+                <Ionicons name="people-outline" size={32} color="#333" />
+              </View>
+              <Text style={styles.emptyTitle}>No team scores yet</Text>
+              <Text style={styles.emptySub}>Team scores appear after a completed skeeball session.</Text>
+            </View>
+          ) : (
+            <View style={styles.listCard}>
+              <View style={styles.listHeader}>
+                <Text style={styles.listHeaderText}>TEAM RANKINGS — SKEEBALL</Text>
+              </View>
+              {teamScores.map((t, i) => (
+                <View key={t.team_id} style={[styles.listRowWrap, i < teamScores.length - 1 && styles.listRowBorder]}>
+                  <Text style={[styles.listRank, t.rank <= 3 && { color: t.rank === 1 ? "#f59e0b" : t.rank === 2 ? "#94a3b8" : "#cd7c2f" }]}>
+                    #{t.rank}
+                  </Text>
+                  <View style={[styles.listTypeDot, { backgroundColor: "#06b6d4" }]} />
+                  <View style={styles.listInfo}>
+                    <Text style={styles.listUsername}>{t.team_name}</Text>
+                    <Text style={styles.listGame}>Week of {t.week_of}</Text>
+                  </View>
+                  <Text style={styles.listScore}>{t.total_score.toLocaleString()}</Text>
+                </View>
+              ))}
+            </View>
+          )}
+        </>
+      ) : (
+        /* ── Players leaderboard ── */
+        <>
       {/* Time filter */}
       <View style={styles.filterRow}>
         {(["alltime", "season"] as TimeFilter[]).map((tf) => (
@@ -331,6 +432,8 @@ export default function LeaderboardScreen() {
           )}
         </>
       )}
+    </>
+  )}
     </>
   );
 

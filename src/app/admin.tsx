@@ -2703,14 +2703,27 @@ export default function AdminScreen() {
                     {/* Action buttons */}
                     <View style={styles.triviaGameActions}>
                       {game.status === "lobby" && (
-                        <Pressable
-                          style={[styles.triviaActionBtn, { backgroundColor: "rgba(34,197,94,0.12)", borderColor: "rgba(34,197,94,0.3)" }, triviaGameActioning === game.id && { opacity: 0.5 }]}
-                          onPress={() => handleTriviaGameAction(game.id, "start")}
-                          disabled={triviaGameActioning === game.id}
-                        >
-                          <Ionicons name="play" size={13} color="#22c55e" />
-                          <Text style={[styles.triviaActionBtnText, { color: "#22c55e" }]}>Start</Text>
-                        </Pressable>
+                        <>
+                          <Pressable
+                            style={[styles.triviaActionBtn, { backgroundColor: "rgba(34,197,94,0.12)", borderColor: "rgba(34,197,94,0.3)" }, triviaGameActioning === game.id && { opacity: 0.5 }]}
+                            onPress={() => handleTriviaGameAction(game.id, "start")}
+                            disabled={triviaGameActioning === game.id}
+                          >
+                            <Ionicons name="play" size={13} color="#22c55e" />
+                            <Text style={[styles.triviaActionBtnText, { color: "#22c55e" }]}>Start</Text>
+                          </Pressable>
+                          <Pressable
+                            style={[styles.triviaActionBtn, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.25)" }, triviaGameActioning === game.id && { opacity: 0.5 }]}
+                            onPress={() => Alert.alert("Shut Down Game", "Cancel this lobby and remove it? Players will not be able to join.", [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Shut Down", style: "destructive", onPress: () => handleTriviaGameAction(game.id, "delete") },
+                            ])}
+                            disabled={triviaGameActioning === game.id}
+                          >
+                            <Ionicons name="power" size={13} color="#ef4444" />
+                            <Text style={[styles.triviaActionBtnText, { color: "#ef4444" }]}>Shut Down</Text>
+                          </Pressable>
+                        </>
                       )}
                       {game.status === "active" && (
                         <>
@@ -2724,11 +2737,14 @@ export default function AdminScreen() {
                           </Pressable>
                           <Pressable
                             style={[styles.triviaActionBtn, { backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.25)" }, triviaGameActioning === game.id && { opacity: 0.5 }]}
-                            onPress={() => handleTriviaGameAction(game.id, "end")}
+                            onPress={() => Alert.alert("Shut Down Game", "End this trivia game now? Scores will be saved and a new game can be created.", [
+                              { text: "Cancel", style: "cancel" },
+                              { text: "Shut Down", style: "destructive", onPress: () => handleTriviaGameAction(game.id, "end") },
+                            ])}
                             disabled={triviaGameActioning === game.id}
                           >
-                            <Ionicons name="stop" size={13} color="#ef4444" />
-                            <Text style={[styles.triviaActionBtnText, { color: "#ef4444" }]}>End</Text>
+                            <Ionicons name="power" size={13} color="#ef4444" />
+                            <Text style={[styles.triviaActionBtnText, { color: "#ef4444" }]}>Shut Down</Text>
                           </Pressable>
                         </>
                       )}

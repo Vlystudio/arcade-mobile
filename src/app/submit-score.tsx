@@ -100,7 +100,7 @@ export default function SubmitScoreScreen() {
     }
     const finalScore = scoreCheck.value;
     if (!proofUri) {
-      setSubmitError("Please add a photo proof of your score.");
+      Alert.alert("Photo Required", "Please add a photo of your score screen before submitting.");
       return;
     }
 
