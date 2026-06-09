@@ -33,7 +33,7 @@ import { supabase } from "../../lib/supabase";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke" | "trivia";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke" | "trivia" | "skeeball";
 type SupportTicket = { id: string; user_id: string; status: string; created_at: string; username: string; avatar_url: string | null };
 type SupportMsg    = { id: string; sender_id: string; content: string; is_admin_msg: boolean; created_at: string };
 type ReviewTab = "pending" | "approved" | "denied";
@@ -169,6 +169,7 @@ const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
   { key: "support",     label: "Support",     icon: "headset-outline" },
   { key: "karaoke",     label: "Karaoke",     icon: "mic-outline" },
   { key: "trivia",      label: "Trivia",      icon: "help-circle-outline" },
+  { key: "skeeball",   label: "Skeeball",   icon: "bowling-ball-outline" },
   { key: "users",       label: "Users",       icon: "person-outline" },
 ];
 
@@ -334,6 +335,29 @@ export default function AdminScreen() {
   const [expandedGamePlayers, setExpandedGamePlayers] = useState<string | null>(null);
   const [kickingParticipant, setKickingParticipant] = useState<string | null>(null);
 
+  // Skeeball admin state
+  type SkeeAdminSession = {
+    id: string;
+    team_id: string;
+    team_name: string;
+    league_match_id: string | null;
+    week_of: string | null;
+    game_score: number;
+    placement: number | null;
+    league_points: number | null;
+    league_points_adjustment: number;
+    score_adjustment: number;
+    completed_at: string | null;
+  };
+  const [skeeAdminSessions, setSkeeAdminSessions] = useState<SkeeAdminSession[]>([]);
+  const [skeeAdminLoading, setSkeeAdminLoading]   = useState(false);
+  const [editingSkeeSession, setEditingSkeeSession] = useState<SkeeAdminSession | null>(null);
+  const [skeeAdjLp, setSkeeAdjLp]     = useState("");
+  const [skeeAdjScore, setSkeeAdjScore] = useState("");
+  const [skeeAdjNote, setSkeeAdjNote]   = useState("");
+  const [savingSkeeAdj, setSavingSkeeAdj] = useState(false);
+  const [skeeAdminError, setSkeeAdminError] = useState<string | null>(null);
+
   // Player list management (all tournaments)
   type RegPlayer = { id: string; user_id: string | null; guest_name: string | null; username: string; status: string };
   const [playerListTarget, setPlayerListTarget] = useState<ManageTournament | null>(null);
@@ -383,6 +407,7 @@ export default function AdminScreen() {
     if (mainTab === "support") { loadSupportTickets(); setUnreadSupport(0); }
     if (mainTab === "karaoke") loadKaraokeQueue();
     if (mainTab === "trivia") loadTriviaData();
+    if (mainTab === "skeeball") loadSkeeAdminSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
@@ -1368,6 +1393,66 @@ export default function AdminScreen() {
       g.id === gameId ? { ...g, participant_count: Math.max(0, (g.participant_count ?? 1) - 1) } : g
     ));
     setKickingParticipant(null);
+  }
+
+  async function loadSkeeAdminSessions() {
+    setSkeeAdminLoading(true);
+    setSkeeAdminError(null);
+    const { data: sessions, error } = await supabase
+      .from("skeeball_sessions")
+      .select("id, team_id, league_match_id, placement, league_points, league_points_adjustment, score_adjustment, completed_at, skeeball_ball_scores(points)")
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false })
+      .limit(100);
+    if (error) { setSkeeAdminError(error.message); setSkeeAdminLoading(false); return; }
+    const teamIds = [...new Set((sessions ?? []).map((s: any) => s.team_id).filter(Boolean))];
+    let teamMap: Record<string, string> = {};
+    if (teamIds.length > 0) {
+      const { data: teams } = await supabase.from("teams").select("id, name").in("id", teamIds);
+      (teams ?? []).forEach((t: any) => { teamMap[t.id] = t.name; });
+    }
+    const matchIds = [...new Set((sessions ?? []).map((s: any) => s.league_match_id).filter(Boolean))];
+    let matchMap: Record<string, string> = {};
+    if (matchIds.length > 0) {
+      const { data: matches } = await supabase.from("skeeball_league_matches").select("id, week_of").in("id", matchIds);
+      (matches ?? []).forEach((m: any) => { matchMap[m.id] = m.week_of; });
+    }
+    const mapped = (sessions ?? []).map((s: any) => ({
+      id: s.id,
+      team_id: s.team_id,
+      team_name: teamMap[s.team_id] ?? "Unknown",
+      league_match_id: s.league_match_id ?? null,
+      week_of: s.league_match_id ? (matchMap[s.league_match_id] ?? null) : null,
+      game_score: (s.skeeball_ball_scores ?? []).reduce((sum: number, b: any) => sum + (b.points ?? 0), 0) + (s.score_adjustment ?? 0),
+      placement: s.placement,
+      league_points: s.league_points,
+      league_points_adjustment: s.league_points_adjustment ?? 0,
+      score_adjustment: s.score_adjustment ?? 0,
+      completed_at: s.completed_at,
+    }));
+    setSkeeAdminSessions(mapped);
+    setSkeeAdminLoading(false);
+  }
+
+  async function handleSkeeAdjust() {
+    if (!editingSkeeSession || savingSkeeAdj) return;
+    setSavingSkeeAdj(true);
+    setSkeeAdminError(null);
+    const lp = parseInt(skeeAdjLp) || 0;
+    const sc = parseInt(skeeAdjScore) || 0;
+    const { data, error } = await supabase.rpc("rpc_admin_adjust_skeeball_session", {
+      p_session_id: editingSkeeSession.id,
+      p_league_points_adjustment: lp,
+      p_score_adjustment: sc,
+      p_note: skeeAdjNote.trim() || null,
+    });
+    setSavingSkeeAdj(false);
+    if (error || (data as any)?.error) {
+      setSkeeAdminError((data as any)?.error ?? error?.message ?? "Failed to save adjustment.");
+      return;
+    }
+    setEditingSkeeSession(null);
+    await loadSkeeAdminSessions();
   }
 
   async function handleRevokeQR(tournamentId: string) {
@@ -2926,6 +3011,150 @@ export default function AdminScreen() {
           )}
         </ScrollView>
       )}
+
+      {/* ── Skeeball League Admin ── */}
+      {mainTab === "skeeball" && (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={skeeAdminLoading} onRefresh={loadSkeeAdminSessions} tintColor="#06b6d4" />}
+        >
+          <View style={styles.sectionHeader}>
+            <Ionicons name="bowling-ball-outline" size={20} color="#06b6d4" />
+            <Text style={styles.sectionTitle}>Skee-Ball League Overrides</Text>
+          </View>
+          <Text style={styles.skeeAdminSubtitle}>
+            Adjust league standing points or game score for any completed session. Adjustments are additive on top of the original values.
+          </Text>
+
+          {skeeAdminError && (
+            <View style={[styles.inlineError, { marginBottom: 12 }]}>
+              <Text style={styles.inlineErrorText}>{skeeAdminError}</Text>
+            </View>
+          )}
+
+          {skeeAdminLoading && skeeAdminSessions.length === 0 ? (
+            <ActivityIndicator color="#06b6d4" style={{ marginTop: 32 }} />
+          ) : skeeAdminSessions.length === 0 ? (
+            <Text style={styles.triviaEmpty}>No completed sessions yet.</Text>
+          ) : (
+            (() => {
+              // Group by week_of (match), then no-match
+              const groups: Record<string, typeof skeeAdminSessions> = {};
+              skeeAdminSessions.forEach(s => {
+                const key = s.week_of ?? "__no_match";
+                if (!groups[key]) groups[key] = [];
+                groups[key].push(s);
+              });
+              return Object.entries(groups).map(([weekKey, sessions]) => (
+                <View key={weekKey} style={styles.skeeMatchGroup}>
+                  <Text style={styles.skeeMatchGroupLabel}>
+                    {weekKey === "__no_match" ? "No League Match" : `Week of ${weekKey}`}
+                  </Text>
+                  {sessions.map((s) => (
+                    <View key={s.id} style={styles.skeeAdminCard}>
+                      <View style={styles.skeeAdminCardTop}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.skeeAdminTeamName}>{s.team_name}</Text>
+                          <Text style={styles.skeeAdminMeta}>
+                            {s.placement != null ? `${["🥇","🥈","🥉","4th"][s.placement - 1] ?? `#${s.placement}`} place · ` : ""}
+                            Score: {s.game_score}{s.score_adjustment !== 0 ? ` (adj ${s.score_adjustment > 0 ? "+" : ""}${s.score_adjustment})` : ""}
+                          </Text>
+                          <Text style={styles.skeeAdminMeta}>
+                            League pts: {(s.league_points ?? 0) + s.league_points_adjustment}
+                            {s.league_points_adjustment !== 0 ? ` (base ${s.league_points ?? 0}, adj ${s.league_points_adjustment > 0 ? "+" : ""}${s.league_points_adjustment})` : ""}
+                          </Text>
+                        </View>
+                        <Pressable
+                          style={styles.skeeEditBtn}
+                          onPress={() => {
+                            setEditingSkeeSession(s);
+                            setSkeeAdjLp(String(s.league_points_adjustment));
+                            setSkeeAdjScore(String(s.score_adjustment));
+                            setSkeeAdjNote("");
+                            setSkeeAdminError(null);
+                          }}
+                        >
+                          <Ionicons name="pencil-outline" size={16} color="#06b6d4" />
+                          <Text style={styles.skeeEditBtnText}>Edit</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              ));
+            })()
+          )}
+
+        </ScrollView>
+      )}
+
+      {/* ── Skeeball Adjust Modal ── */}
+      <Modal visible={!!editingSkeeSession} transparent animationType="fade" onRequestClose={() => setEditingSkeeSession(null)}>
+        <View style={styles.confirmBg}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setEditingSkeeSession(null)} />
+          <View style={[styles.confirmSheet, { width: "90%" }]}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: "rgba(6,182,212,0.1)", borderColor: "rgba(6,182,212,0.25)" }]}>
+              <Ionicons name="bowling-ball-outline" size={36} color="#06b6d4" />
+            </View>
+            <Text style={styles.confirmTitle}>Adjust Session</Text>
+            <Text style={[styles.confirmBody, { marginBottom: 16 }]}>{editingSkeeSession?.team_name}</Text>
+
+            <Text style={[styles.editTournLabel, { alignSelf: "flex-start", marginBottom: 4 }]}>League Points Adjustment</Text>
+            <TextInput
+              style={[styles.editTournInput, { marginBottom: 12 }]}
+              placeholder="e.g. 2 or -1"
+              placeholderTextColor="#333"
+              value={skeeAdjLp}
+              onChangeText={setSkeeAdjLp}
+              keyboardType="numbers-and-punctuation"
+            />
+
+            <Text style={[styles.editTournLabel, { alignSelf: "flex-start", marginBottom: 4 }]}>Score Adjustment</Text>
+            <TextInput
+              style={[styles.editTournInput, { marginBottom: 12 }]}
+              placeholder="e.g. 50 or -30"
+              placeholderTextColor="#333"
+              value={skeeAdjScore}
+              onChangeText={setSkeeAdjScore}
+              keyboardType="numbers-and-punctuation"
+            />
+
+            <Text style={[styles.editTournLabel, { alignSelf: "flex-start", marginBottom: 4 }]}>Note (optional)</Text>
+            <TextInput
+              style={[styles.editTournInput, { marginBottom: 16 }]}
+              placeholder="Reason for adjustment..."
+              placeholderTextColor="#333"
+              value={skeeAdjNote}
+              onChangeText={setSkeeAdjNote}
+              maxLength={200}
+              multiline
+            />
+
+            {skeeAdminError && (
+              <View style={[styles.inlineError, { marginBottom: 12 }]}>
+                <Text style={styles.inlineErrorText}>{skeeAdminError}</Text>
+              </View>
+            )}
+
+            <View style={styles.confirmBtns}>
+              <Pressable style={styles.confirmCancel} onPress={() => setEditingSkeeSession(null)}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmActionBtn, { backgroundColor: "#06b6d4" }, savingSkeeAdj && { opacity: 0.5 }]}
+                onPress={handleSkeeAdjust}
+                disabled={savingSkeeAdj}
+              >
+                {savingSkeeAdj
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <Text style={[styles.confirmActionText, { color: "#000" }]}>Save</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Trivia QR Modal ── */}
       <Modal visible={!!triviaQrGame} transparent animationType="fade" onRequestClose={() => setTriviaQrGame(null)}>
@@ -4532,4 +4761,15 @@ const styles = StyleSheet.create({
   triviaQOpt: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#1a1a1a" },
   triviaQOptCorrect: { borderColor: "rgba(34,197,94,0.4)", backgroundColor: "rgba(34,197,94,0.07)" },
   triviaQOptText: { color: "#555", fontSize: 11, fontWeight: "700" },
+
+  // ── Skeeball Admin ───────────────────────────────────────────────────────────
+  skeeAdminSubtitle: { color: "#555", fontSize: 13, lineHeight: 19, marginBottom: 16 },
+  skeeMatchGroup: { marginBottom: 20 },
+  skeeMatchGroupLabel: { color: "#06b6d4", fontSize: 12, fontWeight: "900", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8 },
+  skeeAdminCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e" },
+  skeeAdminCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
+  skeeAdminTeamName: { color: "#fff", fontSize: 15, fontWeight: "900", marginBottom: 3 },
+  skeeAdminMeta: { color: "#555", fontSize: 12, marginBottom: 2 },
+  skeeEditBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 11, borderWidth: 1, borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.07)" },
+  skeeEditBtnText: { color: "#06b6d4", fontSize: 12, fontWeight: "800" },
 });
