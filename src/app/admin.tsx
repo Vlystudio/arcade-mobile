@@ -1400,7 +1400,7 @@ export default function AdminScreen() {
     setSkeeAdminError(null);
     const { data: sessions, error } = await supabase
       .from("skeeball_sessions")
-      .select("id, team_id, league_match_id, placement, league_points, league_points_adjustment, score_adjustment, completed_at, skeeball_ball_scores(points)")
+      .select("id, team_id, league_match_id, placement, league_points, league_points_adjustment, score_adjustment, completed_at, skeeball_ball_scores(score)")
       .eq("status", "completed")
       .order("completed_at", { ascending: false })
       .limit(100);
@@ -1423,7 +1423,7 @@ export default function AdminScreen() {
       team_name: teamMap[s.team_id] ?? "Unknown",
       league_match_id: s.league_match_id ?? null,
       week_of: s.league_match_id ? (matchMap[s.league_match_id] ?? null) : null,
-      game_score: (s.skeeball_ball_scores ?? []).reduce((sum: number, b: any) => sum + (b.points ?? 0), 0) + (s.score_adjustment ?? 0),
+      game_score: (s.skeeball_ball_scores ?? []).reduce((sum: number, b: any) => sum + (b.score ?? 0), 0) + (s.score_adjustment ?? 0),
       placement: s.placement,
       league_points: s.league_points,
       league_points_adjustment: s.league_points_adjustment ?? 0,
