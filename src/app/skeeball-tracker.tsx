@@ -17,8 +17,16 @@ import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
 
 const LANE_COUNT = 6;
-const BALLS_PER_PLAYER = 3;
+const TOTAL_BALLS = 9;   // always 9 per game regardless of player count
 const PLAYERS_PER_GAME = 3;
+
+// Distribute 9 balls across n players as evenly as possible.
+// Last player absorbs any remainder so total is always exactly 9.
+// 1 player → 9, 2 players → 4+5, 3 players → 3+3+3
+function getBallsForPlayer(playerIdx: number, totalPlayers: number): number {
+  const base = Math.floor(TOTAL_BALLS / totalPlayers);
+  return playerIdx === totalPlayers - 1 ? base + (TOTAL_BALLS % totalPlayers) : base;
+}
 const MIN_PLAYERS = 1;
 const INACTIVITY_WARNING_MS  = 8 * 60 * 1000;
 const INACTIVITY_TIMEOUT_MS  = 10 * 60 * 1000;
@@ -79,14 +87,15 @@ export default function SkeeballTrackerScreen() {
 
   const iAmPlayer = sessionPlayers.some((p) => p.player_user_id === user?.id);
   const allBallsSubmitted = sessionPlayers.length > 0 && sessionPlayers.every(
-    (sp) => ballScores.filter((b) => b.player_user_id === sp.player_user_id).length >= BALLS_PER_PLAYER
+    (sp, i) => ballScores.filter((b) => b.player_user_id === sp.player_user_id).length >= getBallsForPlayer(i, sessionPlayers.length)
   );
   const sessionDone = mySession?.status === "completed";
   const takenLanes = new Set(allActiveSessions.map((s) => s.lane_number));
 
-  const playerProgress = sessionPlayers.map((sp) => ({
+  const playerProgress = sessionPlayers.map((sp, i) => ({
     ...sp,
     balls: ballScores.filter((b) => b.player_user_id === sp.player_user_id).length,
+    expectedBalls: getBallsForPlayer(i, sessionPlayers.length),
   }));
 
   useEffect(() => {
@@ -172,7 +181,7 @@ export default function SkeeballTrackerScreen() {
   useEffect(() => {
     if (!mySession || mySession.status !== "active" || sessionPlayers.length === 0) return;
     const allIn = sessionPlayers.every(
-      (sp) => ballScores.filter((b) => b.player_user_id === sp.player_user_id).length >= BALLS_PER_PLAYER
+      (sp, i) => ballScores.filter((b) => b.player_user_id === sp.player_user_id).length >= getBallsForPlayer(i, sessionPlayers.length)
     );
     if (allIn) completeSession();
   }, [ballScores, sessionPlayers, mySession]);
@@ -238,7 +247,7 @@ export default function SkeeballTrackerScreen() {
     }
     setPlayerBalls(initialBalls);
     // Resume at first player who hasn't finished all balls
-    const firstIdx = players.findIndex((sp) => (initialBalls[sp.player_user_id]?.length ?? 0) < BALLS_PER_PLAYER);
+    const firstIdx = players.findIndex((sp, i) => (initialBalls[sp.player_user_id]?.length ?? 0) < getBallsForPlayer(i, players.length));
     setCurrentPlayerIdx(firstIdx >= 0 ? firstIdx : 0);
 
     // Realtime for this session's ball scores
@@ -287,7 +296,7 @@ export default function SkeeballTrackerScreen() {
   async function submitBalls() {
     if (!user || !mySession) return;
     const allLocalDone = sessionPlayers.every(
-      (sp) => (playerBalls[sp.player_user_id] ?? []).length >= BALLS_PER_PLAYER
+      (sp, i) => (playerBalls[sp.player_user_id] ?? []).length >= getBallsForPlayer(i, sessionPlayers.length)
     );
     if (!allLocalDone) { setSubmitError("Enter all ball scores before submitting."); return; }
     setSubmitting(true);
@@ -332,10 +341,11 @@ export default function SkeeballTrackerScreen() {
     const sp = sessionPlayers[currentPlayerIdx];
     if (!sp) return;
     const current = playerBalls[sp.player_user_id] ?? [];
-    if (current.length >= BALLS_PER_PLAYER) return;
+    const maxBalls = getBallsForPlayer(currentPlayerIdx, sessionPlayers.length);
+    if (current.length >= maxBalls) return;
     const updated = [...current, pts];
     setPlayerBalls((prev) => ({ ...prev, [sp.player_user_id]: updated }));
-    if (updated.length >= BALLS_PER_PLAYER && currentPlayerIdx < sessionPlayers.length - 1) {
+    if (updated.length >= maxBalls && currentPlayerIdx < sessionPlayers.length - 1) {
       setCurrentPlayerIdx((idx) => idx + 1);
     }
   }
@@ -573,14 +583,15 @@ export default function SkeeballTrackerScreen() {
 
   if (mySession && iAmPlayer && !allBallsSubmitted) {
     const allLocalDone = sessionPlayers.every(
-      (sp) => (playerBalls[sp.player_user_id] ?? []).length >= BALLS_PER_PLAYER
+      (sp, i) => (playerBalls[sp.player_user_id] ?? []).length >= getBallsForPlayer(i, sessionPlayers.length)
     );
     const currentSp = sessionPlayers[currentPlayerIdx];
     const currentBalls = playerBalls[currentSp?.player_user_id] ?? [];
     const currentTotal = currentBalls.reduce((s, b) => s + b, 0);
+    const currentMaxBalls = getBallsForPlayer(currentPlayerIdx, sessionPlayers.length);
     const globalBallStart = sessionPlayers
       .slice(0, currentPlayerIdx)
-      .reduce((sum) => sum + BALLS_PER_PLAYER, 0);
+      .reduce((sum, _, i) => sum + getBallsForPlayer(i, sessionPlayers.length), 0);
     const grandTotal = sessionPlayers.reduce(
       (sum, sp) => sum + (playerBalls[sp.player_user_id] ?? []).reduce((s, b) => s + b, 0), 0
     );
@@ -607,7 +618,7 @@ export default function SkeeballTrackerScreen() {
                 <Text style={s.playerSectionTotal}>{currentTotal} pts</Text>
               </View>
 
-              {currentBalls.length < BALLS_PER_PLAYER ? (
+              {currentBalls.length < currentMaxBalls ? (
                 <>
                   <Text style={s.ringHint}>
                     Ball {globalBallStart + currentBalls.length + 1} — pick ring
@@ -655,7 +666,7 @@ export default function SkeeballTrackerScreen() {
             const isActive = playerIdx === currentPlayerIdx && !allLocalDone;
             if (isActive) return null;
             const spBalls = playerBalls[sp.player_user_id] ?? [];
-            const isDone = spBalls.length >= BALLS_PER_PLAYER;
+            const isDone = spBalls.length >= getBallsForPlayer(playerIdx, sessionPlayers.length);
             const spTotal = spBalls.reduce((s, b) => s + b, 0);
             return (
               <View key={sp.player_user_id} style={[s.playerSection, !isDone && s.playerSectionDim]}>
@@ -807,8 +818,8 @@ export default function SkeeballTrackerScreen() {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function ProgressRow({ pp, isMe, card }: { pp: { player_user_id: string; username: string; avatar_url: string | null; balls: number }; isMe: boolean; card?: boolean }) {
-  const done = pp.balls >= BALLS_PER_PLAYER;
+function ProgressRow({ pp, isMe, card }: { pp: { player_user_id: string; username: string; avatar_url: string | null; balls: number; expectedBalls: number }; isMe: boolean; card?: boolean }) {
+  const done = pp.balls >= pp.expectedBalls;
   return (
     <View style={[s.progressRow, card && s.progressCard]}>
       <Avatar uri={pp.avatar_url} name={pp.username} size={36} radius={11} />
@@ -817,10 +828,10 @@ function ProgressRow({ pp, isMe, card }: { pp: { player_user_id: string; usernam
           <Text style={s.progressName}>{pp.username}</Text>
           {isMe && <View style={s.youChip}><Text style={s.youChipText}>You</Text></View>}
         </View>
-        <Text style={s.progressSub}>{pp.balls}/{BALLS_PER_PLAYER} balls submitted</Text>
+        <Text style={s.progressSub}>{pp.balls}/{pp.expectedBalls} balls submitted</Text>
       </View>
       <View style={{ flexDirection: "row", gap: 5, alignItems: "center" }}>
-        {Array.from({ length: BALLS_PER_PLAYER }, (_, i) => (
+        {Array.from({ length: pp.expectedBalls }, (_, i) => (
           <View key={i} style={[s.ballDot, i < pp.balls && s.ballDotFilled]} />
         ))}
         {done && <Ionicons name="checkmark-circle" size={18} color="#22c55e" style={{ marginLeft: 4 }} />}
