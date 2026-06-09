@@ -68,6 +68,7 @@ export default function ScanLaneScreen() {
   const [pendingSkeeballLane, setPendingSkeeballLane] = useState<SkeeballLanePreview | null>(null);
   const [cameraZoom, setCameraZoom] = useState(0);
   const [openingScoring, setOpeningScoring] = useState(false);
+  const [scoringHref, setScoringHref] = useState<string | null>(null);
 
   const routeLaneToken = useMemo(() => {
     const raw = lane_token ?? routeToken;
@@ -189,6 +190,7 @@ export default function ScanLaneScreen() {
     setPendingTokenWithoutTeam(null);
     setManualToken("");
     setOpeningScoring(false);
+    setScoringHref(null);
     setScanned(false);
   };
 
@@ -351,22 +353,21 @@ export default function ScanLaneScreen() {
       fromQr: "1",
     });
     const href = `/skeeball-tracker?${params.toString()}`;
+    setScoringHref(href);
     setOpeningScoring(true);
     setPendingSkeeballLane(null);
     setPendingTokenWithoutTeam(null);
     setScanned(true);
-    router.replace(href as any);
 
-    if (process.env.EXPO_OS === "web") {
-      setTimeout(() => {
-        const webGlobal = globalThis as typeof globalThis & {
-          location?: { pathname: string; assign: (url: string) => void };
-        };
-        if (webGlobal.location?.pathname.includes("scan-lane")) {
-          webGlobal.location.assign(href);
-        }
-      }, 300);
+    const webGlobal = globalThis as typeof globalThis & {
+      location?: { assign: (url: string) => void };
+    };
+    if (webGlobal.location?.assign) {
+      webGlobal.location.assign(href);
+      return;
     }
+
+    router.replace(href as any);
   };
 
   const setZoomPreset = (value: number) => {
@@ -534,6 +535,25 @@ export default function ScanLaneScreen() {
             <ActivityIndicator color="#06b6d4" size="small" />
             <Text style={styles.statusText}>{openingScoring ? "Opening scoring..." : "Checking in..."}</Text>
           </View>
+        )}
+
+        {openingScoring && scoringHref && (
+          <Pressable
+            style={styles.manualOpenBtn}
+            onPress={() => {
+              const webGlobal = globalThis as typeof globalThis & {
+                location?: { assign: (url: string) => void };
+              };
+              if (webGlobal.location?.assign) {
+                webGlobal.location.assign(scoringHref);
+              } else {
+                router.replace(scoringHref as any);
+              }
+            }}
+          >
+            <Ionicons name="open-outline" size={16} color="#000" />
+            <Text style={styles.manualOpenBtnText}>Open Scoring</Text>
+          </Pressable>
         )}
 
         {!routeLaneToken && !loading && !openingScoring && !cameraReady && !cameraError && (
@@ -720,6 +740,17 @@ const styles = StyleSheet.create({
 
   statusRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   statusText: { color: "#888", fontSize: 14 },
+  manualOpenBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#06b6d4",
+    borderRadius: 12,
+    paddingVertical: 13,
+    marginBottom: 12,
+  },
+  manualOpenBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
   inlineNotice: { flexDirection: "row", alignItems: "flex-start", gap: 8, backgroundColor: "#101010", borderRadius: 12, padding: 12, borderWidth: 1, borderColor: "#222", marginBottom: 12 },
   inlineNoticeText: { color: "#aaa", fontSize: 13, lineHeight: 18, flex: 1 },
 
