@@ -41,7 +41,7 @@ const RING_COLORS: Record<number, string> = {
   10: "#555", 20: "#555", 30: "#3b82f6", 40: "#8b5cf6", 50: "#22c55e", 100: "#06b6d4",
 };
 
-type LaneSession = { id: string; team_id: string; lane_number: number; status: string; team_name?: string; last_activity_at?: string };
+type LaneSession = { id: string; team_id: string; lane_number: number; status: string; team_name?: string; last_activity_at?: string; league_match_id?: string | null; placement?: number | null; league_points?: number | null };
 type SessionPlayer = { session_id: string; player_user_id: string; username: string; avatar_url: string | null };
 type BallScore = { id: string; session_id: string; player_user_id: string; ball_number: number; score: number };
 type Member = { user_id: string; username: string; avatar_url: string | null; role: string };
@@ -193,7 +193,7 @@ export default function SkeeballTrackerScreen() {
     setError(null);
     try {
       const [sessRes, memRes, profileRes] = await Promise.all([
-        supabase.from("skeeball_sessions").select("id, team_id, lane_number, status, last_activity_at, teams(name)").eq("status", "active"),
+        supabase.from("skeeball_sessions").select("id, team_id, lane_number, status, last_activity_at, league_match_id, placement, league_points, teams(name)").eq("status", "active"),
         supabase.from("team_members").select("user_id, role, profiles(username, avatar_url)").eq("team_id", teamId),
         supabase.from("profiles").select("is_admin").eq("id", user!.id).single(),
       ]);
@@ -203,6 +203,7 @@ export default function SkeeballTrackerScreen() {
         id: s.id, team_id: s.team_id, lane_number: s.lane_number, status: s.status,
         team_name: Array.isArray(s.teams) ? s.teams[0]?.name : s.teams?.name,
         last_activity_at: s.last_activity_at,
+        league_match_id: s.league_match_id, placement: s.placement, league_points: s.league_points,
       }));
       setAllActiveSessions(sessions);
 
@@ -269,9 +270,15 @@ export default function SkeeballTrackerScreen() {
     setStarting(true);
     setError(null);
     try {
+      // Get or create a league match for this week's session
+      const { data: matchData } = await supabase.rpc("rpc_skeeball_get_or_create_match", {
+        p_week_of: getMondayDate(),
+      });
+      const matchId: string | null = (matchData as any)?.match_id ?? null;
+
       const { data: session, error: sErr } = await supabase
         .from("skeeball_sessions")
-        .insert({ team_id: teamId, lane_number: selectedLane, week_of: getMondayDate(), created_by: user.id, status: "active", last_activity_at: new Date().toISOString() })
+        .insert({ team_id: teamId, lane_number: selectedLane, week_of: getMondayDate(), created_by: user.id, status: "active", last_activity_at: new Date().toISOString(), league_match_id: matchId })
         .select()
         .single();
       if (sErr) throw sErr;
@@ -281,7 +288,7 @@ export default function SkeeballTrackerScreen() {
         .insert(selectedPlayers.map((pid) => ({ session_id: session.id, player_user_id: pid })));
       if (pErr) throw pErr;
 
-      const newSession: LaneSession = { id: session.id, team_id: teamId, lane_number: selectedLane, status: "active", last_activity_at: new Date().toISOString() };
+      const newSession: LaneSession = { id: session.id, team_id: teamId, lane_number: selectedLane, status: "active", last_activity_at: new Date().toISOString(), league_match_id: matchId };
       setMySession(newSession);
       await loadSessionData(session.id);
     } catch (e: any) {
@@ -419,6 +426,24 @@ export default function SkeeballTrackerScreen() {
       );
     }
     setMySession((prev) => prev ? { ...prev, status: "completed" } : prev);
+
+    // Try to finalize the league match — awards placement + league_points to all teams
+    if (mySession.league_match_id) {
+      const { data: finalizeResult } = await supabase.rpc("rpc_skeeball_finalize_match", {
+        p_match_id: mySession.league_match_id,
+      });
+      if ((finalizeResult as any)?.ok) {
+        // Reload this session to get placement and league_points
+        const { data: updatedSession } = await supabase
+          .from("skeeball_sessions")
+          .select("placement, league_points")
+          .eq("id", mySession.id)
+          .single();
+        if (updatedSession) {
+          setMySession((prev) => prev ? { ...prev, placement: updatedSession.placement, league_points: updatedSession.league_points } : prev);
+        }
+      }
+    }
   }
 
   function togglePlayer(uid: string) {
@@ -486,6 +511,11 @@ export default function SkeeballTrackerScreen() {
 
   if (sessionDone) {
     const teamTotal = sessionPlayers.reduce((sum, sp) => sum + ballScores.filter((b) => b.player_user_id === sp.player_user_id).reduce((s, b) => s + b.score, 0), 0);
+    const placement = mySession?.placement ?? null;
+    const leaguePoints = mySession?.league_points ?? null;
+    const placementEmoji = placement === 1 ? "🥇" : placement === 2 ? "🥈" : placement === 3 ? "🥉" : placement === 4 ? "4️⃣" : null;
+    const placementLabel = placement === 1 ? "1st Place" : placement === 2 ? "2nd Place" : placement === 3 ? "3rd Place" : placement === 4 ? "4th Place" : null;
+    const placementColor = placement === 1 ? "#f59e0b" : placement === 2 ? "#94a3b8" : placement === 3 ? "#cd7c2f" : "#555";
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         <View style={s.topBar}><Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable></View>
@@ -493,6 +523,17 @@ export default function SkeeballTrackerScreen() {
           <View style={s.trophyWrap}><Ionicons name="trophy" size={48} color="#f59e0b" /></View>
           <Text style={s.bigTitle}>Game Complete!</Text>
           <Text style={s.bigSub}>Scores submitted for review.</Text>
+          {placementLabel && (
+            <View style={[s.placementBadge, { borderColor: placementColor + "44" }]}>
+              <Text style={s.placementEmoji}>{placementEmoji}</Text>
+              <View>
+                <Text style={[s.placementLabel, { color: placementColor }]}>{placementLabel}</Text>
+                {leaguePoints != null && (
+                  <Text style={s.placementPts}>+{leaguePoints} league point{leaguePoints !== 1 ? "s" : ""}</Text>
+                )}
+              </View>
+            </View>
+          )}
           <View style={s.resultCard}>
             {sessionPlayers.map((sp) => {
               const pts = ballScores.filter((b) => b.player_user_id === sp.player_user_id).reduce((sum, b) => sum + b.score, 0);
@@ -844,6 +885,10 @@ const s = StyleSheet.create({
   spectatorNote: { color: "#555", fontSize: 14, textAlign: "center", marginBottom: 24 },
 
   trophyWrap: { width: 96, height: 96, borderRadius: 48, backgroundColor: "rgba(245,158,11,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 24, borderWidth: 1, borderColor: "rgba(245,158,11,0.25)" },
+  placementBadge: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#111", borderRadius: 16, paddingHorizontal: 20, paddingVertical: 14, borderWidth: 1, marginTop: 4, marginBottom: 4 },
+  placementEmoji: { fontSize: 32 },
+  placementLabel: { fontSize: 20, fontWeight: "900" },
+  placementPts: { color: "#555", fontSize: 13, fontWeight: "600", marginTop: 2 },
   waitWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 24 },
 
   resultCard: { width: "100%", backgroundColor: "#111", borderRadius: 20, padding: 20, marginTop: 24, borderWidth: 1, borderColor: "#1e1e1e" },
