@@ -42,6 +42,9 @@ yarn-error.*
 
 app-example
 
+# generated live QR sheets contain active lane tokens
+skeeball-lane-qrs/
+
 # generated native folders
 /ios
 /android

@@ -488,13 +488,22 @@ export default function TeamDetailScreen() {
             {seasons.length > 0 ? `  ·  ${seasons.length} season${seasons.length !== 1 ? "s" : ""}` : ""}
           </Text>
           {isTeamMember && (isMonday || isAdmin) && (
-            <Pressable
-              style={styles.trackBtn}
-              onPress={() => router.push({ pathname: "/scan-lane" as any, params: { mode: "skeeball", teamId, teamName } })}
-            >
-              <Ionicons name="qr-code-outline" size={16} color="#000" />
-              <Text style={styles.trackBtnText}>Scan Lane QR</Text>
-            </Pressable>
+            <View style={styles.trackActions}>
+              <Pressable
+                style={styles.trackBtn}
+                onPress={() => router.push({ pathname: "/scan-lane" as any, params: { mode: "skeeball", teamId, teamName } })}
+              >
+                <Ionicons name="qr-code-outline" size={16} color="#000" />
+                <Text style={styles.trackBtnText}>Scan Lane QR</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.trackBtn, styles.trackManualBtn]}
+                onPress={() => router.push({ pathname: "/skeeball-tracker" as any, params: { teamId, teamName } })}
+              >
+                <Ionicons name="bowling-ball-outline" size={16} color="#06b6d4" />
+                <Text style={styles.trackManualBtnText}>Manual Entry</Text>
+              </Pressable>
+            </View>
           )}
           <View style={styles.slotPrefRow}>
             <Ionicons name="time-outline" size={14} color="#444" />
@@ -909,12 +918,15 @@ const styles = StyleSheet.create({
   },
   teamTitle: { color: "#fff", fontSize: 28, fontWeight: "900", letterSpacing: -0.4, marginBottom: 5 },
   teamSub: { color: "#555", fontSize: 13 },
+  trackActions: { flexDirection: "row", gap: 10, marginTop: 16, flexWrap: "wrap", justifyContent: "center" },
   trackBtn: {
     flexDirection: "row", alignItems: "center", gap: 7,
     backgroundColor: "#06b6d4", borderRadius: 20,
-    paddingHorizontal: 20, paddingVertical: 10, marginTop: 16,
+    paddingHorizontal: 18, paddingVertical: 10,
   },
   trackBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
+  trackManualBtn: { backgroundColor: "rgba(6,182,212,0.1)", borderWidth: 1, borderColor: "rgba(6,182,212,0.3)" },
+  trackManualBtnText: { color: "#06b6d4", fontWeight: "900", fontSize: 14 },
 
   seasonPill: {
     flexDirection: "row", alignItems: "center", gap: 10,
