@@ -456,9 +456,9 @@ export default function SkeeballTrackerScreen() {
     </Modal>
   );
 
-  // ─── Not Monday ───────────────────────────────────────────────────────────────
+  // ─── Not Monday (admins can always access for testing) ───────────────────────
 
-  if (!isMonday()) {
+  if (!isMonday() && !isAdmin) {
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         <View style={s.topBar}><Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable></View>
