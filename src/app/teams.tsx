@@ -4,6 +4,7 @@ import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   Platform,
   Pressable,
@@ -37,8 +38,11 @@ type JoinRequest = {
 };
 
 export default function TeamsScreen() {
+  const MAX_TEAMS = 3;
+
   const { user, loading: authLoading } = useRequireAuth();
   const [teams, setTeams] = useState<Team[]>([]);
+  const [myTeamCount, setMyTeamCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState("");
@@ -160,12 +164,17 @@ export default function TeamsScreen() {
     }
 
     setTeams(enriched);
+    setMyTeamCount(myIds.size);
     setLoading(false);
     setRefreshing(false);
   }
 
   async function handleRequestJoin() {
     if (!user || !requestJoinTeam) return;
+    if (myTeamCount >= MAX_TEAMS) {
+      setRequestError(`You're already in ${MAX_TEAMS} teams. Leave a team before joining another.`);
+      return;
+    }
     setRequestError(null);
     setSubmittingRequest(true);
     const { error } = await supabase.from("team_requests").upsert(
@@ -196,6 +205,13 @@ export default function TeamsScreen() {
 
   async function handleAcceptInvite(teamId: string) {
     if (!user) return;
+    if (myTeamCount >= MAX_TEAMS) {
+      Alert.alert(
+        "Team Limit Reached",
+        `You can only be in ${MAX_TEAMS} teams at a time. Leave a team before accepting this invite.`
+      );
+      return;
+    }
     await supabase.from("team_requests").update({ status: "approved" }).eq("team_id", teamId).eq("user_id", user.id);
     await supabase.from("team_members").insert({ team_id: teamId, user_id: user.id, role: "member" });
     await loadTeams();
@@ -276,6 +292,10 @@ export default function TeamsScreen() {
     const name = validateTeamName(newTeamName);
     if (!user || !name.ok) {
       if (!name.ok) setCreateError(name.error);
+      return;
+    }
+    if (myTeamCount >= MAX_TEAMS) {
+      setCreateError(`You're already in ${MAX_TEAMS} teams. Leave a team before creating a new one.`);
       return;
     }
     setCreating(true);
@@ -563,7 +583,13 @@ export default function TeamsScreen() {
                     <Text style={styles.pendingBtnText}>Pending</Text>
                   </Pressable>
                 ) : (
-                  <Pressable style={styles.requestBtn} onPress={() => { setRequestError(null); setRequestMessage(""); setRequestJoinTeam({ id: t.id, name: t.name }); }}>
+                  <Pressable style={styles.requestBtn} onPress={() => {
+                    if (myTeamCount >= MAX_TEAMS) {
+                      Alert.alert("Team Limit Reached", `You can only be in ${MAX_TEAMS} teams at a time. Leave a team before joining another.`);
+                      return;
+                    }
+                    setRequestError(null); setRequestMessage(""); setRequestJoinTeam({ id: t.id, name: t.name });
+                  }}>
                     <Text style={styles.requestBtnText}>Request</Text>
                   </Pressable>
                 )}
