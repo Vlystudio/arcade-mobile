@@ -7,7 +7,6 @@ import { useEffect, useState } from "react";
 import { useAdmin } from "../context/admin-context";
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -19,6 +18,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { Avatar } from "../components/avatar";
@@ -28,6 +28,7 @@ import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
 import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
+import { reportContent, type ReportReason } from "../../lib/report-content";
 import { validateCommentContent, validatePostContent } from "../../lib/validation";
 import { AppTour } from "../components/app-tour";
 import { useTour } from "../hooks/use-tour";
@@ -106,6 +107,12 @@ export default function FeedScreen() {
   const [editPhotoRemoved, setEditPhotoRemoved] = useState(false);
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  // Report post
+  const [reportPostId, setReportPostId] = useState<string | null>(null);
+  const [reportReason, setReportReason] = useState<ReportReason | null>(null);
+  const [reportDetails, setReportDetails] = useState("");
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   const [userRole, setUserRole] = useState<AppRole>("user");
   const { tourVisible, dismissTour } = useTour(user?.id);
@@ -251,6 +258,31 @@ export default function FeedScreen() {
     setEditPhotoUri(null);
     setEditPhotoRemoved(false);
     setEditError(null);
+  }
+
+  function openReport(postId: string) {
+    setReportPostId(postId);
+    setReportReason(null);
+    setReportDetails("");
+  }
+
+  function closeReport() {
+    setReportPostId(null);
+    setReportReason(null);
+    setReportDetails("");
+  }
+
+  async function submitReport() {
+    if (!reportPostId || !reportReason) return;
+    setReportSubmitting(true);
+    const result = await reportContent("post", reportPostId, reportReason, reportDetails.trim() || undefined);
+    setReportSubmitting(false);
+    if (result.ok) {
+      closeReport();
+      Alert.alert("Report submitted", "Thanks for letting us know — our team will review this.");
+    } else {
+      Alert.alert("Couldn't submit report", result.message);
+    }
   }
 
   async function pickEditPhoto(source: "camera" | "library") {
@@ -584,6 +616,7 @@ export default function FeedScreen() {
                 onImagePress={(uri) => setLightboxUri(uri)}
                 onComment={() => { setCommentPostId(post.id); setComments([]); setNewComment(""); loadComments(post.id); }}
                 onShare={() => openShare(post)}
+                onReport={() => openReport(post.id)}
               />
             ))
           )}
@@ -784,6 +817,53 @@ export default function FeedScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
+      {/* Report post modal */}
+      <Modal visible={reportPostId !== null} transparent animationType="slide" onRequestClose={closeReport}>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+          <View style={styles.modalBg}>
+            <Pressable style={styles.modalDismiss} onPress={closeReport} />
+            <View style={styles.modalSheet}>
+              <View style={styles.modalHandle} />
+              <View style={styles.modalTop}>
+                <Text style={styles.editModalTitle}>Report Post</Text>
+                <Pressable style={styles.modalCloseBtn} onPress={closeReport}>
+                  <Ionicons name="close" size={18} color="#555" />
+                </Pressable>
+              </View>
+
+              <Text style={styles.reportPrompt}>Why are you reporting this post?</Text>
+
+              {REPORT_REASONS.map((r) => (
+                <Pressable key={r.value} style={styles.reportOption} onPress={() => setReportReason(r.value)}>
+                  <View style={[styles.reportRadio, reportReason === r.value && styles.reportRadioActive]}>
+                    {reportReason === r.value && <View style={styles.reportRadioDot} />}
+                  </View>
+                  <Text style={styles.reportOptionText}>{r.label}</Text>
+                </Pressable>
+              ))}
+
+              <TextInput
+                style={[styles.postInput, styles.reportDetailsInput]}
+                placeholder="Additional details (optional)"
+                placeholderTextColor="#333"
+                multiline
+                value={reportDetails}
+                onChangeText={setReportDetails}
+                maxLength={500}
+              />
+
+              <Pressable
+                style={[styles.postBtn, styles.reportSubmitBtn, (!reportReason || reportSubmitting) && styles.postBtnOff]}
+                onPress={submitReport}
+                disabled={!reportReason || reportSubmitting}
+              >
+                <Text style={styles.postBtnText}>{reportSubmitting ? "Submitting…" : "Submit Report"}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* Create post modal */}
       <Modal visible={createVisible} transparent animationType="slide" onRequestClose={() => setCreateVisible(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
@@ -884,7 +964,7 @@ export default function FeedScreen() {
   );
 }
 
-function PostCard({ post, canDelete, canEdit, onLike, onDelete, onEdit, onImagePress, onComment, onShare }: {
+function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, onImagePress, onComment, onShare, onReport }: {
   post: Post;
   isMe: boolean;
   canDelete: boolean;
@@ -895,6 +975,7 @@ function PostCard({ post, canDelete, canEdit, onLike, onDelete, onEdit, onImageP
   onImagePress: (uri: string) => void;
   onComment: () => void;
   onShare: () => void;
+  onReport: () => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const isAnnouncement = post.post_type === "announcement";
@@ -918,7 +999,7 @@ function PostCard({ post, canDelete, canEdit, onLike, onDelete, onEdit, onImageP
           </View>
           <Text style={styles.postTime}>{relTime(post.created_at)}</Text>
         </View>
-        {(canEdit || canDelete) && (
+        {(canEdit || canDelete || !isMe) && (
           <Pressable style={styles.postMenuBtn} onPress={() => setMenuOpen(true)} hitSlop={8}>
             <Ionicons name="ellipsis-horizontal" size={18} color="#444" />
           </Pressable>
@@ -1006,6 +1087,12 @@ function PostCard({ post, canDelete, canEdit, onLike, onDelete, onEdit, onImageP
               <Text style={[styles.menuItemText, styles.menuItemDestructive]}>Delete Post</Text>
             </Pressable>
           )}
+          {!isMe && (
+            <Pressable style={styles.menuItem} onPress={() => { setMenuOpen(false); onReport(); }}>
+              <Ionicons name="flag-outline" size={16} color="#f59e0b" />
+              <Text style={styles.menuItemText}>Report Post</Text>
+            </Pressable>
+          )}
           <View style={styles.menuDivider} />
           <Pressable style={styles.menuItem} onPress={() => setMenuOpen(false)}>
             <Text style={styles.menuCancelText}>Cancel</Text>
@@ -1016,6 +1103,15 @@ function PostCard({ post, canDelete, canEdit, onLike, onDelete, onEdit, onImageP
     </>
   );
 }
+
+const REPORT_REASONS: { value: ReportReason; label: string }[] = [
+  { value: "inappropriate_picture", label: "Inappropriate picture" },
+  { value: "inappropriate_text", label: "Inappropriate text" },
+  { value: "racism", label: "Racism / hate speech" },
+  { value: "violence", label: "Violence" },
+  { value: "nudity", label: "Nudity" },
+  { value: "other", label: "Other" },
+];
 
 function relTime(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -1180,6 +1276,19 @@ const styles = StyleSheet.create({
   },
   postBtnOff: { backgroundColor: "#1a1a1a" },
   postBtnText: { color: "#000", fontWeight: "900", fontSize: 15 },
+
+  reportPrompt: { color: "#888", fontSize: 13, marginBottom: 12 },
+  reportOption: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
+  reportRadio: {
+    width: 20, height: 20, borderRadius: 10,
+    borderWidth: 2, borderColor: "#333",
+    alignItems: "center", justifyContent: "center",
+  },
+  reportRadioActive: { borderColor: "#06b6d4" },
+  reportRadioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#06b6d4" },
+  reportOptionText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  reportDetailsInput: { minHeight: 70, marginTop: 12 },
+  reportSubmitBtn: { alignItems: "center", marginTop: 4 },
   postErrorBox: {
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 10,

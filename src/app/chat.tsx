@@ -11,7 +11,6 @@ import Animated, {
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Platform,
   Pressable,
@@ -21,6 +20,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { Avatar } from "../components/avatar";

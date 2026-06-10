@@ -138,6 +138,7 @@ Run these SQL scripts **in order** in the Supabase SQL Editor:
 | 19 | `scripts/security-cleanup.sql` | Production hardening: remove QR legacy fallback, fix storage cleanup RPC auth, deprecate `lanes.lane_qr_token` |
 | 20 | `scripts/profile-creation-fix.sql` | Backfill missing `profiles` rows and harden `handle_new_user()` against silent failures |
 | 21 | `scripts/rate-limit-log-fix.sql` | Recreate the missing `rate_limit_log` table required by `check_and_log_rate_limit()` |
+| 22 | `scripts/content-reports.sql` | User-facing content reporting: `content_reports` table, `rpc_report_content`, admin review queue RPCs |
 
 > ⚠ **`rpc_check_in` and `rpc_admin_rotate_lane_token` source of truth:**
 > Script 5 (`rpc-check-in.sql`) and script 10 (`security-hardening-2.sql`) used
