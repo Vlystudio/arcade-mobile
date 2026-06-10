@@ -2,9 +2,9 @@ name: Security
 
 on:
   push:
-    branches: [master, main]
+    branches: [master, main, staging, sandbox]
   pull_request:
-    branches: [master, main]
+    branches: [master, main, staging]
 
 permissions:
   contents: read
