@@ -219,12 +219,12 @@ BEGIN
       RAISE EXCEPTION 'Not authorized to change is_arcade_official';
     END IF;
     IF TG_TABLE_NAME = 'profiles' AND
-       NEW::jsonb ? 'role' AND
-       (NEW::jsonb->>'role') IS DISTINCT FROM (OLD::jsonb->>'role') THEN
+       to_jsonb(NEW) ? 'role' AND
+       (to_jsonb(NEW)->>'role') IS DISTINCT FROM (to_jsonb(OLD)->>'role') THEN
       INSERT INTO security_events (event_type, severity, user_id, details)
       VALUES ('role_escalation_attempt', 'critical', auth.uid(),
         jsonb_build_object('field', 'role', 'target_id', OLD.id,
-                           'attempted_role', NEW::jsonb->>'role'));
+                           'attempted_role', to_jsonb(NEW)->>'role'));
       RAISE EXCEPTION 'Not authorized to change role';
     END IF;
   END IF;

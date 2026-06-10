@@ -415,8 +415,8 @@ BEGIN
     END IF;
     -- Guard the role column if it exists on profiles
     IF TG_TABLE_NAME = 'profiles' AND
-       NEW::jsonb ? 'role' AND
-       (NEW::jsonb->>'role') IS DISTINCT FROM (OLD::jsonb->>'role') THEN
+       to_jsonb(NEW) ? 'role' AND
+       (to_jsonb(NEW)->>'role') IS DISTINCT FROM (to_jsonb(OLD)->>'role') THEN
       RAISE EXCEPTION 'Not authorized to change role';
     END IF;
   END IF;
