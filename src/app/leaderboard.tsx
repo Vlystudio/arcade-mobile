@@ -102,16 +102,17 @@ export default function LeaderboardScreen() {
 
     const { data } = await query;
 
-    // Fetch display names from public_profiles (respects is_private flag).
-    // Private users show as "Unknown" on the leaderboard.
+    // Fetch display names directly from profiles. Leaderboard scores are already
+    // public (approved), so the is_private flag (which gates profile/search
+    // visibility) shouldn't hide a player's name on their own scores.
     const userIds = [...new Set((data ?? []).map((r: any) => r.user_id as string))];
     let usernameMap: Record<string, string> = {};
     if (userIds.length > 0) {
-      const { data: pubProfiles } = await supabase
-        .from("public_profiles")
+      const { data: profilesData } = await supabase
+        .from("profiles")
         .select("id, username")
         .in("id", userIds);
-      for (const p of pubProfiles ?? []) usernameMap[p.id] = p.username ?? "Unknown";
+      for (const p of profilesData ?? []) usernameMap[p.id] = p.username ?? "Unknown";
     }
 
     const mapped: LeaderEntry[] = (data ?? []).map((row: any, i: number) => ({
