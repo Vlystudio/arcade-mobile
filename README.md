@@ -109,7 +109,7 @@ Run these SQL scripts **in order** in the Supabase SQL Editor:
 | 2 | `scripts/seed-menu.sql` | Food menu seed data |
 | 3 | `scripts/seed-admin-policies.sql` | `is_admin()` helper function |
 | 4 | `scripts/rls-policies.sql` | Full Row Level Security for every table |
-| 5 | `scripts/rpc-check-in.sql` | `rpc_check_in` SECURITY DEFINER function |
+| 5 | `scripts/rpc-check-in.sql` | Historical placeholder — no-op (see ⚠ below) |
 | 6 | `scripts/rpc-admin-actions.sql` | Admin SECURITY DEFINER RPCs (score review, tournament actions, team delete) |
 | 7 | `scripts/rls-security-patches.sql` | Critical RLS patches (C1-C3, H1-H5, M1-M3) |
 | 8 | `scripts/venue-migration.sql` | Multi-venue support (`venues` table, `venue_id` columns) |
@@ -124,6 +124,18 @@ Run these SQL scripts **in order** in the Supabase SQL Editor:
 | 17 | `scripts/input-validation-hardening.sql` | Database check constraints for user-generated inputs |
 | 18 | `scripts/security-hardening-3.sql` | Venue-scoped score review queue, score proof signed URL RPC, lane token rotation fix |
 | 19 | `scripts/security-cleanup.sql` | Production hardening: remove QR legacy fallback, fix storage cleanup RPC auth, deprecate `lanes.lane_qr_token` |
+
+> ⚠ **`rpc_check_in` and `rpc_admin_rotate_lane_token` source of truth:**
+> Script 5 (`rpc-check-in.sql`) and script 10 (`security-hardening-2.sql`) used
+> to define `rpc_check_in` (and, for script 10, `rpc_admin_rotate_lane_token`)
+> using the deprecated plaintext `lanes.lane_qr_token` column. Those
+> definitions have been **removed**. `rpc_check_in` is bootstrapped by script
+> 13 (`qr-token-hardening.sql`) and finalized by script 19
+> (`security-cleanup.sql`) — script 19 is the production source of truth.
+> `rpc_admin_rotate_lane_token` is defined only by script 18
+> (`security-hardening-3.sql`). Do not re-introduce either function in an
+> earlier script — running an earlier script after 18/19 must never silently
+> downgrade these functions back to plaintext `lane_qr_token` matching.
 
 > **Verification:** After all scripts are applied, run `scripts/security-verification-tests.sql` in the SQL Editor. Every row should return `result = 'PASS'`.
 
@@ -210,7 +222,7 @@ Lane QR check-in uses **hashed, expiring, revocable tokens** stored in `lane_qr_
 2. The DB stores only the SHA-256 hash (`lane_qr_tokens.token_hash`). A compromised DB reveals nothing usable.
 3. Default token lifetime: **30 days** (720 hours). Admins can force-rotate any time via `rpc_admin_rotate_lane_token`.
 4. Revoked and expired tokens are rejected with distinct error codes (`token_revoked`, `token_expired`).
-5. `lanes.lane_qr_token` is **deprecated** — no longer written to; all validation goes through `lane_qr_tokens` only.
+5. `lanes.lane_qr_token` is **deprecated** — no longer written to; all validation goes through `lane_qr_tokens` only. `scripts/security-cleanup.sql` is the canonical source of truth for `rpc_check_in`.
 6. Check-ins are **RPC-only** — direct `INSERT INTO check_ins` is blocked by RLS for all roles.
 7. One active check-in per user at a time (enforced server-side in `rpc_check_in`).
 8. Rate-limit: 30-minute cooldown before re-checking into the same lane.

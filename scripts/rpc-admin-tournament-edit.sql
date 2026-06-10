@@ -2,6 +2,13 @@
 -- Uses SECURITY DEFINER so they bypass RLS (consistent with all other admin RPCs).
 -- Both functions require MFA, venue-scoped authorization, and write to admin_audit_log.
 
+-- ⚠ This 5-arg overload of rpc_admin_update_tournament is NOT called by the
+-- app — src/app/admin.tsx handleEditTournament calls the 7-arg overload
+-- (with p_signup_time/p_start_time) defined in scripts/ff-bracket.sql.
+-- Postgres treats these as distinct, coexisting functions because the
+-- argument lists differ. This overload is kept hardened for any caller that
+-- supplies only these 5 params; keep both in sync if the auth/logging logic
+-- changes.
 CREATE OR REPLACE FUNCTION public.rpc_admin_update_tournament(
   p_tournament_id uuid,
   p_title         text        DEFAULT NULL,

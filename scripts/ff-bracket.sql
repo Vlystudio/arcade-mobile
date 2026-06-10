@@ -86,6 +86,12 @@ CREATE POLICY "Auth read bracket scores"  ON ff_bracket_scores  FOR SELECT USING
 -- ─── 3. Update rpc_admin_update_tournament (add time params) ──────────────────
 DROP FUNCTION IF EXISTS public.rpc_admin_update_tournament(uuid, text, text, timestamptz, int);
 
+-- ⚠ This 7-arg overload (with p_signup_time/p_start_time) is the one called by
+-- the app (src/app/admin.tsx handleEditTournament). A separate 5-arg overload
+-- of rpc_admin_update_tournament exists in scripts/rpc-admin-tournament-edit.sql
+-- — Postgres treats these as distinct functions since the argument lists
+-- differ. Keep both hardened (require_mfa + venue-scoped + audit log) if
+-- either is changed.
 CREATE OR REPLACE FUNCTION public.rpc_admin_update_tournament(
   p_tournament_id uuid,
   p_title         text        DEFAULT NULL,
@@ -96,10 +102,28 @@ CREATE OR REPLACE FUNCTION public.rpc_admin_update_tournament(
   p_start_time    text        DEFAULT NULL
 )
 RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE
+  v_title    text;
+  v_venue_id uuid;
 BEGIN
-  IF NOT public.is_admin() THEN
-    RETURN json_build_object('error','unauthorized');
+  PERFORM public.require_mfa();
+
+  SELECT title, venue_id INTO v_title, v_venue_id
+    FROM tournaments WHERE id = p_tournament_id;
+
+  IF NOT FOUND THEN
+    RETURN json_build_object('error', 'tournament_not_found');
   END IF;
+
+  IF NOT (public.is_admin() OR
+          (v_venue_id IS NOT NULL AND public.can_manage_venue(v_venue_id))) THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_update_tournament', 'tournament_id', p_tournament_id))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error', 'unauthorized');
+  END IF;
+
   UPDATE tournaments SET
     title          = COALESCE(NULLIF(trim(p_title), ''),        title),
     game_type      = COALESCE(NULLIF(trim(p_game_type), ''),    game_type),
@@ -108,24 +132,47 @@ BEGIN
     ff_signup_time = COALESCE(NULLIF(trim(p_signup_time), ''),  ff_signup_time),
     ff_start_time  = COALESCE(NULLIF(trim(p_start_time), ''),   ff_start_time)
   WHERE id = p_tournament_id;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'update_tournament', 'tournament', p_tournament_id::text,
+          jsonb_build_object('title', v_title));
+
   RETURN json_build_object('ok', true);
 END;
 $$;
+REVOKE ALL ON FUNCTION public.rpc_admin_update_tournament(uuid, text, text, timestamptz, int, text, text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.rpc_admin_update_tournament(uuid, text, text, timestamptz, int, text, text) TO authenticated;
 
 -- ─── 4. rpc_ff_generate_bracket ───────────────────────────────────────────────
+-- ⚠ SUPERSEDED by scripts/ff-guest-player.sql, the SOURCE OF TRUTH for
+-- rpc_ff_generate_bracket (run last — adds guest-player support). This
+-- definition is venue-scoped + hardened but lacks guest support — kept only
+-- for fresh-bootstrap ordering.
 CREATE OR REPLACE FUNCTION public.rpc_ff_generate_bracket(p_tournament_id uuid)
 RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
-  v_count  int;
-  v_users  uuid[];
-  v_names  text[];
-  v_rid    uuid;
-  v_gid    uuid;
-  v_g      int;
-  v_i      int;
+  v_count    int;
+  v_users    uuid[];
+  v_names    text[];
+  v_rid      uuid;
+  v_gid      uuid;
+  v_g        int;
+  v_i        int;
+  v_venue_id uuid;
 BEGIN
-  IF NOT public.is_admin() THEN RETURN json_build_object('error','unauthorized'); END IF;
+  PERFORM public.require_mfa();
+
+  SELECT venue_id INTO v_venue_id FROM tournaments WHERE id = p_tournament_id;
+  IF NOT FOUND THEN RETURN json_build_object('error','tournament_not_found'); END IF;
+
+  IF NOT (public.is_admin() OR
+          (v_venue_id IS NOT NULL AND public.can_manage_venue(v_venue_id))) THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_ff_generate_bracket', 'tournament_id', p_tournament_id))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error','unauthorized');
+  END IF;
 
   SELECT COUNT(*) INTO v_count FROM tournament_registrations
   WHERE tournament_id = p_tournament_id AND status = 'accepted';
@@ -178,6 +225,10 @@ BEGIN
   END LOOP;
 
   UPDATE tournaments SET status = 'active' WHERE id = p_tournament_id;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'ff_generate_bracket', 'tournament', p_tournament_id::text, '{}');
+
   RETURN json_build_object('ok', true);
 END;
 $$;
@@ -185,6 +236,13 @@ GRANT EXECUTE ON FUNCTION public.rpc_ff_generate_bracket(uuid) TO authenticated;
 
 -- ─── 5. rpc_ff_submit_game_scores ─────────────────────────────────────────────
 -- p_scores: [{"user_id":"...", "score":12345}, ...]
+-- Venue-scoped: platform admin OR venue admin of the tournament's venue.
+--
+-- ⚠ SUPERSEDED by scripts/ff-guest-player.sql, the SOURCE OF TRUTH for
+-- rpc_ff_submit_game_scores (latest bracket-format logic + guest support, run
+-- last). This definition is kept so a fresh database run has a working,
+-- hardened rpc_ff_submit_game_scores immediately after this script runs. If
+-- you change the auth/logging logic here, update ff-guest-player.sql too.
 CREATE OR REPLACE FUNCTION public.rpc_ff_submit_game_scores(
   p_game_id uuid,
   p_scores  jsonb
@@ -205,8 +263,9 @@ DECLARE
   v_n          int;
   v_g          int;
   v_i          int;
+  v_venue_id   uuid;
 BEGIN
-  IF NOT public.is_admin() THEN RETURN json_build_object('error','unauthorized'); END IF;
+  PERFORM public.require_mfa();
 
   SELECT gm.tournament_id, gm.group_id, gm.game_number,
          bg.round_id, br.round_number
@@ -216,6 +275,21 @@ BEGIN
   JOIN   ff_bracket_rounds br ON br.id = bg.round_id
   WHERE  gm.id = p_game_id;
   IF NOT FOUND THEN RETURN json_build_object('error','game_not_found'); END IF;
+
+  SELECT venue_id INTO v_venue_id FROM tournaments WHERE id = v_tid;
+
+  IF NOT (public.is_admin() OR
+          (v_venue_id IS NOT NULL AND public.can_manage_venue(v_venue_id))) THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_ff_submit_game_scores', 'game_id', p_game_id, 'tournament_id', v_tid))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error','unauthorized');
+  END IF;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'ff_submit_game_scores', 'tournament', v_tid::text,
+          jsonb_build_object('game_id', p_game_id));
 
   -- Upsert scores
   FOR v_entry IN SELECT * FROM jsonb_array_elements(p_scores) LOOP
@@ -334,6 +408,9 @@ $$;
 GRANT EXECUTE ON FUNCTION public.rpc_ff_submit_game_scores(uuid, jsonb) TO authenticated;
 
 -- ─── 6. rpc_ff_get_bracket ────────────────────────────────────────────────────
+-- ⚠ SUPERSEDED by scripts/ff-bracket-scoring.sql, which redefines this
+-- function to also expose `rank_points` per score row. Read-only (no admin
+-- check needed either way) — kept here for fresh-bootstrap ordering.
 CREATE OR REPLACE FUNCTION public.rpc_ff_get_bracket(p_tournament_id uuid)
 RETURNS json LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT json_build_object(

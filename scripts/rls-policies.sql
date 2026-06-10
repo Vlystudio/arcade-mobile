@@ -222,15 +222,15 @@ CREATE POLICY "Auth users can read teams" ON teams
 
 DROP POLICY IF EXISTS "Users can create teams" ON teams;
 CREATE POLICY "Users can create teams" ON teams
-  FOR INSERT WITH CHECK (auth.uid() = captain_id);
+  FOR INSERT WITH CHECK (auth.uid() = captain_user_id);
 
 DROP POLICY IF EXISTS "Captains can update their team" ON teams;
 CREATE POLICY "Captains can update their team" ON teams
-  FOR UPDATE USING (auth.uid() = captain_id);
+  FOR UPDATE USING (auth.uid() = captain_user_id);
 
 DROP POLICY IF EXISTS "Captains or admins can delete teams" ON teams;
 CREATE POLICY "Captains or admins can delete teams" ON teams
-  FOR DELETE USING (auth.uid() = captain_id OR public.is_admin());
+  FOR DELETE USING (auth.uid() = captain_user_id OR public.is_admin());
 
 -- TEAM MEMBERS
 DROP POLICY IF EXISTS "Auth users can read team members" ON team_members;
@@ -246,7 +246,7 @@ CREATE POLICY "Users can leave teams or captains can remove" ON team_members
   FOR DELETE USING (
     auth.uid() = user_id
     OR public.is_admin()
-    OR auth.uid() = (SELECT captain_id FROM teams WHERE id = team_id)
+    OR auth.uid() = (SELECT captain_user_id FROM teams WHERE id = team_id)
   );
 
 -- ──────────────────────────────────────────────────────────
@@ -342,15 +342,15 @@ CREATE POLICY "Auth users can read trivia teams" ON trivia_teams
 
 DROP POLICY IF EXISTS "Users can create trivia teams" ON trivia_teams;
 CREATE POLICY "Users can create trivia teams" ON trivia_teams
-  FOR INSERT WITH CHECK (auth.uid() = captain_id);
+  FOR INSERT WITH CHECK (auth.uid() = captain_user_id);
 
 DROP POLICY IF EXISTS "Captains can update trivia teams" ON trivia_teams;
 CREATE POLICY "Captains can update trivia teams" ON trivia_teams
-  FOR UPDATE USING (auth.uid() = captain_id);
+  FOR UPDATE USING (auth.uid() = captain_user_id);
 
 DROP POLICY IF EXISTS "Captains or admins can delete trivia teams" ON trivia_teams;
 CREATE POLICY "Captains or admins can delete trivia teams" ON trivia_teams
-  FOR DELETE USING (auth.uid() = captain_id OR public.is_admin());
+  FOR DELETE USING (auth.uid() = captain_user_id OR public.is_admin());
 
 DROP POLICY IF EXISTS "Auth users can read trivia members" ON trivia_team_members;
 CREATE POLICY "Auth users can read trivia members" ON trivia_team_members
@@ -365,7 +365,7 @@ CREATE POLICY "Users can leave or captains can remove" ON trivia_team_members
   FOR DELETE USING (
     auth.uid() = user_id
     OR public.is_admin()
-    OR auth.uid() = (SELECT captain_id FROM trivia_teams WHERE id = trivia_team_id)
+    OR auth.uid() = (SELECT captain_user_id FROM trivia_teams WHERE id = trivia_team_id)
   );
 
 -- ──────────────────────────────────────────────────────────

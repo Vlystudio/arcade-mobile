@@ -241,18 +241,28 @@ REVOKE ALL ON FUNCTION public.rpc_trivia_submit_answer FROM public, anon;
 GRANT EXECUTE ON FUNCTION public.rpc_trivia_submit_answer TO authenticated;
 
 -- Admin: create game with question set
+-- Trivia is a platform-wide feature (no venue_id) — platform-admin-only.
 CREATE OR REPLACE FUNCTION public.rpc_admin_trivia_create_game(
   p_title            text,
   p_max_participants int,
   p_allow_teams      boolean,
   p_min_team_size    int,
   p_question_ids     uuid[]
-) RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+) RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_game_id uuid;
   i         int;
 BEGIN
-  IF NOT public.is_admin() THEN RETURN json_build_object('error','unauthorized'); END IF;
+  PERFORM public.require_mfa();
+
+  IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_trivia_create_game'))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error','unauthorized');
+  END IF;
+
   INSERT INTO public.trivia_games(title, max_participants, allow_teams, min_team_size, created_by)
   VALUES (p_title, p_max_participants, p_allow_teams, p_min_team_size, auth.uid())
   RETURNING id INTO v_game_id;
@@ -262,6 +272,10 @@ BEGIN
     VALUES (v_game_id, p_question_ids[i], i);
   END LOOP;
 
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'trivia_create_game', 'trivia_game', v_game_id::text,
+          jsonb_build_object('title', p_title, 'question_count', array_length(p_question_ids, 1)));
+
   RETURN json_build_object('ok', true, 'game_id', v_game_id);
 END; $$;
 
@@ -270,10 +284,19 @@ GRANT EXECUTE ON FUNCTION public.rpc_admin_trivia_create_game TO authenticated;
 
 -- Admin: start game (moves to first question)
 CREATE OR REPLACE FUNCTION public.rpc_admin_trivia_start_game(p_game_id uuid)
-RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE v_first_qid uuid;
 BEGIN
-  IF NOT public.is_admin() THEN RETURN json_build_object('error','unauthorized'); END IF;
+  PERFORM public.require_mfa();
+
+  IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_trivia_start_game', 'game_id', p_game_id))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error','unauthorized');
+  END IF;
+
   SELECT question_id INTO v_first_qid FROM public.trivia_game_questions
   WHERE game_id = p_game_id AND question_order = 1;
   IF NOT FOUND THEN RETURN json_build_object('error','no_questions'); END IF;
@@ -283,6 +306,9 @@ BEGIN
       current_question_id = v_first_qid, started_at = now()
   WHERE id = p_game_id AND status = 'lobby';
 
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'trivia_start_game', 'trivia_game', p_game_id::text, '{}');
+
   RETURN json_build_object('ok', true, 'question_id', v_first_qid);
 END; $$;
 
@@ -291,13 +317,22 @@ GRANT EXECUTE ON FUNCTION public.rpc_admin_trivia_start_game TO authenticated;
 
 -- Admin: advance to next question
 CREATE OR REPLACE FUNCTION public.rpc_admin_trivia_next_question(p_game_id uuid)
-RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_game    record;
   v_next_qid uuid;
   v_next_idx int;
 BEGIN
-  IF NOT public.is_admin() THEN RETURN json_build_object('error','unauthorized'); END IF;
+  PERFORM public.require_mfa();
+
+  IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_trivia_next_question', 'game_id', p_game_id))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error','unauthorized');
+  END IF;
+
   SELECT * INTO v_game FROM public.trivia_games WHERE id = p_game_id AND status = 'active';
   IF NOT FOUND THEN RETURN json_build_object('error','game_not_active'); END IF;
 
@@ -323,10 +358,23 @@ GRANT EXECUTE ON FUNCTION public.rpc_admin_trivia_next_question TO authenticated
 
 -- Admin: end game early
 CREATE OR REPLACE FUNCTION public.rpc_admin_trivia_end_game(p_game_id uuid)
-RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
-  IF NOT public.is_admin() THEN RETURN json_build_object('error','unauthorized'); END IF;
+  PERFORM public.require_mfa();
+
+  IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_trivia_end_game', 'game_id', p_game_id))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error','unauthorized');
+  END IF;
+
   UPDATE public.trivia_games SET status = 'finished', ended_at = now() WHERE id = p_game_id;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'trivia_end_game', 'trivia_game', p_game_id::text, '{}');
+
   RETURN json_build_object('ok', true);
 END; $$;
 
@@ -337,12 +385,21 @@ GRANT EXECUTE ON FUNCTION public.rpc_admin_trivia_end_game TO authenticated;
 CREATE OR REPLACE FUNCTION public.rpc_admin_trivia_grade(
   p_answer_id  uuid,
   p_is_correct boolean
-) RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+) RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_ans record;
   v_pts int;
 BEGIN
-  IF NOT public.is_admin() THEN RETURN json_build_object('error','unauthorized'); END IF;
+  PERFORM public.require_mfa();
+
+  IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_trivia_grade', 'answer_id', p_answer_id))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error','unauthorized');
+  END IF;
+
   SELECT a.*, q.points INTO v_ans
   FROM public.trivia_answers a
   JOIN public.trivia_questions q ON q.id = a.question_id
@@ -362,10 +419,23 @@ GRANT EXECUTE ON FUNCTION public.rpc_admin_trivia_grade TO authenticated;
 
 -- Admin: delete a game
 CREATE OR REPLACE FUNCTION public.rpc_admin_trivia_delete_game(p_game_id uuid)
-RETURNS json LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS json LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
-  IF NOT public.is_admin() THEN RETURN json_build_object('error','unauthorized'); END IF;
+  PERFORM public.require_mfa();
+
+  IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_trivia_delete_game', 'game_id', p_game_id))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error','unauthorized');
+  END IF;
+
   DELETE FROM public.trivia_games WHERE id = p_game_id;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'trivia_delete_game', 'trivia_game', p_game_id::text, '{}');
+
   RETURN json_build_object('ok', true);
 END; $$;
 

@@ -9,6 +9,10 @@
 
 ALTER TABLE ff_bracket_scores ADD COLUMN IF NOT EXISTS rank_points int;
 
+-- ⚠ SUPERSEDED by scripts/ff-guest-player.sql, the SOURCE OF TRUTH for
+-- rpc_ff_submit_game_scores (run last). This definition lacks
+-- require_mfa()/venue-scoping/audit logging — kept only for fresh-bootstrap
+-- ordering (the rank_points column add above is still needed).
 CREATE OR REPLACE FUNCTION public.rpc_ff_submit_game_scores(
   p_game_id uuid,
   p_scores  jsonb
@@ -196,6 +200,10 @@ $$;
 GRANT EXECUTE ON FUNCTION public.rpc_ff_submit_game_scores(uuid, jsonb) TO authenticated;
 
 -- Update get_bracket to expose rank_points in score rows
+--
+-- ⚠ SOURCE OF TRUTH for public.rpc_ff_get_bracket (adds `rank_points` to each
+-- score row vs. the original definition in scripts/ff-bracket.sql). Read-only
+-- — no admin check needed.
 CREATE OR REPLACE FUNCTION public.rpc_ff_get_bracket(p_tournament_id uuid)
 RETURNS json LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public AS $$
   SELECT json_build_object(

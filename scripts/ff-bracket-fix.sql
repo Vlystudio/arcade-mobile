@@ -1,7 +1,11 @@
 -- Fix: eliminate by slot ID (not user_id) so only 1 slot is affected per game
 -- Simplification: Game 2 elimination = lowest raw score in Game 2 only (not combined rank points)
 -- Run in Supabase SQL Editor
-
+--
+-- ⚠ SUPERSEDED by scripts/ff-guest-player.sql, the SOURCE OF TRUTH for
+-- rpc_ff_submit_game_scores (run last). This definition lacks
+-- require_mfa()/venue-scoping/audit logging — kept only for fresh-bootstrap
+-- ordering.
 CREATE OR REPLACE FUNCTION public.rpc_ff_submit_game_scores(
   p_game_id uuid,
   p_scores  jsonb

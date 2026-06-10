@@ -116,8 +116,11 @@ GRANT EXECUTE ON FUNCTION public.rpc_admin_create_score_proof_signed_url(uuid) T
 
 
 -- ── Fix rpc_admin_rotate_lane_token ──────────────────────────
+-- ⚠ SOURCE OF TRUTH for public.rpc_admin_rotate_lane_token (run order 18).
 -- The security-hardening-2.sql version only updated lanes.lane_qr_token
--- (legacy column) without writing to lane_qr_tokens.
+-- (legacy column) without writing to lane_qr_tokens, and that definition has
+-- since been removed from security-hardening-2.sql. Do not redefine
+-- rpc_admin_rotate_lane_token in any earlier script.
 -- This version delegates to rpc_admin_generate_lane_qr_token which
 -- handles the full hashed-token flow and is also venue-admin scoped.
 CREATE OR REPLACE FUNCTION public.rpc_admin_rotate_lane_token(p_lane_id uuid)

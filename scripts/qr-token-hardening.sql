@@ -202,6 +202,11 @@ GRANT EXECUTE ON FUNCTION public.rpc_admin_generate_lane_qr_token(uuid, int) TO 
 
 
 -- ── 4. Updated rpc_check_in: hash-first, legacy fallback ─────
+-- Intermediate definition — superseded by scripts/security-cleanup.sql
+-- (run order 19), the SOURCE OF TRUTH for rpc_check_in. Kept here because
+-- this script is what creates the lane_qr_tokens table that rpc_check_in
+-- depends on, and a fresh database run must have a working rpc_check_in
+-- between this script and security-cleanup.sql.
 CREATE OR REPLACE FUNCTION public.rpc_check_in(p_token text)
 RETURNS json
 LANGUAGE plpgsql

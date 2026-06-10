@@ -4,6 +4,14 @@
 --   Final 8     : 2 groups × 4 players, 1 game,  bottom 2 eliminated → 4 advance
 --   Final 4     : 1 group  × 4 players, 1 game,  ranks = placements
 -- Run in Supabase SQL Editor
+--
+-- ⚠ SUPERSEDED by scripts/ff-guest-player.sql, the SOURCE OF TRUTH for
+-- rpc_ff_submit_game_scores (chronologically newer — adds guest-player
+-- support + the player_seed-based scoring used by this round structure). This
+-- definition is hardened (require_mfa + venue-scoped + audit log) and kept
+-- only for fresh-bootstrap ordering — ff-guest-player.sql must run after this
+-- file. If you change the auth/logging logic here, update
+-- ff-guest-player.sql too.
 
 -- ── rpc_ff_submit_game_scores ─────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.rpc_ff_submit_game_scores(
@@ -28,8 +36,9 @@ DECLARE
   v_g           int;
   v_i           int;
   v_num_players int;
+  v_venue_id    uuid;
 BEGIN
-  IF NOT public.is_admin() THEN RETURN json_build_object('error','unauthorized'); END IF;
+  PERFORM public.require_mfa();
 
   SELECT gm.tournament_id, gm.group_id, gm.game_number,
          bg.round_id, br.round_number
@@ -39,6 +48,21 @@ BEGIN
   JOIN   ff_bracket_rounds br ON br.id = bg.round_id
   WHERE  gm.id = p_game_id;
   IF NOT FOUND THEN RETURN json_build_object('error','game_not_found'); END IF;
+
+  SELECT venue_id INTO v_venue_id FROM tournaments WHERE id = v_tid;
+
+  IF NOT (public.is_admin() OR
+          (v_venue_id IS NOT NULL AND public.can_manage_venue(v_venue_id))) THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_ff_submit_game_scores', 'game_id', p_game_id, 'tournament_id', v_tid))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error','unauthorized');
+  END IF;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'ff_submit_game_scores', 'tournament', v_tid::text,
+          jsonb_build_object('game_id', p_game_id));
 
   -- ── Undo previous submission when re-editing ────────────────────────────────
   IF EXISTS (SELECT 1 FROM ff_bracket_games WHERE id = p_game_id AND status = 'completed') THEN

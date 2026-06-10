@@ -72,12 +72,25 @@ CREATE OR REPLACE FUNCTION public.rpc_get_score_proof_url(p_score_id uuid)
 RETURNS text LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public AS $$
 DECLARE
-  v_path text;
+  v_path   text;
+  v_exists boolean;
 BEGIN
   SELECT proof_storage_path INTO v_path
     FROM scores
    WHERE id = p_score_id
      AND (user_id = auth.uid() OR public.is_admin());
+
+  IF v_path IS NULL THEN
+    -- Distinguish "not found" from "found but unauthorized" only for logging;
+    -- the return value is NULL either way so we don't leak existence info.
+    SELECT EXISTS (SELECT 1 FROM scores WHERE id = p_score_id) INTO v_exists;
+    IF v_exists THEN
+      INSERT INTO security_events (event_type, severity, user_id, details)
+      VALUES ('score_proof_access_denied', 'warn', auth.uid(),
+        jsonb_build_object('score_id', p_score_id))
+      ON CONFLICT DO NOTHING;
+    END IF;
+  END IF;
 
   RETURN v_path;  -- NULL if not found or caller is not authorized
 END; $$;
@@ -97,116 +110,31 @@ UPDATE lanes
        qr_token_issued_at  = now()
  WHERE qr_token_expires_at IS NULL;
 
--- Rebuild rpc_check_in with QR expiry guard
-CREATE OR REPLACE FUNCTION public.rpc_check_in(p_token text)
-RETURNS json LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public AS $$
-DECLARE
-  v_user_id  uuid;
-  v_lane     record;
-  v_game     record;
-  v_ci_id    uuid;
-  v_cutoff   timestamptz;
-BEGIN
-  v_user_id := auth.uid();
-  IF v_user_id IS NULL THEN
-    RETURN json_build_object('error', 'not_authenticated',
-      'message', 'You must be logged in.');
-  END IF;
+-- rpc_check_in is NOT defined in this script.
+--
+-- ⚠ SOURCE OF TRUTH: scripts/security-cleanup.sql (run order 19) defines the
+-- production rpc_check_in (hash-only lookup against lane_qr_tokens, with
+-- expiry/revocation/invalid-token logging to security_events). An earlier
+-- version of this script defined an insecure rpc_check_in here that matched
+-- on plaintext lanes.lane_qr_token = p_token — that definition has been
+-- removed. Do NOT re-add a rpc_check_in definition to this file; doing so
+-- would silently downgrade check-in security if this script is ever re-run
+-- after security-cleanup.sql.
+--
+-- The qr_token_expires_at / qr_token_issued_at columns above are retained
+-- because qr-token-hardening.sql's lane_qr_tokens backfill migration uses
+-- them as a fallback expiry value for legacy rows.
 
-  SELECT l.id, l.lane_number, l.game_id, l.venue_id, l.status,
-         l.qr_token_expires_at
-    INTO v_lane
-    FROM lanes l
-   WHERE l.lane_qr_token = p_token
-   LIMIT 1;
 
-  IF NOT FOUND THEN
-    RETURN json_build_object('error', 'lane_not_found',
-      'message', 'This QR code does not match any lane.');
-  END IF;
-
-  -- QR token expiry check
-  IF v_lane.qr_token_expires_at IS NOT NULL
-     AND v_lane.qr_token_expires_at < now() THEN
-    RETURN json_build_object('error', 'token_expired',
-      'message', 'This QR code has expired. Ask staff to regenerate it.');
-  END IF;
-
-  -- Prevent duplicate active sessions
-  IF EXISTS (
-    SELECT 1 FROM check_ins
-     WHERE user_id = v_user_id AND status = 'active'
-  ) THEN
-    RETURN json_build_object('error', 'already_active',
-      'message', 'You already have an active session. End it before scanning a new lane.');
-  END IF;
-
-  -- 30-minute cooldown per lane
-  v_cutoff := NOW() - INTERVAL '30 minutes';
-  IF EXISTS (
-    SELECT 1 FROM check_ins
-     WHERE user_id = v_user_id
-       AND lane_id  = v_lane.id
-       AND created_at > v_cutoff
-  ) THEN
-    RETURN json_build_object('error', 'rate_limited',
-      'message', 'You checked into this lane recently. Wait 30 minutes before scanning again.');
-  END IF;
-
-  SELECT g.name, g.type INTO v_game
-    FROM games g WHERE g.id = v_lane.game_id;
-
-  INSERT INTO check_ins (user_id, lane_id, venue_id, status)
-  VALUES (v_user_id, v_lane.id, v_lane.venue_id, 'active')
-  RETURNING id INTO v_ci_id;
-
-  RETURN json_build_object(
-    'check_in_id',  v_ci_id,
-    'lane_id',      v_lane.id,
-    'lane_number',  v_lane.lane_number,
-    'game_id',      v_lane.game_id,
-    'game_name',    COALESCE(v_game.name, 'Game'),
-    'game_type',    COALESCE(v_game.type, 'arcade'),
-    'venue_id',     v_lane.venue_id
-  );
-END; $$;
-
-REVOKE ALL ON FUNCTION public.rpc_check_in(text) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.rpc_check_in(text) TO authenticated;
-
--- Admin-triggered QR token rotation (90-day TTL; generates new UUID token)
-CREATE OR REPLACE FUNCTION public.rpc_admin_rotate_lane_token(p_lane_id uuid)
-RETURNS json LANGUAGE plpgsql SECURITY DEFINER
-SET search_path = public AS $$
-DECLARE
-  v_new_token text := gen_random_uuid()::text;
-BEGIN
-  PERFORM public.require_mfa();
-
-  IF NOT public.is_admin() THEN
-    RETURN json_build_object('error', 'unauthorized');
-  END IF;
-
-  UPDATE lanes
-     SET lane_qr_token       = v_new_token,
-         qr_token_issued_at  = now(),
-         qr_token_expires_at = now() + interval '90 days'
-   WHERE id = p_lane_id;
-
-  IF NOT FOUND THEN
-    RETURN json_build_object('error', 'not_found');
-  END IF;
-
-  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
-  VALUES (auth.uid(), 'rotate_lane_token', 'lane', p_lane_id::text,
-          jsonb_build_object('new_token', v_new_token));
-
-  RETURN json_build_object('ok', true, 'new_token', v_new_token);
-END; $$;
-
-REVOKE ALL ON FUNCTION public.rpc_admin_rotate_lane_token(uuid) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.rpc_admin_rotate_lane_token(uuid) TO authenticated;
+-- rpc_admin_rotate_lane_token is NOT defined in this script.
+--
+-- ⚠ SOURCE OF TRUTH: scripts/security-hardening-3.sql (run order 18) defines
+-- the production rpc_admin_rotate_lane_token (venue-admin scoped, delegates
+-- to rpc_admin_generate_lane_qr_token for hashed-token rotation). An earlier
+-- version of this script defined a platform-admin-only rotate function here
+-- that wrote a raw token directly to the deprecated lanes.lane_qr_token
+-- column without creating a lane_qr_tokens entry — that definition has been
+-- removed. Do NOT re-add it here.
 
 
 -- ── A6: Score upper bound ─────────────────────────────────────

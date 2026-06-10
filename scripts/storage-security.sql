@@ -297,6 +297,13 @@ CREATE TRIGGER trig_queue_post_photo_cleanup
 -- RPC: process storage cleanup queue (admin only)
 -- Admins call this to flush the cleanup queue.
 -- In production this is called by a scheduled Edge Function.
+--
+-- Superseded by scripts/security-cleanup.sql (run order 19), the SOURCE OF
+-- TRUTH for rpc_admin_get_storage_cleanup_queue and
+-- rpc_admin_mark_storage_cleaned. Kept here (identical body) because this
+-- script creates the storage_cleanup_queue table and a fresh database run
+-- must have working, MFA-gated cleanup RPCs immediately after this script
+-- runs. If you change the auth/logging logic, update both files.
 -- ─────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.rpc_admin_get_storage_cleanup_queue(p_limit int DEFAULT 100)
 RETURNS TABLE (id uuid, bucket text, path text, reason text, created_at timestamptz)

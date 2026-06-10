@@ -110,7 +110,7 @@ CREATE POLICY "Users can read relevant team requests" ON team_requests
   FOR SELECT USING (
     auth.uid() = user_id
     OR public.is_admin()
-    OR auth.uid() = (SELECT captain_id FROM teams WHERE id = team_id)
+    OR auth.uid() = (SELECT captain_user_id FROM teams WHERE id = team_id)
   );
 
 -- Users may send join requests (direction='request', status='pending')
@@ -126,7 +126,7 @@ CREATE POLICY "Users can send join requests" ON team_requests
 DROP POLICY IF EXISTS "Captains can send invites" ON team_requests;
 CREATE POLICY "Captains can send invites" ON team_requests
   FOR INSERT WITH CHECK (
-    auth.uid() = (SELECT captain_id FROM teams WHERE id = team_id)
+    auth.uid() = (SELECT captain_user_id FROM teams WHERE id = team_id)
     AND direction = 'invite'
     AND status    = 'pending'
   );
@@ -135,7 +135,7 @@ CREATE POLICY "Captains can send invites" ON team_requests
 DROP POLICY IF EXISTS "Captains and invitees can update requests" ON team_requests;
 CREATE POLICY "Captains and invitees can update requests" ON team_requests
   FOR UPDATE USING (
-    (direction = 'request' AND auth.uid() = (SELECT captain_id FROM teams WHERE id = team_id))
+    (direction = 'request' AND auth.uid() = (SELECT captain_user_id FROM teams WHERE id = team_id))
     OR (direction = 'invite'   AND auth.uid() = user_id)
     OR public.is_admin()
   );
@@ -145,7 +145,7 @@ DROP POLICY IF EXISTS "Users can delete own team requests" ON team_requests;
 CREATE POLICY "Users can delete own team requests" ON team_requests
   FOR DELETE USING (
     auth.uid() = user_id
-    OR auth.uid() = (SELECT captain_id FROM teams WHERE id = team_id)
+    OR auth.uid() = (SELECT captain_user_id FROM teams WHERE id = team_id)
     OR public.is_admin()
   );
 
@@ -254,6 +254,17 @@ CREATE POLICY "Users delete own post photos" ON storage.objects
 
 -- ──────────────────────────────────────────────────────────
 -- L2: rpc_admin_save_placements — guard against cancelled tournaments
+--
+-- ⚠ SOURCE OF TRUTH for public.rpc_admin_save_placements (run order 7,
+-- after rpc-admin-actions.sql at run order 6 — CREATE OR REPLACE means this
+-- definition wins on a fresh full run). This version keeps the L2 guard
+-- (placements can only be saved for 'upcoming'/'active' tournaments) and
+-- adds the require_mfa() + venue-scoped admin check + security_events /
+-- admin_audit_log logging from the rpc-admin-actions.sql definition, which
+-- the original L2 patch had dropped. Do not redefine
+-- rpc_admin_save_placements in an earlier script without keeping it in sync
+-- with this one — see the comment above the definition in
+-- rpc-admin-actions.sql.
 -- ──────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.rpc_admin_save_placements(
   p_tournament_id uuid,
@@ -269,16 +280,28 @@ DECLARE
   v_uid      uuid;
   v_uname    text;
   v_status   text;
+  v_title    text;
+  v_venue_id uuid;
   v_warnings text[] := '{}';
 BEGIN
-  IF NOT public.is_admin() THEN
-    RETURN json_build_object('error', 'unauthorized', 'message', 'Admin only.');
-  END IF;
+  PERFORM public.require_mfa();
 
-  SELECT status INTO v_status FROM tournaments WHERE id = p_tournament_id;
+  SELECT title, status, venue_id INTO v_title, v_status, v_venue_id
+    FROM tournaments WHERE id = p_tournament_id;
+
   IF NOT FOUND THEN
     RETURN json_build_object('error', 'not_found');
   END IF;
+
+  IF NOT (public.is_admin() OR
+          (v_venue_id IS NOT NULL AND public.can_manage_venue(v_venue_id))) THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_save_placements', 'tournament_id', p_tournament_id))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error', 'unauthorized', 'message', 'Admin only.');
+  END IF;
+
   IF v_status NOT IN ('upcoming', 'active') THEN
     RETURN json_build_object('error', 'invalid_status',
       'message', 'Results can only be saved for upcoming or active tournaments.');
@@ -306,6 +329,10 @@ BEGIN
   END LOOP;
 
   UPDATE tournaments SET status = 'completed' WHERE id = p_tournament_id;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'save_tournament_placements', 'tournament', p_tournament_id::text,
+          jsonb_build_object('title', v_title, 'placement_count', jsonb_array_length(p_placements)));
 
   RETURN json_build_object('ok', true, 'warnings', v_warnings);
 END;

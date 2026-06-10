@@ -272,6 +272,15 @@ GRANT  EXECUTE ON FUNCTION public.is_venue_admin(uuid) TO authenticated;
 
 -- ────────────────────────────────────────────────────────────
 -- P3: rpc_admin_update_forum_status (replaces direct UPDATE)
+--
+-- ⚠ SOURCE OF TRUTH: scripts/venue-role-hardening.sql (run order 12, "10.
+-- Update forum admin RPC to accept venue admins") defines the production
+-- rpc_admin_update_forum_status — it runs after this script (order 9) and
+-- adds require_mfa(), venue-admin scoping (server-side venue_id lookup), and
+-- security_events logging on denial, which this version lacks. CREATE OR
+-- REPLACE means that later definition wins on a fresh full run. Do not
+-- redefine rpc_admin_update_forum_status in a script that runs after order
+-- 12 without keeping it in sync.
 -- ────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.rpc_admin_update_forum_status(
   p_forum_id uuid,

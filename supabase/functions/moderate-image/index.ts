@@ -73,24 +73,6 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST")
     return Response.json({ error: "method_not_allowed" }, { status: 405, headers: CORS });
 
-  // ── Missing credentials ───────────────────────────────────
-  /*
-    if (IS_PROD) {
-      // Production: fail closed — do not allow content through
-      console.error("[moderate-image] PRODUCTION: AWS credentials not configured — rejecting");
-      const admin = createClient(SUPA_URL, SUPA_SVC, { auth: { persistSession: false } });
-      await logModerationFailure(admin, "missing_aws_credentials", { is_production: true });
-      return Response.json(
-        { ok: false, flagged: false, error: "moderation_unavailable",
-          message: "Content moderation is temporarily unavailable. Please try again later." },
-        { status: 503, headers: CORS }
-      );
-    }
-    // Dev: warn and allow
-    console.warn("[moderate-image] DEV: AWS credentials not configured — skipping moderation");
-    return Response.json({ ok: true, flagged: false, skipped: true }, { headers: CORS });
-  */
-
   let body: {
     image_url:   string;
     bucket:      string;

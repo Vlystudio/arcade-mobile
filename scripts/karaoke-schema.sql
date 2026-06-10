@@ -16,8 +16,20 @@ CREATE TABLE IF NOT EXISTS public.karaoke_queue (
   created_at      timestamptz DEFAULT now()
 );
 
--- Enable Realtime for live queue updates
-ALTER PUBLICATION supabase_realtime ADD TABLE public.karaoke_queue;
+-- Enable Realtime for live queue updates (idempotent — ALTER PUBLICATION ADD
+-- TABLE errors if the table is already a member, so guard with a check)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+     WHERE pubname = 'supabase_realtime'
+       AND schemaname = 'public'
+       AND tablename = 'karaoke_queue'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.karaoke_queue;
+  END IF;
+END;
+$$;
 
 -- RLS
 ALTER TABLE public.karaoke_queue ENABLE ROW LEVEL SECURITY;
@@ -103,7 +115,9 @@ REVOKE ALL ON FUNCTION public.rpc_karaoke_next(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.rpc_karaoke_next(uuid) TO authenticated, anon;
 
 -- ── rpc_karaoke_skip ─────────────────────────────────────────
--- Admin: skip a queued or playing song
+-- Admin: skip a queued or playing song.
+-- karaoke_queue is a single platform-wide queue (no venue_id) —
+-- platform-admin-only.
 CREATE OR REPLACE FUNCTION public.rpc_karaoke_skip(p_song_id uuid)
 RETURNS json
 LANGUAGE plpgsql
@@ -111,7 +125,13 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  PERFORM public.require_mfa();
+
   IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_karaoke_skip', 'song_id', p_song_id))
+    ON CONFLICT DO NOTHING;
     RETURN json_build_object('error', 'unauthorized');
   END IF;
 
@@ -119,6 +139,9 @@ BEGIN
   IF NOT FOUND THEN
     RETURN json_build_object('error', 'not_found');
   END IF;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'karaoke_skip', 'karaoke_queue', p_song_id::text, '{}');
 
   RETURN json_build_object('ok', true);
 END;
@@ -128,7 +151,7 @@ REVOKE ALL ON FUNCTION public.rpc_karaoke_skip(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.rpc_karaoke_skip(uuid) TO authenticated;
 
 -- ── rpc_karaoke_remove ───────────────────────────────────────
--- Admin: hard-delete a song from the queue
+-- Admin: hard-delete a song from the queue. Platform-admin-only (see above).
 CREATE OR REPLACE FUNCTION public.rpc_karaoke_remove(p_song_id uuid)
 RETURNS json
 LANGUAGE plpgsql
@@ -136,11 +159,21 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  PERFORM public.require_mfa();
+
   IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_karaoke_remove', 'song_id', p_song_id))
+    ON CONFLICT DO NOTHING;
     RETURN json_build_object('error', 'unauthorized');
   END IF;
 
   DELETE FROM karaoke_queue WHERE id = p_song_id;
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'karaoke_remove', 'karaoke_queue', p_song_id::text, '{}');
+
   RETURN json_build_object('ok', true);
 END;
 $$;
@@ -149,7 +182,7 @@ REVOKE ALL ON FUNCTION public.rpc_karaoke_remove(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.rpc_karaoke_remove(uuid) TO authenticated;
 
 -- ── rpc_karaoke_clear_history ────────────────────────────────
--- Admin: remove all played / skipped entries
+-- Admin: remove all played / skipped entries. Platform-admin-only (see above).
 CREATE OR REPLACE FUNCTION public.rpc_karaoke_clear_history()
 RETURNS json
 LANGUAGE plpgsql
@@ -157,11 +190,21 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
+  PERFORM public.require_mfa();
+
   IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_karaoke_clear_history'))
+    ON CONFLICT DO NOTHING;
     RETURN json_build_object('error', 'unauthorized');
   END IF;
 
   DELETE FROM karaoke_queue WHERE status IN ('played', 'skipped');
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (auth.uid(), 'karaoke_clear_history', 'karaoke_queue', NULL, '{}');
+
   RETURN json_build_object('ok', true);
 END;
 $$;

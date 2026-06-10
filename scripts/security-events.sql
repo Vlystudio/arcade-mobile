@@ -93,6 +93,7 @@ GRANT  EXECUTE ON FUNCTION public.log_security_event(text, text, jsonb) TO anon;
 
 
 -- ── 3. Admin view RPC ─────────────────────────────────────────
+-- Platform-wide table (no venue_id) — platform-admin-only.
 CREATE OR REPLACE FUNCTION public.rpc_admin_get_security_events(
   p_severity  text DEFAULT NULL,  -- filter by severity
   p_type      text DEFAULT NULL,  -- filter by event_type prefix
@@ -108,10 +109,22 @@ RETURNS TABLE (
   details    jsonb,
   created_at timestamptz
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+BEGIN
+  PERFORM public.require_mfa();
+
+  IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_get_security_events'))
+    ON CONFLICT DO NOTHING;
+    RAISE EXCEPTION 'unauthorized' USING ERRCODE = 'P0001';
+  END IF;
+
+  RETURN QUERY
   SELECT
     se.id,
     se.event_type,
@@ -123,12 +136,12 @@ AS $$
   FROM security_events se
   LEFT JOIN profiles p ON p.id = se.user_id
   WHERE
-    public.is_admin()
-    AND (p_severity IS NULL OR se.severity = p_severity)
+    (p_severity IS NULL OR se.severity = p_severity)
     AND (p_type     IS NULL OR se.event_type LIKE p_type || '%')
   ORDER BY se.created_at DESC
   LIMIT  LEAST(p_limit, 500)
   OFFSET p_offset;
+END;
 $$;
 
 REVOKE ALL ON FUNCTION public.rpc_admin_get_security_events(text, text, int, int) FROM PUBLIC;

@@ -10,9 +10,15 @@ RETURNS TABLE (
   avatar_url text,
   role       text,
   email      text
-) LANGUAGE plpgsql SECURITY DEFINER AS $$
+) LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
+  PERFORM public.require_mfa();
+
   IF NOT public.is_admin() THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_get_users'))
+    ON CONFLICT DO NOTHING;
     RAISE EXCEPTION 'unauthorized' USING ERRCODE = 'P0001';
   END IF;
 

@@ -298,11 +298,17 @@ BEGIN
     RETURN json_build_object('error', 'not_authenticated');
   END IF;
 
+  PERFORM public.require_mfa();
+
   -- Only admins, owners, and architects can reply
   IF NOT (
     public.is_admin()
     OR EXISTS (SELECT 1 FROM profiles WHERE id = v_uid AND role IN ('owner', 'architect'))
   ) THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', v_uid,
+      jsonb_build_object('rpc', 'rpc_admin_reply_support', 'ticket_id', p_ticket_id))
+    ON CONFLICT DO NOTHING;
     RETURN json_build_object('error', 'unauthorized');
   END IF;
 
@@ -318,6 +324,9 @@ BEGIN
      SET status = 'open'
    WHERE id = p_ticket_id
      AND status != 'open';
+
+  INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
+  VALUES (v_uid, 'support_reply', 'support_ticket', p_ticket_id::text, '{}');
 
   RETURN json_build_object('ok', true);
 END;

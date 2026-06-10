@@ -16,6 +16,12 @@
 -- Run AFTER all migration scripts have been applied.
 -- ============================================================
 
+-- Wrapped in BEGIN/COMMIT so this setup is durable even when the whole file
+-- is sent as a single multi-statement query (e.g. via the Supabase
+-- Management API), where the BEGIN/ROLLBACK pairs around each test block
+-- below would otherwise also roll back this setup.
+BEGIN;
+
 -- Ensure pgcrypto is available (needed for hash_lane_token)
 CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions;
 
@@ -28,6 +34,8 @@ CREATE OR REPLACE FUNCTION public.test_result(
 ) RETURNS TABLE (test text, result text) AS $$
   SELECT test_name, CASE WHEN passed THEN 'PASS' ELSE 'FAIL' END;
 $$ LANGUAGE sql;
+
+COMMIT;
 
 -- ════════════════════════════════════════════════════════════
 -- BLOCK 1: Anonymous user — cannot read private data
@@ -210,35 +218,9 @@ SELECT * FROM test_result(
   length(public.hash_lane_token('any-input')) = 64
 );
 
--- Test: expired token in lane_qr_tokens fails check_in
--- (We simulate by testing the rpc_check_in logic against a fake expired token)
-SET LOCAL ROLE authenticated;
-DO $$
-DECLARE
-  v_uid uuid := gen_random_uuid();
-  v_result json;
-BEGIN
-  PERFORM set_config('request.jwt.claims',
-    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
-
-  -- Call rpc_check_in with a clearly invalid token
-  -- Inner BEGIN/EXCEPTION: rpc_check_in tries to INSERT INTO security_events with
-  -- a fake user_id that has no row in auth.users — FK violation is expected in
-  -- the test environment and is itself proof the security logging path executed.
-  BEGIN
-    SELECT rpc_check_in('invalid-qr-token-that-does-not-exist') INTO v_result;
-    IF (v_result->>'error') = 'lane_not_found' THEN
-      RAISE NOTICE 'PASS: invalid QR token returns lane_not_found';
-    ELSE
-      RAISE NOTICE 'FAIL: unexpected result for invalid token — %', v_result;
-    END IF;
-  EXCEPTION WHEN foreign_key_violation THEN
-    -- security_events.user_id FK requires a real auth.users row — only happens
-    -- in tests. In production auth.uid() always resolves to a real user.
-    RAISE NOTICE 'PASS: rpc_check_in reached security_events logging path (FK limitation in test env — not a bug)';
-  END;
-END;
-$$;
+-- Full rpc_check_in decision-table tests (invalid/revoked/expired/active/
+-- already_active/rate_limited) now use REAL lane_qr_tokens fixture rows —
+-- see BLOCK 20.
 
 ROLLBACK;
 
@@ -328,28 +310,11 @@ DECLARE
   v_result        json;
 BEGIN
 
-  -- ── 7A: Venue A admin (AAL2) cannot access Venue B score queue ──
+  -- ── 7A: Venue cross-isolation for rpc_admin_get_score_review_queue /
+  -- rpc_admin_review_score with REAL fixture venues, admins and scores —
+  -- see BLOCK 20 (20H, 20J, 20K, 20L).
   PERFORM set_config('request.jwt.claims',
     json_build_object('sub', v_venue_a_admin, 'role', 'authenticated', 'aal', 'aal2')::text, true);
-
-  BEGIN
-    SELECT rpc_admin_get_score_review_queue(v_venue_b_id, 'pending') INTO v_result;
-    IF (v_result->>'error') = 'unauthorized' THEN
-      RAISE NOTICE 'PASS [7A]: venue A admin blocked from venue B score queue';
-    ELSIF json_array_length(v_result) = 0 THEN
-      RAISE NOTICE 'PASS [7A]: venue A admin gets empty queue for venue B (no rows match — auth passed but no data visible)';
-    ELSE
-      RAISE NOTICE 'FAIL [7A]: venue A admin got unexpected result: %', v_result;
-    END IF;
-  EXCEPTION WHEN foreign_key_violation THEN
-    RAISE NOTICE 'PASS [7A]: venue cross-isolation reached security_events path (FK limitation in test env)';
-  WHEN OTHERS THEN
-    IF SQLERRM LIKE '%unauthorized%' OR SQLERRM LIKE '%MFA%' OR SQLSTATE = 'P0003' THEN
-      RAISE NOTICE 'PASS [7A]: venue A admin blocked from venue B score queue — %', SQLERRM;
-    ELSE
-      RAISE NOTICE 'FAIL [7A]: unexpected exception: %', SQLERRM;
-    END IF;
-  END;
 
   -- ── 7B: Random user (AAL2, not admin, no venue role) cannot review any score ──
   BEGIN
@@ -447,48 +412,11 @@ ROLLBACK;
 
 -- ════════════════════════════════════════════════════════════
 -- BLOCK 10: Venue cross-isolation
--- Venue admin of venue A cannot access the score queue of venue B.
+-- Superseded by BLOCK 20, which exercises rpc_admin_get_score_review_queue
+-- and rpc_admin_review_score with REAL fixture venues/admins/scores instead
+-- of fake UUIDs (so authorization checks are actually reached, not just
+-- their FK-violation side effects).
 -- ════════════════════════════════════════════════════════════
-BEGIN;
-SET LOCAL ROLE authenticated;
-DO $$
-DECLARE
-  v_venue_a_admin uuid := gen_random_uuid();
-  v_venue_b_id    uuid := gen_random_uuid();
-  v_result        json;
-BEGIN
-  -- Simulate venue A admin with AAL2 JWT but no venue_admins row for venue B
-  PERFORM set_config('request.jwt.claims',
-    json_build_object('sub', v_venue_a_admin, 'role', 'authenticated', 'aal', 'aal2')::text, true);
-
-  -- rpc_admin_get_score_review_queue for an unknown venue_b must return unauthorized
-  BEGIN
-    SELECT rpc_admin_get_score_review_queue(v_venue_b_id, 'pending') INTO v_result;
-    IF (v_result->>'error') = 'unauthorized' THEN
-      RAISE NOTICE 'PASS: venue cross-isolation — non-admin blocked from foreign venue score queue';
-    ELSE
-      RAISE NOTICE 'FAIL: venue cross-isolation — unexpected result: %', v_result;
-    END IF;
-  EXCEPTION WHEN foreign_key_violation THEN
-    RAISE NOTICE 'PASS: venue cross-isolation — RPC reached security_events logging path (FK limitation in test env)';
-  END;
-
-  -- rpc_admin_review_score with a fake score_id must fail auth (not_found or unauthorized)
-  -- When the score doesn't exist, venue_id lookup returns NULL → is_venue_admin(NULL) = false
-  -- → unauthorized (not_found would also be acceptable)
-  BEGIN
-    SELECT rpc_admin_review_score(v_venue_b_id, 'approved') INTO v_result;
-    IF (v_result->>'error') IN ('unauthorized', 'not_found') THEN
-      RAISE NOTICE 'PASS: venue cross-isolation — non-admin blocked from score review';
-    ELSE
-      RAISE NOTICE 'FAIL: venue cross-isolation — rpc_admin_review_score unexpected: %', v_result;
-    END IF;
-  EXCEPTION WHEN foreign_key_violation THEN
-    RAISE NOTICE 'PASS: venue cross-isolation — RPC reached security_events logging path (FK limitation in test env)';
-  END;
-END;
-$$;
-ROLLBACK;
 
 
 -- ════════════════════════════════════════════════════════════
@@ -572,48 +500,10 @@ ROLLBACK;
 
 -- ════════════════════════════════════════════════════════════
 -- BLOCK 13: QR check-in decision tests
+-- Full decision-table coverage (invalid/revoked/expired/active/
+-- already_active/rate_limited) now uses REAL lane_qr_tokens fixture rows —
+-- see BLOCK 20. hash_lane_token determinism is covered in BLOCK 3.
 -- ════════════════════════════════════════════════════════════
-BEGIN;
-SET LOCAL ROLE authenticated;
-DO $$
-DECLARE
-  v_uid    uuid := gen_random_uuid();
-  v_result json;
-BEGIN
-  PERFORM set_config('request.jwt.claims',
-    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
-
-  -- Unknown token → lane_not_found
-  -- Inner BEGIN/EXCEPTION: rpc_check_in tries to INSERT INTO security_events with
-  -- a fake user_id that has no row in auth.users — FK violation is expected in
-  -- the test environment and is itself proof the security logging path executed.
-  BEGIN
-    SELECT rpc_check_in('completely-invalid-qr-token-xyz-123') INTO v_result;
-    IF (v_result->>'error') = 'lane_not_found' THEN
-      RAISE NOTICE 'PASS: QR check-in — unknown token returns lane_not_found';
-    ELSE
-      RAISE NOTICE 'FAIL: QR check-in — unexpected result for unknown token: %', v_result;
-    END IF;
-  EXCEPTION WHEN foreign_key_violation THEN
-    -- security_events.user_id FK requires a real auth.users row — only happens
-    -- in tests. In production auth.uid() always resolves to a real user.
-    RAISE NOTICE 'PASS: QR check-in — rpc_check_in reached security_events logging path (FK limitation in test env — not a bug)';
-  END;
-END;
-$$;
-
--- hash_lane_token stability (no auth required)
-SELECT * FROM test_result(
-  'QR: hash_lane_token is deterministic',
-  public.hash_lane_token('test-token') = public.hash_lane_token('test-token')
-);
-
-SELECT * FROM test_result(
-  'QR: different tokens produce different hashes',
-  public.hash_lane_token('token-a') <> public.hash_lane_token('token-b')
-);
-
-ROLLBACK;
 
 
 -- ════════════════════════════════════════════════════════════
@@ -730,6 +620,20 @@ BEGIN
     END IF;
   END;
 
+  -- ── 15E: direct SELECT on storage_cleanup_queue returns no rows ──
+  -- RLS policy "No direct access storage_cleanup_queue" is FOR ALL
+  -- USING (false), so even a row-owning admin session must see zero rows
+  -- via direct table access; rpc_admin_get_storage_cleanup_queue (SECURITY
+  -- DEFINER) is the only read path.
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_uid, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+
+  IF (SELECT count(*) FROM storage_cleanup_queue) = 0 THEN
+    RAISE NOTICE 'PASS [15E]: direct SELECT on storage_cleanup_queue returns no rows (RLS blocks it)';
+  ELSE
+    RAISE NOTICE 'FAIL [15E]: direct SELECT on storage_cleanup_queue returned rows — RLS bypassed';
+  END IF;
+
 END;
 $$;
 ROLLBACK;
@@ -789,33 +693,10 @@ ROLLBACK;
 -- BLOCK 17: QR legacy fallback is removed
 -- Verifies that rpc_check_in does NOT fall back to lanes.lane_qr_token.
 -- Any token not in lane_qr_tokens must return lane_not_found.
+-- Covered with a real fixture lane in BLOCK 20 (20A: unrelated random
+-- token against a lane that DOES have active lane_qr_tokens rows still
+-- returns lane_not_found — proving no legacy/fallback match occurs).
 -- ════════════════════════════════════════════════════════════
-BEGIN;
-SET LOCAL ROLE authenticated;
-DO $$
-DECLARE
-  v_uid    uuid := gen_random_uuid();
-  v_result json;
-BEGIN
-  PERFORM set_config('request.jwt.claims',
-    json_build_object('sub', v_uid, 'role', 'authenticated')::text, true);
-
-  -- Use a token that looks like a valid UUID (same format as lane_qr_token values)
-  -- but has no entry in lane_qr_tokens. Legacy path would match lanes.lane_qr_token
-  -- if it still existed. It must NOT.
-  BEGIN
-    SELECT rpc_check_in('00000000-0000-0000-0000-000000000000') INTO v_result;
-    IF (v_result->>'error') = 'lane_not_found' THEN
-      RAISE NOTICE 'PASS [17A]: UUID-shaped token not in lane_qr_tokens returns lane_not_found (legacy fallback is gone)';
-    ELSE
-      RAISE NOTICE 'FAIL [17A]: unexpected result for non-existent UUID token: %', v_result;
-    END IF;
-  EXCEPTION WHEN foreign_key_violation THEN
-    RAISE NOTICE 'PASS [17A]: rpc_check_in reached security_events logging (FK limitation in test env — no legacy path executed)';
-  END;
-END;
-$$;
-ROLLBACK;
 
 
 -- ════════════════════════════════════════════════════════════
@@ -885,6 +766,252 @@ BEGIN
       RAISE;
     END IF;
   END;
+END;
+$$;
+ROLLBACK;
+
+
+-- ════════════════════════════════════════════════════════════
+-- BLOCK 20: Fixture-based cross-venue isolation & QR token tests
+-- Creates real (rolled-back) fixture rows — two venues, a venue admin and
+-- venue staff member for venue A, a venue admin for venue B, a platform
+-- admin, a lane with active/expired/revoked lane_qr_tokens, pending scores
+-- in each venue, and a recent check-in — then exercises rpc_check_in and
+-- the venue-scoped admin RPCs against them under simulated JWT claims for
+-- each role. Everything runs inside this transaction's BEGIN/ROLLBACK, so
+-- nothing persists.
+--
+-- Bootstrapping the fixture platform admin requires impersonating an
+-- existing real platform admin (profiles.is_admin = true) for one UPDATE,
+-- to satisfy guard_role_escalation_trigger. If no platform admin exists yet
+-- (e.g. a fresh dev database), this block is skipped.
+--
+-- Unlike other blocks, this one does NOT `SET LOCAL ROLE authenticated` —
+-- fixture setup needs to insert directly into auth.users/venues/lanes/etc.,
+-- which the `authenticated` role cannot do. The RPCs under test are
+-- SECURITY DEFINER and authorize purely via request.jwt.claims (set below
+-- per-step), so running fixture setup as the default role does not affect
+-- the validity of the authorization checks being tested.
+-- ════════════════════════════════════════════════════════════
+BEGIN;
+DO $$
+DECLARE
+  v_real_admin      uuid;
+  v_platform_admin  uuid := gen_random_uuid();
+  v_venue_a_admin   uuid := gen_random_uuid();
+  v_venue_a_staff   uuid := gen_random_uuid();
+  v_venue_b_admin   uuid := gen_random_uuid();
+  v_normal_user     uuid := gen_random_uuid();
+  v_cooldown_user   uuid := gen_random_uuid();
+  v_venue_a         uuid := gen_random_uuid();
+  v_venue_b         uuid := gen_random_uuid();
+  v_game_id         uuid := gen_random_uuid();
+  v_lane_id         uuid := gen_random_uuid();
+  v_score_a         uuid := gen_random_uuid();
+  v_score_b         uuid := gen_random_uuid();
+  v_token_active    text := 'fixture-active-'  || gen_random_uuid()::text;
+  v_token_expired   text := 'fixture-expired-' || gen_random_uuid()::text;
+  v_token_revoked   text := 'fixture-revoked-' || gen_random_uuid()::text;
+  v_result          json;
+BEGIN
+  SELECT id INTO v_real_admin FROM profiles WHERE is_admin = true LIMIT 1;
+  IF v_real_admin IS NULL THEN
+    RAISE NOTICE 'SKIP [BLOCK 20]: no existing platform admin (profiles.is_admin=true) to bootstrap fixtures — skipping';
+    RETURN;
+  END IF;
+
+  -- ── Fixture setup ──────────────────────────────────────────
+  INSERT INTO auth.users (id) VALUES
+    (v_platform_admin), (v_venue_a_admin), (v_venue_a_staff),
+    (v_venue_b_admin), (v_normal_user), (v_cooldown_user);
+
+  -- Bypass guard_role_escalation_trigger by impersonating the real admin
+  -- for this one UPDATE.
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_real_admin, 'role', 'authenticated')::text, true);
+  UPDATE profiles SET is_admin = true WHERE id = v_platform_admin;
+
+  INSERT INTO venues (id, slug, name) VALUES
+    (v_venue_a, 'fixture-venue-a-' || left(v_venue_a::text, 8), 'Fixture Venue A'),
+    (v_venue_b, 'fixture-venue-b-' || left(v_venue_b::text, 8), 'Fixture Venue B');
+
+  INSERT INTO venue_admins (venue_id, user_id, role) VALUES
+    (v_venue_a, v_venue_a_admin, 'admin'),
+    (v_venue_a, v_venue_a_staff, 'staff'),
+    (v_venue_b, v_venue_b_admin, 'admin');
+
+  INSERT INTO games (id, name, type) VALUES (v_game_id, 'Fixture Pinball', 'pinball');
+
+  INSERT INTO lanes (id, game_id, venue_id, lane_number, status) VALUES
+    (v_lane_id, v_game_id, v_venue_a, 999, 'available');
+
+  INSERT INTO lane_qr_tokens (lane_id, venue_id, token_hash, expires_at, revoked_at) VALUES
+    (v_lane_id, v_venue_a, public.hash_lane_token(v_token_active),  now() + interval '1 hour', NULL),
+    (v_lane_id, v_venue_a, public.hash_lane_token(v_token_expired), now() - interval '1 hour', NULL),
+    (v_lane_id, v_venue_a, public.hash_lane_token(v_token_revoked), now() + interval '1 hour', now());
+
+  INSERT INTO scores (id, user_id, game_id, venue_id, score, status, proof_storage_path) VALUES
+    (v_score_a, v_normal_user, v_game_id, v_venue_a, 12345, 'pending', 'fixture/proof-a.jpg'),
+    (v_score_b, v_normal_user, v_game_id, v_venue_b, 54321, 'pending', 'fixture/proof-b.jpg');
+
+  INSERT INTO check_ins (user_id, lane_id, venue_id, status, created_at)
+  VALUES (v_cooldown_user, v_lane_id, v_venue_a, 'completed', now() - interval '5 minutes');
+
+  -- ── 20A-F: rpc_check_in decision table (real lane_qr_tokens rows) ──
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_normal_user, 'role', 'authenticated')::text, true);
+
+  SELECT rpc_check_in('fixture-no-such-token-' || gen_random_uuid()::text) INTO v_result;
+  IF (v_result->>'error') = 'lane_not_found' THEN
+    RAISE NOTICE 'PASS [20A]: rpc_check_in — unrecognized token returns lane_not_found';
+  ELSE
+    RAISE NOTICE 'FAIL [20A]: unexpected result for unrecognized token: %', v_result;
+  END IF;
+
+  SELECT rpc_check_in(v_token_revoked) INTO v_result;
+  IF (v_result->>'error') = 'token_revoked' THEN
+    RAISE NOTICE 'PASS [20B]: rpc_check_in — revoked token returns token_revoked';
+  ELSE
+    RAISE NOTICE 'FAIL [20B]: unexpected result for revoked token: %', v_result;
+  END IF;
+
+  SELECT rpc_check_in(v_token_expired) INTO v_result;
+  IF (v_result->>'error') = 'token_expired' THEN
+    RAISE NOTICE 'PASS [20C]: rpc_check_in — expired token returns token_expired';
+  ELSE
+    RAISE NOTICE 'FAIL [20C]: unexpected result for expired token: %', v_result;
+  END IF;
+
+  SELECT rpc_check_in(v_token_active) INTO v_result;
+  IF (v_result->>'check_in_id') IS NOT NULL AND (v_result->>'lane_id') = v_lane_id::text THEN
+    RAISE NOTICE 'PASS [20D]: rpc_check_in — active token succeeds (check_in_id=%)', v_result->>'check_in_id';
+  ELSE
+    RAISE NOTICE 'FAIL [20D]: active token did not produce a successful check-in: %', v_result;
+  END IF;
+
+  SELECT rpc_check_in(v_token_active) INTO v_result;
+  IF (v_result->>'error') = 'already_active' THEN
+    RAISE NOTICE 'PASS [20E]: rpc_check_in — second check-in blocked as already_active';
+  ELSE
+    RAISE NOTICE 'FAIL [20E]: unexpected result for duplicate check-in: %', v_result;
+  END IF;
+
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_cooldown_user, 'role', 'authenticated')::text, true);
+  SELECT rpc_check_in(v_token_active) INTO v_result;
+  IF (v_result->>'error') = 'rate_limited' THEN
+    RAISE NOTICE 'PASS [20F]: rpc_check_in — recent check-in to same lane blocked as rate_limited';
+  ELSE
+    RAISE NOTICE 'FAIL [20F]: unexpected result for cooldown user: %', v_result;
+  END IF;
+
+  -- ── 20H-M: cross-venue score review queue / review ──────────
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_venue_a_admin, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+
+  SELECT rpc_admin_get_score_review_queue(v_venue_b, 'pending') INTO v_result;
+  IF (v_result->>'error') = 'unauthorized' THEN
+    RAISE NOTICE 'PASS [20H]: venue A admin blocked from venue B score review queue';
+  ELSE
+    RAISE NOTICE 'FAIL [20H]: venue A admin unexpectedly accessed venue B queue: %', v_result;
+  END IF;
+
+  SELECT rpc_admin_get_score_review_queue(v_venue_a, 'pending') INTO v_result;
+  IF json_typeof(v_result) = 'array'
+     AND EXISTS (SELECT 1 FROM json_array_elements(v_result) e WHERE (e->>'id')::uuid = v_score_a) THEN
+    RAISE NOTICE 'PASS [20I]: venue A admin sees venue A''s pending score in review queue';
+  ELSE
+    RAISE NOTICE 'FAIL [20I]: venue A admin queue missing fixture score: %', v_result;
+  END IF;
+
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_venue_a_staff, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+  SELECT rpc_admin_get_score_review_queue(v_venue_a, 'pending') INTO v_result;
+  IF (v_result->>'error') = 'unauthorized' THEN
+    RAISE NOTICE 'PASS [20J]: venue A staff (non-admin role) blocked from score review queue';
+  ELSE
+    RAISE NOTICE 'FAIL [20J]: venue A staff unexpectedly accessed score review queue: %', v_result;
+  END IF;
+
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_platform_admin, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+  SELECT rpc_admin_get_score_review_queue(v_venue_b, 'pending') INTO v_result;
+  IF json_typeof(v_result) = 'array'
+     AND EXISTS (SELECT 1 FROM json_array_elements(v_result) e WHERE (e->>'id')::uuid = v_score_b) THEN
+    RAISE NOTICE 'PASS [20K]: platform admin sees venue B''s pending score in review queue';
+  ELSE
+    RAISE NOTICE 'FAIL [20K]: platform admin queue missing fixture score: %', v_result;
+  END IF;
+
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_venue_a_admin, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+  SELECT rpc_admin_review_score(v_score_b, 'approved') INTO v_result;
+  IF (v_result->>'error') = 'unauthorized' THEN
+    RAISE NOTICE 'PASS [20L]: venue A admin blocked from reviewing venue B''s score';
+  ELSE
+    RAISE NOTICE 'FAIL [20L]: venue A admin unexpectedly reviewed venue B''s score: %', v_result;
+  END IF;
+
+  SELECT rpc_admin_review_score(v_score_a, 'approved') INTO v_result;
+  IF (v_result->>'ok')::boolean IS TRUE THEN
+    RAISE NOTICE 'PASS [20M]: venue A admin successfully reviews venue A''s own score';
+  ELSE
+    RAISE NOTICE 'FAIL [20M]: venue A admin could not review venue A''s own score: %', v_result;
+  END IF;
+
+  -- ── 20N-O: cross-venue score-proof signed URL access ────────
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_venue_b_admin, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+  SELECT rpc_admin_create_score_proof_signed_url(v_score_a) INTO v_result;
+  IF (v_result->>'error') = 'unauthorized' THEN
+    RAISE NOTICE 'PASS [20N]: venue B admin blocked from venue A''s score-proof path';
+  ELSE
+    RAISE NOTICE 'FAIL [20N]: venue B admin unexpectedly accessed venue A''s score proof: %', v_result;
+  END IF;
+
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_venue_a_admin, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+  SELECT rpc_admin_create_score_proof_signed_url(v_score_a) INTO v_result;
+  IF (v_result->>'ok')::boolean IS TRUE AND v_result->>'path' = 'fixture/proof-a.jpg' THEN
+    RAISE NOTICE 'PASS [20O]: venue A admin can access venue A''s own score-proof path';
+  ELSE
+    RAISE NOTICE 'FAIL [20O]: venue A admin could not access its own score proof: %', v_result;
+  END IF;
+
+  -- ── 20P-Q: security_events / admin_audit_log side effects ───
+  IF (SELECT count(*) FROM security_events
+       WHERE event_type = 'admin_access_denied'
+         AND user_id IN (v_venue_a_admin, v_venue_a_staff, v_venue_b_admin)) >= 4 THEN
+    RAISE NOTICE 'PASS [20P]: admin_access_denied logged for each cross-venue/role denial above';
+  ELSE
+    RAISE NOTICE 'FAIL [20P]: expected >= 4 admin_access_denied security_events rows for fixture admins';
+  END IF;
+
+  IF (SELECT count(*) FROM security_events
+       WHERE user_id = v_normal_user
+         AND event_type IN ('qr_token_invalid','qr_token_revoked','qr_token_expired')) = 3 THEN
+    RAISE NOTICE 'PASS [20P]: invalid/revoked/expired QR attempts logged to security_events';
+  ELSE
+    RAISE NOTICE 'FAIL [20P]: expected 3 qr_token_* security_events rows for normal user';
+  END IF;
+
+  IF (SELECT count(*) FROM security_events
+       WHERE user_id = v_cooldown_user
+         AND event_type = 'qr_checkin_rate_limited') = 1 THEN
+    RAISE NOTICE 'PASS [20P]: rate-limited check-in attempt logged to security_events';
+  ELSE
+    RAISE NOTICE 'FAIL [20P]: expected qr_checkin_rate_limited security_events row for cooldown user';
+  END IF;
+
+  IF (SELECT count(*) FROM admin_audit_log
+       WHERE admin_id = v_venue_a_admin
+         AND action = 'score_review'
+         AND target_id = v_score_a::text) = 1 THEN
+    RAISE NOTICE 'PASS [20Q]: successful score review logged to admin_audit_log';
+  ELSE
+    RAISE NOTICE 'FAIL [20Q]: expected admin_audit_log row for venue A admin''s score review';
+  END IF;
+
 END;
 $$;
 ROLLBACK;

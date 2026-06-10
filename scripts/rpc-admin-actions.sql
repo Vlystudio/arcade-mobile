@@ -211,6 +211,13 @@ $$;
 
 -- ── Tournament: save placements + mark completed (atomic) ─────
 -- Venue-scoped: platform admin OR venue admin of the tournament's venue.
+--
+-- ⚠ SOURCE OF TRUTH: scripts/rls-security-patches.sql (run order 7, "L2:
+-- rpc_admin_save_placements") defines the production rpc_admin_save_placements
+-- — it runs after this script and adds a guard that placements can only be
+-- saved for 'upcoming'/'active' tournaments. CREATE OR REPLACE means that
+-- definition wins on a fresh full run. Keep both definitions in sync if you
+-- change the auth/logging logic here.
 CREATE OR REPLACE FUNCTION public.rpc_admin_save_placements(
   p_tournament_id uuid,
   p_placements    jsonb  -- [{"place": 1, "username": "alice"}, ...]

@@ -13,6 +13,7 @@ ALTER TABLE tournaments
 -- ── Admin: generate (or regenerate) a signup QR token ────────
 -- Requires AAL2. Returns the raw token once so the client
 -- can build the deep-link URL for display.
+-- Venue-scoped: platform admin OR venue admin of the tournament's venue.
 CREATE OR REPLACE FUNCTION public.rpc_admin_generate_ff_signup_qr(
   p_tournament_id uuid
 ) RETURNS json
@@ -21,21 +22,27 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_token uuid := gen_random_uuid();
-  v_title text;
+  v_token    uuid := gen_random_uuid();
+  v_title    text;
+  v_venue_id uuid;
 BEGIN
   PERFORM public.require_mfa();
 
-  IF NOT public.is_admin() THEN
-    RETURN json_build_object('error', 'unauthorized');
-  END IF;
-
-  SELECT title INTO v_title
+  SELECT title, venue_id INTO v_title, v_venue_id
     FROM tournaments
    WHERE id = p_tournament_id AND is_individual = true;
 
   IF NOT FOUND THEN
     RETURN json_build_object('error', 'not_found');
+  END IF;
+
+  IF NOT (public.is_admin() OR
+          (v_venue_id IS NOT NULL AND public.can_manage_venue(v_venue_id))) THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_generate_ff_signup_qr', 'tournament_id', p_tournament_id))
+    ON CONFLICT DO NOTHING;
+    RETURN json_build_object('error', 'unauthorized');
   END IF;
 
   UPDATE tournaments
@@ -53,6 +60,7 @@ END;
 $$;
 
 -- ── Admin: lock / revoke the active QR ───────────────────────
+-- Venue-scoped: platform admin OR venue admin of the tournament's venue.
 CREATE OR REPLACE FUNCTION public.rpc_admin_revoke_ff_signup_qr(
   p_tournament_id uuid
 ) RETURNS json
@@ -60,20 +68,29 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+DECLARE
+  v_venue_id uuid;
 BEGIN
   PERFORM public.require_mfa();
 
-  IF NOT public.is_admin() THEN
+  SELECT venue_id INTO v_venue_id FROM tournaments WHERE id = p_tournament_id;
+
+  IF NOT FOUND THEN
+    RETURN json_build_object('error', 'not_found');
+  END IF;
+
+  IF NOT (public.is_admin() OR
+          (v_venue_id IS NOT NULL AND public.can_manage_venue(v_venue_id))) THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('admin_access_denied', 'warn', auth.uid(),
+      jsonb_build_object('rpc', 'rpc_admin_revoke_ff_signup_qr', 'tournament_id', p_tournament_id))
+    ON CONFLICT DO NOTHING;
     RETURN json_build_object('error', 'unauthorized');
   END IF;
 
   UPDATE tournaments
      SET signup_qr_active = false
    WHERE id = p_tournament_id;
-
-  IF NOT FOUND THEN
-    RETURN json_build_object('error', 'not_found');
-  END IF;
 
   INSERT INTO admin_audit_log (admin_id, action, target_type, target_id, details)
   VALUES (auth.uid(), 'revoke_ff_qr', 'tournament', p_tournament_id::text, '{}');

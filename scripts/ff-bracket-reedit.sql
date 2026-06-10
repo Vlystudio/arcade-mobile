@@ -1,7 +1,11 @@
 -- Allow re-editing already-submitted game scores
 -- Replaces rpc_ff_submit_game_scores from ff-bracket-scoring.sql
 -- Run in Supabase SQL Editor
-
+--
+-- ⚠ SUPERSEDED by scripts/ff-guest-player.sql, the SOURCE OF TRUTH for
+-- rpc_ff_submit_game_scores (run last). This definition lacks
+-- require_mfa()/venue-scoping/audit logging — kept only for fresh-bootstrap
+-- ordering.
 CREATE OR REPLACE FUNCTION public.rpc_ff_submit_game_scores(
   p_game_id uuid,
   p_scores  jsonb

@@ -17,8 +17,11 @@
 
 
 -- ── 1. rpc_check_in: hash-only, no legacy fallback ────────────
--- The legacy Path B that read lanes.lane_qr_token in plain text
--- is removed. Any token not present in lane_qr_tokens is rejected.
+-- ⚠ SOURCE OF TRUTH for public.rpc_check_in (run order 19, last script in
+-- the documented run order). The legacy Path B that read lanes.lane_qr_token
+-- in plain text is removed. Any token not present in lane_qr_tokens is
+-- rejected. Do not redefine rpc_check_in in any earlier script — see the
+-- comments in scripts/rpc-check-in.sql and scripts/security-hardening-2.sql.
 CREATE OR REPLACE FUNCTION public.rpc_check_in(p_token text)
 RETURNS json
 LANGUAGE plpgsql
@@ -27,7 +30,6 @@ SET search_path = public
 AS $$
 DECLARE
   v_user_id    uuid;
-  v_lane       record;
   v_lqt        record;
   v_game       record;
   v_ci_id      uuid;
@@ -78,16 +80,9 @@ BEGIN
       'message', 'This QR code has expired. Ask staff to regenerate it.');
   END IF;
 
-  -- Populate lane record from joined data
-  v_lane.id          := v_lqt.lane_id;
-  v_lane.lane_number := v_lqt.lane_number;
-  v_lane.game_id     := v_lqt.game_id;
-  v_lane.venue_id    := v_lqt.venue_id;
-  v_lane.status      := v_lqt.lane_status;
-
   -- Skee-Ball uses manual lane selection — QR check-in disabled
   SELECT g.name, g.type INTO v_game
-    FROM games g WHERE g.id = v_lane.game_id;
+    FROM games g WHERE g.id = v_lqt.game_id;
 
   IF v_game.type = 'skeeball' THEN
     RETURN json_build_object(
@@ -96,7 +91,7 @@ BEGIN
     );
   END IF;
 
-  IF v_lane.status IS NOT NULL AND v_lane.status = 'inactive' THEN
+  IF v_lqt.lane_status IS NOT NULL AND v_lqt.lane_status = 'inactive' THEN
     RETURN json_build_object('error', 'lane_inactive',
       'message', 'This lane is currently inactive.');
   END IF;
@@ -115,25 +110,29 @@ BEGIN
   IF EXISTS (
     SELECT 1 FROM check_ins
      WHERE user_id    = v_user_id
-       AND lane_id    = v_lane.id
+       AND lane_id    = v_lqt.lane_id
        AND created_at > v_cutoff
   ) THEN
+    INSERT INTO security_events (event_type, severity, user_id, details)
+    VALUES ('qr_checkin_rate_limited', 'info', v_user_id,
+      jsonb_build_object('lane_id', v_lqt.lane_id))
+    ON CONFLICT DO NOTHING;
     RETURN json_build_object('error', 'rate_limited',
       'message', 'You checked into this lane recently. Wait 30 minutes before scanning again.');
   END IF;
 
   INSERT INTO check_ins (user_id, lane_id, venue_id, status)
-  VALUES (v_user_id, v_lane.id, v_lane.venue_id, 'active')
+  VALUES (v_user_id, v_lqt.lane_id, v_lqt.venue_id, 'active')
   RETURNING id INTO v_ci_id;
 
   RETURN json_build_object(
     'check_in_id',  v_ci_id,
-    'lane_id',      v_lane.id,
-    'lane_number',  v_lane.lane_number,
-    'game_id',      v_lane.game_id,
+    'lane_id',      v_lqt.lane_id,
+    'lane_number',  v_lqt.lane_number,
+    'game_id',      v_lqt.game_id,
     'game_name',    COALESCE(v_game.name, 'Game'),
     'game_type',    COALESCE(v_game.type, 'arcade'),
-    'venue_id',     v_lane.venue_id
+    'venue_id',     v_lqt.venue_id
   );
 END;
 $$;
@@ -239,6 +238,14 @@ CREATE POLICY "Users read own check_ins" ON check_ins
 
 
 -- ── 5. rpc_admin_get_storage_cleanup_queue: add MFA + admin check
+-- ⚠ SOURCE OF TRUTH for rpc_admin_get_storage_cleanup_queue and
+-- rpc_admin_mark_storage_cleaned (run order 19, last script). An identical
+-- copy also exists in scripts/storage-security.sql (run order 15) because
+-- that script is what creates the storage_cleanup_queue table and must leave
+-- it with working, MFA-gated RPCs on a fresh database run. Both copies are
+-- kept in sync intentionally (CREATE OR REPLACE with the same body is a
+-- no-op regardless of run order) — if you change the auth/logging logic,
+-- update both files.
 CREATE OR REPLACE FUNCTION public.rpc_admin_get_storage_cleanup_queue(p_limit int DEFAULT 100)
 RETURNS TABLE (id uuid, bucket text, path text, reason text, created_at timestamptz)
 LANGUAGE plpgsql
