@@ -16,6 +16,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../components/avatar";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 
 type PoolTable = {
@@ -157,7 +158,13 @@ export default function PoolScreen() {
       .select("id")
       .single();
 
-    if (gameErr || !game) { setStartError(gameErr?.message ?? "Could not start game."); setStarting(false); return; }
+    if (gameErr || !game) {
+      const msg = gameErr?.message ?? "Could not start game.";
+      reportError("Pool.handleStartGame", msg);
+      setStartError(msg);
+      setStarting(false);
+      return;
+    }
 
     const players = [{ game_id: game.id, user_id: user.id }, ...opponents.map(o => ({ game_id: game.id, user_id: o.id }))];
     await supabase.from("pool_game_players").insert(players);

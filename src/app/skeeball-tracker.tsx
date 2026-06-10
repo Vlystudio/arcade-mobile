@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../components/avatar";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { reportError } from "../lib/report-error";
 
 const LANE_COUNT = 6;
 const TOTAL_BALLS = 9;
@@ -258,7 +259,9 @@ export default function SkeeballTrackerScreen({
 
       if (mine) await loadSessionData(mine.id, members);
     } catch (e: any) {
-      setError(e?.message ?? "Failed to load");
+      const msg = e?.message ?? "Failed to load";
+      reportError("SkeeballTracker.loadData", msg);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -368,7 +371,9 @@ export default function SkeeballTrackerScreen({
       setMySession(newSession);
       await loadSessionData(session.id);
     } catch (e: any) {
-      setError(e?.message ?? "Failed to start game");
+      const msg = e?.message ?? "Failed to start game";
+      reportError("SkeeballTracker.startSession", msg);
+      setError(msg);
     } finally {
       setStarting(false);
     }
@@ -395,7 +400,9 @@ export default function SkeeballTrackerScreen({
       });
       if (error) throw error;
       if ((data as any)?.error) {
-        setSubmitError((data as any).message ?? "Failed to submit scores.");
+        const msg = (data as any).message ?? "Failed to submit scores.";
+        reportError("SkeeballTracker.submitBalls", msg);
+        setSubmitError(msg);
         return;
       }
       const asBallScores: BallScore[] = sessionPlayers.flatMap((sp) =>
@@ -411,7 +418,9 @@ export default function SkeeballTrackerScreen({
       setShowWarning(false);
       setWarningCountdown(WARNING_DURATION_S);
     } catch (e: any) {
-      setSubmitError(e?.message ?? "Failed to submit scores");
+      const msg = e?.message ?? "Failed to submit scores";
+      reportError("SkeeballTracker.submitBalls", msg);
+      setSubmitError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -489,6 +498,7 @@ export default function SkeeballTrackerScreen({
       p_session_id: mySession.id,
     });
     if (error) {
+      reportError("SkeeballTracker.completeSession", error.message);
       setSubmitError(error.message);
       return;
     }
@@ -501,7 +511,9 @@ export default function SkeeballTrackerScreen({
       league_points?: number | null;
     };
     if (!result?.ok) {
-      setSubmitError(result?.message ?? "Could not finalize this game.");
+      const msg = result?.message ?? "Could not finalize this game.";
+      reportError("SkeeballTracker.completeSession", msg);
+      setSubmitError(msg);
       return;
     }
     setMySession((prev) => prev ? {

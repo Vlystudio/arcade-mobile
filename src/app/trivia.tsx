@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 
 // --- Types ---
@@ -226,7 +227,9 @@ export default function TriviaScreen() {
     });
     setJoining(false);
     if (error || (data as any)?.error) {
-      setJoinError((data as any)?.error ?? error?.message ?? "Failed to join.");
+      const msg = (data as any)?.error ?? error?.message ?? "Failed to join.";
+      reportError("Trivia.handleJoin", msg);
+      setJoinError(msg);
       return;
     }
     setJoinModal(false);

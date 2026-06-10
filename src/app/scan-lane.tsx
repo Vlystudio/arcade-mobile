@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import SkeeballTrackerScreen from "./skeeball-tracker";
 
@@ -376,7 +377,9 @@ export default function ScanLaneScreen() {
               setCameraError(null);
             }}
             onMountError={(event) => {
-              setCameraError(event.message || "The camera could not start.");
+              const msg = event.message || "The camera could not start.";
+              reportError("ScanLane.cameraMount", msg);
+              setCameraError(msg);
             }}
           />
         ) : (

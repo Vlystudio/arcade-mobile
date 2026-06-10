@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 
 export default function DeleteAccountScreen() {
@@ -27,7 +28,13 @@ export default function DeleteAccountScreen() {
     // Re-authenticate to confirm identity — the fresh JWT is required by the Edge Function
     const { data: sessionData } = await supabase.auth.getSession();
     const email = sessionData.session?.user?.email;
-    if (!email) { setError("Not signed in. Please log in and try again."); setDeleting(false); return; }
+    if (!email) {
+      const msg = "Not signed in. Please log in and try again.";
+      reportError("DeleteAccount.handleDelete", msg);
+      setError(msg);
+      setDeleting(false);
+      return;
+    }
 
     const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
     if (signInErr) {
@@ -41,7 +48,9 @@ export default function DeleteAccountScreen() {
     // and calls auth.admin.deleteUser to fully remove the account.
     const { error: fnErr } = await supabase.functions.invoke("delete-account");
     if (fnErr) {
-      setError(fnErr.message ?? "Account deletion failed. Please try again.");
+      const msg = fnErr.message ?? "Account deletion failed. Please try again.";
+      reportError("DeleteAccount.handleDelete", msg);
+      setError(msg);
       setDeleting(false);
       return;
     }

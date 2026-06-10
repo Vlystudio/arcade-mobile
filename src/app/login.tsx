@@ -17,6 +17,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { getEmailRedirectTo } from "../../lib/auth-redirect";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../context/auth-context";
+import { reportError } from "../lib/report-error";
 import { CURRENT_TOS_VERSION } from "./terms";
 
 const TOS_SECTIONS = [
@@ -173,6 +174,7 @@ export default function LoginScreen() {
     );
     setSendingReset(false);
     if (resetError) {
+      reportError("Login.handleSendReset", resetError.message);
       setForgotPasswordError(resetError.message);
     } else {
       setResetSent(true);

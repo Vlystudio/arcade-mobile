@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 
 export default function MfaVerifyScreen() {
@@ -32,7 +33,9 @@ export default function MfaVerifyScreen() {
     }
     const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId: totp.id });
     if (cErr || !challenge) {
-      setError("Could not start verification. Please try again.");
+      const msg = "Could not start verification. Please try again.";
+      reportError("MfaVerify.setup", cErr?.message ?? msg);
+      setError(msg);
       setLoading(false);
       return;
     }

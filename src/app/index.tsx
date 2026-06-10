@@ -24,6 +24,7 @@ import BottomTabBar from "../components/bottom-tab-bar";
 import { Avatar } from "../components/avatar";
 import { ImageLightbox } from "../components/image-lightbox";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
 import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
@@ -300,7 +301,9 @@ export default function FeedScreen() {
         // Moderate before saving to DB — delete orphaned file if flagged
         nextPhotoUrl = published.publicUrl;
       } catch (err: any) {
-        setEditError("Photo upload failed: " + (err.message ?? "unknown error"));
+        const msg = "Photo upload failed: " + (err.message ?? "unknown error");
+        reportError("Feed.handleSaveEdit", msg);
+        setEditError(msg);
         setEditSaving(false);
         return;
       }
@@ -313,7 +316,7 @@ export default function FeedScreen() {
 
     const { error } = await supabase.from("posts").update(updates).eq("id", editingPost.id);
     setEditSaving(false);
-    if (error) { setEditError(error.message); return; }
+    if (error) { reportError("Feed.handleSaveEdit", error.message); setEditError(error.message); return; }
 
     setPosts((prev) => prev.map((p) => p.id !== editingPost.id ? p : {
       ...p,
@@ -343,6 +346,7 @@ export default function FeedScreen() {
     if (postText.value) {
       const textMod = await moderateText(postText.value);
       if (!textMod.ok) {
+        reportError("Feed.handlePost", textMod.message);
         setPostError(textMod.message);
         setPosting(false);
         return;
@@ -372,7 +376,9 @@ export default function FeedScreen() {
         });
         photoUrl = published.publicUrl;
       } catch (err: any) {
-        setPostError("Photo upload failed: " + (err.message ?? "unknown error"));
+        const msg = "Photo upload failed: " + (err.message ?? "unknown error");
+        reportError("Feed.handlePost", msg);
+        setPostError(msg);
         setPosting(false);
         return;
       }
@@ -387,6 +393,7 @@ export default function FeedScreen() {
     setPosting(false);
     if (error) {
       console.error("[handlePost]", error.message);
+      reportError("Feed.handlePost", error.message);
       setPostError(error.message);
       return;
     }

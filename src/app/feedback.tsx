@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { reportError } from "../lib/report-error";
 import { validateSupportFeedback } from "../../lib/validation";
 
 const CATEGORIES = [
@@ -50,7 +51,9 @@ export default function FeedbackScreen() {
     });
     setSubmitting(false);
     if (rpcErr || (data as any)?.error) {
-      setError((data as any)?.message ?? rpcErr?.message ?? "Failed to submit. Please try again.");
+      const msg = (data as any)?.message ?? rpcErr?.message ?? "Failed to submit. Please try again.";
+      reportError("Feedback.handleSubmit", msg);
+      setError(msg);
       return;
     }
     setSubmitted(true);

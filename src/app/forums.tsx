@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { Avatar } from "../components/avatar";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
 import { isElevatedRole } from "../components/role-badge";
@@ -104,6 +105,7 @@ export default function ForumsScreen() {
 
     const mod = await moderateText(`${safeTitle.value} ${safeDescription.value}`);
     if (!mod.ok) {
+      reportError("Forums.handleCreate", mod.message);
       setSubmitError(mod.message);
       setSubmitting(false);
       return;
@@ -118,7 +120,7 @@ export default function ForumsScreen() {
       status: elevated ? "approved" : "pending",
     });
     setSubmitting(false);
-    if (error) { setSubmitError(error.message); return; }
+    if (error) { reportError("Forums.handleCreate", error.message); setSubmitError(error.message); return; }
 
     setCreateVisible(false);
     setTitle("");

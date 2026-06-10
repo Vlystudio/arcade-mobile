@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { sendSecurityAlert } from "../../lib/security-notify";
 import { validatePasswordStrength } from "../../lib/validation";
@@ -61,6 +62,7 @@ export default function ResetPasswordScreen() {
 
       // AAL2 accounts (MFA enrolled) need a server-side admin update.
       if (!directErr.message.toLowerCase().includes("aal2")) {
+        reportError("ResetPassword.handleReset", directErr.message);
         setError(directErr.message);
         setLoading(false);
         return;
@@ -79,12 +81,15 @@ export default function ResetPasswordScreen() {
       let result: Record<string, string> = {};
       try { result = JSON.parse(text); } catch { /* non-JSON error body */ }
       if (!resp.ok || result.error) {
-        setError(result.error ?? `Failed to update password (${resp.status}).`);
+        const msg = result.error ?? `Failed to update password (${resp.status}).`;
+        reportError("ResetPassword.handleReset", msg);
+        setError(msg);
       } else {
         sendSecurityAlert("password_changed");
         setDone(true);
       }
     } catch {
+      reportError("ResetPassword.handleReset", "Network error — please try again.");
       setError("Network error — please try again.");
     }
     setLoading(false);

@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { validateTeamName } from "../../lib/validation";
 
@@ -189,6 +190,7 @@ export default function TeamsScreen() {
     );
     setSubmittingRequest(false);
     if (error) {
+      reportError("Teams.handleRequestJoin", error.message);
       setRequestError("Could not send request. Please try again.");
     } else {
       setRequestJoinTeam(null);
@@ -305,7 +307,9 @@ export default function TeamsScreen() {
       .select("id")
       .single();
     if (error || !team) {
-      setCreateError(error?.message ?? "Could not create team. Check Supabase RLS policies.");
+      const msg = error?.message ?? "Could not create team. Check Supabase RLS policies.";
+      reportError("Teams.handleCreateTeam", msg);
+      setCreateError(msg);
       setCreating(false);
       return;
     }
@@ -343,6 +347,7 @@ export default function TeamsScreen() {
     );
     setInviting(false);
     if (error) {
+      reportError("Teams.handleInviteUser", error.message);
       setInviteError(error.message);
     } else {
       setInviteSentTo(username);
@@ -394,9 +399,9 @@ export default function TeamsScreen() {
     if (!requestsTeam) return;
     setRequestActionError(null);
     const { error: updateErr } = await supabase.from("team_requests").update({ status: "approved" }).eq("id", requestId);
-    if (updateErr) { setRequestActionError(updateErr.message); return; }
+    if (updateErr) { reportError("Teams.approveRequest", updateErr.message); setRequestActionError(updateErr.message); return; }
     const { error: insertErr } = await supabase.from("team_members").insert({ team_id: requestsTeam.id, user_id: userId, role: "member" });
-    if (insertErr) { setRequestActionError(insertErr.message); return; }
+    if (insertErr) { reportError("Teams.approveRequest", insertErr.message); setRequestActionError(insertErr.message); return; }
     setRequests((prev) => prev.filter((r) => r.id !== requestId));
     await loadTeams();
   }

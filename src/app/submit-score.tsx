@@ -15,6 +15,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { validateScoreValue } from "../../lib/validation";
 
@@ -108,7 +109,9 @@ export default function SubmitScoreScreen() {
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError || !user) {
-        setSubmitError("You must be logged in to submit a score.");
+        const msg = "You must be logged in to submit a score.";
+        reportError("SubmitScore.handleSubmit", msg);
+        setSubmitError(msg);
         setSubmitting(false);
         return;
       }
@@ -124,14 +127,18 @@ export default function SubmitScoreScreen() {
 
       const rpcData = rpcResult as { ok?: boolean; score_id?: string; error?: string; message?: string } | null;
       if (rpcError || rpcData?.error) {
-        setSubmitError(rpcData?.message ?? rpcError?.message ?? "Score submission failed.");
+        const msg = rpcData?.message ?? rpcError?.message ?? "Score submission failed.";
+        reportError("SubmitScore.handleSubmit", msg);
+        setSubmitError(msg);
         setSubmitting(false);
         return;
       }
 
       const scoreId = rpcData?.score_id;
       if (!scoreId) {
-        setSubmitError("Score submission failed — no score ID returned.");
+        const msg = "Score submission failed — no score ID returned.";
+        reportError("SubmitScore.handleSubmit", msg);
+        setSubmitError(msg);
         setSubmitting(false);
         return;
       }
@@ -148,7 +155,9 @@ export default function SubmitScoreScreen() {
         }
       }
     } catch (e: any) {
-      setSubmitError(e?.message ?? "Unexpected error — please try again.");
+      const msg = e?.message ?? "Unexpected error — please try again.";
+      reportError("SubmitScore.handleSubmit", msg);
+      setSubmitError(msg);
       setSubmitting(false);
       return;
     }

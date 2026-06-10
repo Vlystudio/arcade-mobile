@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { sendSecurityAlert } from "../../lib/security-notify";
 
@@ -43,7 +44,12 @@ export default function MfaSetupScreen() {
 
     const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", issuer: "ArcadeTracker" });
     setLoading(false);
-    if (error || !data) { setError(error?.message ?? "Could not start 2FA setup."); return; }
+    if (error || !data) {
+      const msg = error?.message ?? "Could not start 2FA setup.";
+      reportError("MfaSetup.enroll", msg);
+      setError(msg);
+      return;
+    }
     setFactorId(data.id);
     setQrCode(data.totp.qr_code);
     setSecret(data.totp.secret);
@@ -56,7 +62,13 @@ export default function MfaSetupScreen() {
     setError(null);
 
     const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId });
-    if (cErr || !challenge) { setError(cErr?.message ?? "Challenge failed."); setVerifying(false); return; }
+    if (cErr || !challenge) {
+      const msg = cErr?.message ?? "Challenge failed.";
+      reportError("MfaSetup.handleVerify", msg);
+      setError(msg);
+      setVerifying(false);
+      return;
+    }
 
     const { error: vErr } = await supabase.auth.mfa.verify({
       factorId,

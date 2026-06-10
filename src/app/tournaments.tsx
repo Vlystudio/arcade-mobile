@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { validateTournamentDescription, validateTournamentTitle } from "../../lib/validation";
 
@@ -283,7 +284,7 @@ export default function TournamentsScreen() {
       status: "pending",
     });
     setSubmitting(false);
-    if (error) { setSubmitError(error.message); return; }
+    if (error) { reportError("Tournaments.handleSubmitRequest", error.message); setSubmitError(error.message); return; }
     setRequestVisible(false);
     setReqTitle(""); setReqDesc(""); setReqGameType(""); setReqDate(""); setReqMaxTeams("8");
     router.replace("/" as any);

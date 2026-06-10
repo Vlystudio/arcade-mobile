@@ -16,6 +16,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/auth-context";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { API_BASE } from "../../lib/api-base";
 
@@ -117,7 +118,9 @@ export default function KaraokeScreen() {
       if (data.error) throw new Error(data.error);
       setSearchResults(data.items ?? []);
     } catch (e: any) {
-      setSearchError(e.message ?? "Search failed. Check your connection.");
+      const msg = e.message ?? "Search failed. Check your connection.";
+      reportError("Karaoke.handleSearch", msg);
+      setSearchError(msg);
     }
     setSearching(false);
   }
@@ -135,9 +138,12 @@ export default function KaraokeScreen() {
       p_requester_name: name,
     });
     if (error) {
+      reportError("Karaoke.addSong", error.message);
       setAddError(error.message);
     } else if (data?.error) {
-      setAddError(data.message ?? "Could not add song.");
+      const msg = data.message ?? "Could not add song.";
+      reportError("Karaoke.addSong", msg);
+      setAddError(msg);
     } else {
       setShowAdd(false);
       setSearchResults([]);

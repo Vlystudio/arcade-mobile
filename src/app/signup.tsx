@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getEmailRedirectTo } from "../../lib/auth-redirect";
+import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { CURRENT_TOS_VERSION } from "./terms";
 
@@ -112,6 +113,7 @@ export default function SignupScreen() {
         setSuggestions(generateSuggestions(uname));
         setShowSuggestions(true);
       } else {
+        reportError("Signup.handleSignup", signUpError.message);
         setError(signUpError.message);
       }
       return;

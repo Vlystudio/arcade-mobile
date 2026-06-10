@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useCart } from "../context/cart-context";
 import { useLocation } from "../context/location-context";
+import { reportError } from "../lib/report-error";
 import { createSquareCheckoutLink } from "../../lib/square-food";
 
 export default function FoodCartScreen() {
@@ -67,7 +68,9 @@ export default function FoodCartScreen() {
         await Linking.openURL(checkout.checkoutUrl);
       }
     } catch (squareError: any) {
-      setError(squareError?.message ?? "Square could not create a checkout page.");
+      const msg = squareError?.message ?? "Square could not create a checkout page.";
+      reportError("FoodCart.handlePlaceOrder", msg);
+      setError(msg);
       setPlacing(false);
       return;
     }
