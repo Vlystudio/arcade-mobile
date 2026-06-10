@@ -100,6 +100,18 @@ SQUARE_WEBHOOK_NOTIFICATION_URL=https://your-live-site.example.com/api/square/we
 APP_ALLOWED_ORIGINS=https://your-live-site.example.com,https://your-vercel-domain.vercel.app
 ```
 
+> ⚠ **`APP_ALLOWED_ORIGINS` must also be set as a Supabase Edge Function
+> secret** (Dashboard → Edge Functions → Secrets, or
+> `supabase secrets set APP_ALLOWED_ORIGINS=...`), separately from any
+> Vercel/server env vars. `supabase/functions/_shared/cors.ts` reads it via
+> `Deno.env.get()` to build the CORS allowlist for `moderate-image`,
+> `moderate-text`, `delete-account`, and `notify-feedback`. If it (and
+> `EXPO_PUBLIC_SITE_URL`/`VERCEL_*`) are not set as Edge Function secrets,
+> `configuredOrigins()` is empty and `IS_PRODUCTION=true` causes **every
+> browser-origin request to these functions to be rejected with 403** (CORS
+> preflight fails before the request body is even read) — even though
+> requests with no `Origin` header (native mobile) are unaffected.
+
 ### 3. Database setup
 Run these SQL scripts **in order** in the Supabase SQL Editor:
 
@@ -124,6 +136,8 @@ Run these SQL scripts **in order** in the Supabase SQL Editor:
 | 17 | `scripts/input-validation-hardening.sql` | Database check constraints for user-generated inputs |
 | 18 | `scripts/security-hardening-3.sql` | Venue-scoped score review queue, score proof signed URL RPC, lane token rotation fix |
 | 19 | `scripts/security-cleanup.sql` | Production hardening: remove QR legacy fallback, fix storage cleanup RPC auth, deprecate `lanes.lane_qr_token` |
+| 20 | `scripts/profile-creation-fix.sql` | Backfill missing `profiles` rows and harden `handle_new_user()` against silent failures |
+| 21 | `scripts/rate-limit-log-fix.sql` | Recreate the missing `rate_limit_log` table required by `check_and_log_rate_limit()` |
 
 > ⚠ **`rpc_check_in` and `rpc_admin_rotate_lane_token` source of truth:**
 > Script 5 (`rpc-check-in.sql`) and script 10 (`security-hardening-2.sql`) used
