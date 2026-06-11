@@ -140,16 +140,14 @@ export default function ArchitectScreen() {
     }
 
     // Env var status
-    const envKeys = [
-      "EXPO_PUBLIC_SUPABASE_URL",
-      "EXPO_PUBLIC_SUPABASE_ANON_KEY",
-      "EXPO_PUBLIC_SQUARE_APPLICATION_ID",
-      "EXPO_PUBLIC_SITE_URL",
+    // Must use static member access — Metro only inlines process.env.KEY literals,
+    // not dynamic process.env[key] bracket access.
+    const envStatus = [
+      { key: "EXPO_PUBLIC_SUPABASE_URL",          present: !!process.env.EXPO_PUBLIC_SUPABASE_URL },
+      { key: "EXPO_PUBLIC_SUPABASE_ANON_KEY",     present: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY },
+      { key: "EXPO_PUBLIC_SQUARE_APPLICATION_ID", present: !!process.env.EXPO_PUBLIC_SQUARE_APPLICATION_ID },
+      { key: "EXPO_PUBLIC_SITE_URL",              present: !!process.env.EXPO_PUBLIC_SITE_URL },
     ];
-    const envStatus = envKeys.map((key) => ({
-      key,
-      present: !!(process.env[key]),
-    }));
 
     // Check Square API reachability
     try {
