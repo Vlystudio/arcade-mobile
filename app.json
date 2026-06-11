@@ -13,6 +13,7 @@
       "supportsTablet": false,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "ArcadeTracker uses your photo library to attach images to posts and scores.",
+        "NSPhotoLibraryAddUsageDescription": "ArcadeTracker saves screenshots to your photo library.",
         "NSCameraUsageDescription": "ArcadeTracker uses your camera to capture score proof photos."
       }
     },
@@ -31,6 +32,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-media-library",
       [
         "expo-splash-screen",
         {
