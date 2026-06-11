@@ -82,9 +82,14 @@ type AdminTeam = {
   id: string;
   name: string;
   captain_username: string;
+  captain_user_id: string | null;
+  venue_id: string | null;
   member_count: number;
   created_at: string;
 };
+
+type AdminTeamMember = { user_id: string; username: string; avatar_url: string | null; role: string };
+type AdminTeamRequest = { request_id: string; user_id: string; username: string; avatar_url: string | null; message: string | null };
 
 type TournamentRequest = {
   id: string;
@@ -258,6 +263,17 @@ export default function AdminScreen() {
   const [teamsLoading, setTeamsLoading] = useState(false);
   const [deleteTeamTarget, setDeleteTeamTarget] = useState<AdminTeam | null>(null);
   const [deletingTeam, setDeletingTeam] = useState(false);
+  const [createTeamVisible, setCreateTeamVisible] = useState(false);
+  const [createTeamNames, setCreateTeamNames] = useState("");
+  const [creatingTeam, setCreatingTeam] = useState(false);
+  const [createTeamError, setCreateTeamError] = useState<string | null>(null);
+  const [manageTeamTarget, setManageTeamTarget] = useState<AdminTeam | null>(null);
+  const [manageTeamMembers, setManageTeamMembers] = useState<AdminTeamMember[]>([]);
+  const [manageTeamRequests, setManageTeamRequests] = useState<AdminTeamRequest[]>([]);
+  const [manageTeamLoading, setManageTeamLoading] = useState(false);
+  const [manageTeamError, setManageTeamError] = useState<string | null>(null);
+  const [manageTeamBusy, setManageTeamBusy] = useState<string | null>(null);
+  const [addMemberQuery, setAddMemberQuery] = useState("");
 
   // Tournaments — requests
   const [tournRequests, setTournRequests] = useState<TournamentRequest[]>([]);
@@ -724,11 +740,11 @@ export default function AdminScreen() {
   async function loadAdminTeams() {
     setTeamsLoading(true);
     const [teamsRes, membersRes] = await Promise.all([
-      supabase.from("teams").select("id, name, captain_user_id, created_at").order("created_at", { ascending: false }),
+      supabase.from("teams").select("id, name, captain_user_id, venue_id, created_at").order("created_at", { ascending: false }),
       supabase.from("team_members").select("team_id"),
     ]);
 
-    const captainIds = [...new Set((teamsRes.data ?? []).map((t: any) => t.captain_user_id))];
+    const captainIds = [...new Set((teamsRes.data ?? []).map((t: any) => t.captain_user_id).filter(Boolean))];
     let captainMap: Record<string, string> = {};
     if (captainIds.length > 0) {
       const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", captainIds);
@@ -740,11 +756,101 @@ export default function AdminScreen() {
 
     setAdminTeams((teamsRes.data ?? []).map((t: any) => ({
       id: t.id, name: t.name,
-      captain_username: captainMap[t.captain_user_id] ?? "Unknown",
+      captain_username: t.captain_user_id ? (captainMap[t.captain_user_id] ?? "Unknown") : "No captain assigned",
+      captain_user_id: t.captain_user_id,
+      venue_id: t.venue_id,
       member_count: memberCountMap[t.id] ?? 0,
       created_at: t.created_at,
     })));
     setTeamsLoading(false);
+  }
+
+  async function handleBulkCreateTeams() {
+    const names = createTeamNames.split("\n").map((n) => n.trim()).filter(Boolean);
+    if (names.length === 0) return;
+    setCreatingTeam(true);
+    setCreateTeamError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_bulk_create_teams", { p_names: names, p_venue_id: null });
+    if (error) {
+      setCreateTeamError(error.message);
+    } else if ((data as any)?.error) {
+      setCreateTeamError((data as any).message ?? (data as any).error);
+    } else {
+      const skipped = (data as any)?.skipped ?? [];
+      if (skipped.length > 0) {
+        setCreateTeamError(`Skipped (name must be 2-40 chars): ${skipped.join(", ")}`);
+      } else {
+        setCreateTeamVisible(false);
+        setCreateTeamNames("");
+      }
+      await loadAdminTeams();
+    }
+    setCreatingTeam(false);
+  }
+
+  async function loadManageTeam(team: AdminTeam) {
+    setManageTeamTarget(team);
+    setManageTeamLoading(true);
+    setManageTeamError(null);
+    setAddMemberQuery("");
+    if (usersData.length === 0) loadUsers();
+    const [membersRes, requestsRes] = await Promise.all([
+      supabase.rpc("rpc_admin_get_team_members", { p_team_id: team.id }),
+      supabase.rpc("rpc_admin_get_team_join_requests", { p_team_id: team.id }),
+    ]);
+    if (membersRes.error) setManageTeamError(membersRes.error.message);
+    else setManageTeamMembers((membersRes.data ?? []) as AdminTeamMember[]);
+    if (requestsRes.error) setManageTeamError((prev) => prev ?? requestsRes.error!.message);
+    else setManageTeamRequests((requestsRes.data ?? []) as AdminTeamRequest[]);
+    setManageTeamLoading(false);
+  }
+
+  async function refreshManageTeam() {
+    if (manageTeamTarget) await loadManageTeam(manageTeamTarget);
+    await loadAdminTeams();
+  }
+
+  async function handleAssignMember(userId: string) {
+    if (!manageTeamTarget) return;
+    setManageTeamBusy(userId);
+    setManageTeamError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_assign_team_member", { p_team_id: manageTeamTarget.id, p_user_id: userId });
+    if (error) setManageTeamError(error.message);
+    else if ((data as any)?.error) setManageTeamError((data as any).message ?? (data as any).error);
+    else { setAddMemberQuery(""); await refreshManageTeam(); }
+    setManageTeamBusy(null);
+  }
+
+  async function handleRemoveMember(userId: string) {
+    if (!manageTeamTarget) return;
+    setManageTeamBusy(userId);
+    setManageTeamError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_remove_team_member", { p_team_id: manageTeamTarget.id, p_user_id: userId });
+    if (error) setManageTeamError(error.message);
+    else if ((data as any)?.error) setManageTeamError((data as any).message ?? (data as any).error);
+    else await refreshManageTeam();
+    setManageTeamBusy(null);
+  }
+
+  async function handleSetCaptain(userId: string) {
+    if (!manageTeamTarget) return;
+    setManageTeamBusy(userId);
+    setManageTeamError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_set_team_captain", { p_team_id: manageTeamTarget.id, p_user_id: userId });
+    if (error) setManageTeamError(error.message);
+    else if ((data as any)?.error) setManageTeamError((data as any).message ?? (data as any).error);
+    else await refreshManageTeam();
+    setManageTeamBusy(null);
+  }
+
+  async function handleResolveTeamRequest(requestId: string, action: "approve" | "deny") {
+    setManageTeamBusy(requestId);
+    setManageTeamError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_resolve_team_request", { p_request_id: requestId, p_action: action });
+    if (error) setManageTeamError(error.message);
+    else if ((data as any)?.error) setManageTeamError((data as any).message ?? (data as any).error);
+    else await refreshManageTeam();
+    setManageTeamBusy(null);
   }
 
   async function handleDeleteTeam() {
@@ -1655,35 +1761,40 @@ export default function AdminScreen() {
           contentContainerStyle={styles.content}
           refreshControl={<RefreshControl refreshing={false} onRefresh={loadAdminTeams} tintColor="#06b6d4" />}
         >
+          <View style={styles.teamsHeaderRow}>
+            <Text style={styles.teamsCountText}>{adminTeams.length} {adminTeams.length === 1 ? "team" : "teams"}</Text>
+            <Pressable style={styles.createTeamBtn} onPress={() => { setCreateTeamError(null); setCreateTeamNames(""); setCreateTeamVisible(true); }}>
+              <Ionicons name="add-circle-outline" size={16} color="#06b6d4" />
+              <Text style={styles.createTeamBtnText}>Create Team</Text>
+            </Pressable>
+          </View>
           {teamsLoading ? (
             <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
           ) : teamsError ? (
             <ErrorBanner message={teamsError} />
           ) : adminTeams.length === 0 ? (
-            <EmptyState title="No teams yet" sub="Teams created by users will appear here." icon="people-outline" color="#06b6d4" />
+            <EmptyState title="No teams yet" sub="Use Create Team to import or add teams." icon="people-outline" color="#06b6d4" />
           ) : (
-            <>
-              <View style={styles.teamsCountRow}>
-                <Text style={styles.teamsCountText}>{adminTeams.length} {adminTeams.length === 1 ? "team" : "teams"}</Text>
-              </View>
-              {adminTeams.map((team) => (
-                <View key={team.id} style={styles.adminTeamCard}>
-                  <View style={styles.adminTeamAvatar}>
-                    <Text style={styles.adminTeamAvatarText}>{team.name.slice(0, 2).toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.adminTeamName}>{team.name}</Text>
-                    <Text style={styles.adminTeamMeta}>
-                      Captain: {team.captain_username} · {team.member_count} {team.member_count === 1 ? "member" : "members"}
-                    </Text>
-                    <Text style={styles.adminTeamDate}>Created {relTime(team.created_at)}</Text>
-                  </View>
-                  <Pressable style={styles.deleteTeamBtn} onPress={() => setDeleteTeamTarget(team)}>
-                    <Ionicons name="trash-outline" size={16} color="#ef4444" />
-                  </Pressable>
+            adminTeams.map((team) => (
+              <View key={team.id} style={styles.adminTeamCard}>
+                <View style={styles.adminTeamAvatar}>
+                  <Text style={styles.adminTeamAvatarText}>{team.name.slice(0, 2).toUpperCase()}</Text>
                 </View>
-              ))}
-            </>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.adminTeamName}>{team.name}</Text>
+                  <Text style={styles.adminTeamMeta}>
+                    Captain: {team.captain_username} · {team.member_count} {team.member_count === 1 ? "member" : "members"}
+                  </Text>
+                  <Text style={styles.adminTeamDate}>Created {relTime(team.created_at)}</Text>
+                </View>
+                <Pressable style={styles.manageTeamBtn} onPress={() => loadManageTeam(team)}>
+                  <Ionicons name="settings-outline" size={16} color="#06b6d4" />
+                </Pressable>
+                <Pressable style={styles.deleteTeamBtn} onPress={() => setDeleteTeamTarget(team)}>
+                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                </Pressable>
+              </View>
+            ))
           )}
         </ScrollView>
         </VenueAdminPanel>
@@ -3650,6 +3761,192 @@ export default function AdminScreen() {
         </View>
       </Modal>
 
+      {/* Create team(s) modal */}
+      <Modal visible={createTeamVisible} transparent animationType="fade" onRequestClose={() => setCreateTeamVisible(false)}>
+        <View style={styles.confirmBg}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setCreateTeamVisible(false)} />
+          <View style={styles.confirmSheet}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: "rgba(6,182,212,0.1)", borderColor: "rgba(6,182,212,0.25)" }]}>
+              <Ionicons name="people" size={36} color="#06b6d4" />
+            </View>
+            <Text style={styles.confirmTitle}>Create Teams</Text>
+            <Text style={styles.confirmBody}>
+              Enter one team name per line. Teams are created without a captain — assign one later from the Manage panel.
+            </Text>
+            <TextInput
+              style={[styles.confirmInput, { marginBottom: 12, minHeight: 100 }]}
+              placeholder={"Team Alpha\nTeam Bravo\nTeam Charlie"}
+              placeholderTextColor="#333"
+              value={createTeamNames}
+              onChangeText={setCreateTeamNames}
+              multiline
+              autoCapitalize="words"
+            />
+            {createTeamError && (
+              <Text style={{ color: "#ef4444", fontSize: 13, marginBottom: 12, alignSelf: "flex-start" }}>{createTeamError}</Text>
+            )}
+            <View style={styles.confirmBtns}>
+              <Pressable style={styles.confirmCancel} onPress={() => setCreateTeamVisible(false)}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmActionBtn, { backgroundColor: "#06b6d4" }, (creatingTeam || !createTeamNames.trim()) && { opacity: 0.5 }]}
+                onPress={handleBulkCreateTeams}
+                disabled={creatingTeam || !createTeamNames.trim()}
+              >
+                {creatingTeam
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <Text style={styles.confirmActionText}>Create</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Manage team modal */}
+      <Modal visible={!!manageTeamTarget} transparent animationType="slide" onRequestClose={() => setManageTeamTarget(null)}>
+        <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setManageTeamTarget(null)} />
+          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1e1e1e", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24, maxHeight: "85%" }}>
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+              <Text style={{ color: "#fff", fontSize: 18, fontWeight: "900" }}>{manageTeamTarget?.name}</Text>
+              <Pressable onPress={() => setManageTeamTarget(null)}>
+                <Ionicons name="close" size={22} color="#555" />
+              </Pressable>
+            </View>
+            <Text style={{ color: "#555", fontSize: 13, marginBottom: 16 }}>
+              Captain: {manageTeamTarget?.captain_username}
+            </Text>
+
+            {manageTeamError && (
+              <Text style={{ color: "#ef4444", fontSize: 13, marginBottom: 12 }}>{manageTeamError}</Text>
+            )}
+
+            {manageTeamLoading ? (
+              <ActivityIndicator color="#06b6d4" style={{ marginVertical: 24 }} />
+            ) : (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {/* Members */}
+                <Text style={{ color: "#444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+                  Members ({manageTeamMembers.length})
+                </Text>
+                {manageTeamMembers.length === 0 ? (
+                  <Text style={{ color: "#444", fontSize: 14, marginBottom: 16 }}>No members yet.</Text>
+                ) : (
+                  manageTeamMembers.map((m) => (
+                    <View key={m.user_id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
+                      <Ionicons name={m.role === "captain" ? "star" : "person-outline"} size={14} color={m.role === "captain" ? "#f59e0b" : "#06b6d4"} />
+                      <Text style={{ flex: 1, color: "#ccc", fontSize: 14, fontWeight: "700", marginLeft: 8 }} numberOfLines={1}>
+                        {m.username}
+                        {m.role === "captain" ? <Text style={{ color: "#f59e0b", fontWeight: "400" }}> (captain)</Text> : null}
+                      </Text>
+                      {m.role !== "captain" && (
+                        <Pressable
+                          style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: "rgba(245,158,11,0.1)", borderWidth: 1, borderColor: "rgba(245,158,11,0.25)", marginRight: 8 }}
+                          onPress={() => handleSetCaptain(m.user_id)}
+                          disabled={manageTeamBusy === m.user_id}
+                        >
+                          {manageTeamBusy === m.user_id
+                            ? <ActivityIndicator size="small" color="#f59e0b" />
+                            : <Text style={{ color: "#f59e0b", fontSize: 12, fontWeight: "700" }}>Make Captain</Text>}
+                        </Pressable>
+                      )}
+                      <Pressable
+                        onPress={() => handleRemoveMember(m.user_id)}
+                        disabled={manageTeamBusy === m.user_id}
+                        hitSlop={8}
+                      >
+                        {manageTeamBusy === m.user_id
+                          ? <ActivityIndicator size="small" color="#ef4444" />
+                          : <Ionicons name="close-circle" size={20} color="#ef4444" />}
+                      </Pressable>
+                    </View>
+                  ))
+                )}
+
+                {/* Add member */}
+                <Text style={{ color: "#444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 8 }}>
+                  Add Member
+                </Text>
+                <TextInput
+                  style={[styles.confirmInput, { minHeight: 0, marginBottom: 8 }]}
+                  placeholder="Search users by username..."
+                  placeholderTextColor="#333"
+                  value={addMemberQuery}
+                  onChangeText={setAddMemberQuery}
+                  autoCapitalize="none"
+                />
+                {addMemberQuery.trim().length > 0 && (() => {
+                  const memberIds = new Set(manageTeamMembers.map((m) => m.user_id));
+                  const q = addMemberQuery.trim().toLowerCase();
+                  const matches = usersData
+                    .filter((u) => !memberIds.has(u.id) && u.username?.toLowerCase().includes(q))
+                    .slice(0, 5);
+                  if (matches.length === 0) {
+                    return <Text style={{ color: "#444", fontSize: 13, marginBottom: 16 }}>No matching users.</Text>;
+                  }
+                  return matches.map((u) => (
+                    <View key={u.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
+                      <Ionicons name="person-outline" size={14} color="#06b6d4" />
+                      <Text style={{ flex: 1, color: "#ccc", fontSize: 14, fontWeight: "700", marginLeft: 8 }} numberOfLines={1}>{u.username}</Text>
+                      <Pressable
+                        style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: "rgba(6,182,212,0.1)", borderWidth: 1, borderColor: "rgba(6,182,212,0.25)" }}
+                        onPress={() => handleAssignMember(u.id)}
+                        disabled={manageTeamBusy === u.id}
+                      >
+                        {manageTeamBusy === u.id
+                          ? <ActivityIndicator size="small" color="#06b6d4" />
+                          : <Text style={{ color: "#06b6d4", fontSize: 12, fontWeight: "700" }}>Add</Text>}
+                      </Pressable>
+                    </View>
+                  ));
+                })()}
+
+                {/* Join requests */}
+                <Text style={{ color: "#444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 8 }}>
+                  Pending Join Requests ({manageTeamRequests.length})
+                </Text>
+                {manageTeamRequests.length === 0 ? (
+                  <Text style={{ color: "#444", fontSize: 14 }}>No pending requests.</Text>
+                ) : (
+                  manageTeamRequests.map((r) => (
+                    <View key={r.request_id} style={{ backgroundColor: "#0d0d0d", borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
+                      <View style={{ flexDirection: "row", alignItems: "center" }}>
+                        <Ionicons name="person-outline" size={14} color="#06b6d4" />
+                        <Text style={{ flex: 1, color: "#ccc", fontSize: 14, fontWeight: "700", marginLeft: 8 }} numberOfLines={1}>{r.username}</Text>
+                      </View>
+                      {r.message && (
+                        <Text style={{ color: "#555", fontSize: 12, marginTop: 4, marginLeft: 22 }} numberOfLines={2}>"{r.message}"</Text>
+                      )}
+                      <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
+                        <Pressable
+                          style={{ flex: 1, alignItems: "center", paddingVertical: 7, borderRadius: 8, backgroundColor: "rgba(34,197,94,0.1)", borderWidth: 1, borderColor: "rgba(34,197,94,0.25)" }}
+                          onPress={() => handleResolveTeamRequest(r.request_id, "approve")}
+                          disabled={manageTeamBusy === r.request_id}
+                        >
+                          {manageTeamBusy === r.request_id
+                            ? <ActivityIndicator size="small" color="#22c55e" />
+                            : <Text style={{ color: "#22c55e", fontSize: 12, fontWeight: "700" }}>Approve</Text>}
+                        </Pressable>
+                        <Pressable
+                          style={{ flex: 1, alignItems: "center", paddingVertical: 7, borderRadius: 8, backgroundColor: "rgba(239,68,68,0.1)", borderWidth: 1, borderColor: "rgba(239,68,68,0.25)" }}
+                          onPress={() => handleResolveTeamRequest(r.request_id, "deny")}
+                          disabled={manageTeamBusy === r.request_id}
+                        >
+                          {manageTeamBusy === r.request_id
+                            ? <ActivityIndicator size="small" color="#ef4444" />
+                            : <Text style={{ color: "#ef4444", fontSize: 12, fontWeight: "700" }}>Deny</Text>}
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Confirm modal */}
       <Modal visible={!!confirmAction} transparent animationType="fade" onRequestClose={() => setConfirmAction(null)}>
         <View style={styles.confirmBg}>
@@ -4181,13 +4478,17 @@ const styles = StyleSheet.create({
 
   // Admin teams list
   teamsCountRow:       { marginBottom: 12 },
+  teamsHeaderRow:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   teamsCountText:      { color: "#444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1 },
+  createTeamBtn:       { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(6,182,212,0.08)", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
+  createTeamBtnText:   { color: "#06b6d4", fontSize: 12, fontWeight: "800" },
   adminTeamCard:       { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "#1e1e1e" },
   adminTeamAvatar:     { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.15)" },
   adminTeamAvatarText: { color: "#06b6d4", fontSize: 13, fontWeight: "900" },
   adminTeamName:       { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 3 },
   adminTeamMeta:       { color: "#555", fontSize: 12 },
   adminTeamDate:       { color: "#333", fontSize: 11, marginTop: 2 },
+  manageTeamBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
   deleteTeamBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(239,68,68,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(239,68,68,0.2)" },
 
   // Tournament request cards
