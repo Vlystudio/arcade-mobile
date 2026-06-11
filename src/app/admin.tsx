@@ -2421,17 +2421,23 @@ export default function AdminScreen() {
                   : ["user", "admin"];
                 return (
                   <View key={u.id} style={styles.userCard}>
-                    <Avatar uri={u.avatar_url} name={displayName} size={42} radius={13} />
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <Text style={styles.userCardName}>{displayName}</Text>
-                      {!u.username && u.email && (
-                        <Text style={styles.userCardEmail}>{u.email}</Text>
-                      )}
-                      <View style={[styles.userRolePill, { borderColor: color + "44", backgroundColor: color + "12" }]}>
-                        {u.role !== "user" && <Ionicons name="checkmark-circle" size={11} color={color} />}
-                        <Text style={[styles.userRolePillText, { color }]}>{u.role}</Text>
+                    <Pressable
+                      style={{ flexDirection: "row", alignItems: "center", flex: 1 }}
+                      onPress={() => router.push({ pathname: "/user-profile" as any, params: { userId: u.id } })}
+                    >
+                      <Avatar uri={u.avatar_url} name={displayName} size={42} radius={13} />
+                      <View style={{ flex: 1, marginLeft: 12 }}>
+                        <Text style={styles.userCardName}>{displayName}</Text>
+                        {!u.username && u.email && (
+                          <Text style={styles.userCardEmail}>{u.email}</Text>
+                        )}
+                        <View style={[styles.userRolePill, { borderColor: color + "44", backgroundColor: color + "12" }]}>
+                          {u.role !== "user" && <Ionicons name="checkmark-circle" size={11} color={color} />}
+                          <Text style={[styles.userRolePillText, { color }]}>{u.role}</Text>
+                        </View>
                       </View>
-                    </View>
+                      <Ionicons name="chevron-forward" size={16} color="#444" />
+                    </Pressable>
                     <View style={styles.userRoleActions}>
                       {availableRoles
                         .filter((r) => r !== u.role)

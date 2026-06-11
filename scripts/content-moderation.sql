@@ -16,14 +16,19 @@
 -- ────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS moderation_patterns (
   id       serial  PRIMARY KEY,
-  pattern  text    NOT NULL UNIQUE,  -- PostgreSQL case-insensitive regex (~*)
+  pattern  text    NOT NULL UNIQUE,  -- regex; matched case-insensitively unless case_sensitive
   category text    NOT NULL,         -- 'profanity' | 'hate_speech' | 'spam'
   severity int     NOT NULL DEFAULT 2,
     -- 1 = low (spam-like, flag for review)
     -- 2 = medium (profanity, hard block)
     -- 3 = severe (hate speech/slurs, hard block)
-  active   boolean NOT NULL DEFAULT true
+  active   boolean NOT NULL DEFAULT true,
+  case_sensitive boolean NOT NULL DEFAULT false
+    -- true for patterns that rely on letter casing (e.g. ALL-CAPS detection),
+    -- which would otherwise match any-case text once lower()'d for ~*
 );
+
+ALTER TABLE moderation_patterns ADD COLUMN IF NOT EXISTS case_sensitive boolean NOT NULL DEFAULT false;
 
 ALTER TABLE moderation_patterns ENABLE ROW LEVEL SECURITY;
 
@@ -40,57 +45,67 @@ CREATE POLICY "Auth users read moderation_patterns" ON moderation_patterns
 -- Handles common leet-speak substitutions (i→1/!, u→*, o→0, a→@/4).
 -- Patterns are matched against lower(text) using ~* (case-insensitive).
 
-INSERT INTO moderation_patterns (pattern, category, severity) VALUES
+INSERT INTO moderation_patterns (pattern, category, severity, case_sensitive) VALUES
 
 -- ── Severe: hate speech / slurs (severity 3) ─────────────────
 -- n-slur and variants
-('\mn[i1!|]+gg+(a+|e+r+|a+z|e+r+z|e+r+s)?\M',         'hate_speech', 3),
+('\mn[i1!|]+gg+(a+|e+r+|a+z|e+r+z|e+r+s)?\M',         'hate_speech', 3, false),
 -- f-slur (homophobic) and variants
-('\mf[a@4]+gg?(ot+s?|s)?\M',                             'hate_speech', 3),
+('\mf[a@4]+gg?(ot+s?|s)?\M',                             'hate_speech', 3, false),
 -- k-slur (antisemitic) and variants
-('\mk[i1!]+k[e3]+s?\M',                                   'hate_speech', 3),
+('\mk[i1!]+k[e3]+s?\M',                                   'hate_speech', 3, false),
 -- sp-slur (Hispanic) and variants
-('\msp[i1!]+c+s?\M',                                      'hate_speech', 3),
+('\msp[i1!]+c+s?\M',                                      'hate_speech', 3, false),
 -- ch-slur (Asian) — word-bounded to avoid "chin", "china" in normal use
-('\mch[i1!]+n+k+s?\M',                                    'hate_speech', 3),
+('\mch[i1!]+n+k+s?\M',                                    'hate_speech', 3, false),
 -- w-slur (Hispanic)
-('\mwetbacks?\M',                                          'hate_speech', 3),
+('\mwetbacks?\M',                                          'hate_speech', 3, false),
 -- tr-slur (transphobic)
-('\mtr[a@4]nn[y]+s?\M',                                   'hate_speech', 3),
+('\mtr[a@4]nn[y]+s?\M',                                   'hate_speech', 3, false),
 -- r-slur (ableist)
-('\mr[e3]+t[a@4]rd+(ed|s)?\M',                           'hate_speech', 3),
+('\mr[e3]+t[a@4]rd+(ed|s)?\M',                           'hate_speech', 3, false),
 
 -- ── Medium: profanity (severity 2) ──────────────────────────
 -- f-word and common derivatives
-('\mf+[u*]+c+k+(ing?|e[dr]|s|e[dr]?|h?e[a@4]d|wit|wad|f[a@4]ce)?\M', 'profanity', 2),
+('\mf+[u*]+c+k+(ing?|e[dr]|s|e[dr]?|h?e[a@4]d|wit|wad|f[a@4]ce)?\M', 'profanity', 2, false),
 -- s-word and common derivatives
-('\ms+h+[i1!*]+t+(s|ty|h[o0]le|h[e3][a@4]d|b[a@4]g|faced|less|list)?\M', 'profanity', 2),
+('\ms+h+[i1!*]+t+(s|ty|h[o0]le|h[e3][a@4]d|b[a@4]g|faced|less|list)?\M', 'profanity', 2, false),
 -- b-word (female-directed)
-('\mb+[i1!*]+tc+h+(es?|ing?|y|sl[a@4]p|[a@4]ss)?\M',   'profanity', 2),
+('\mb+[i1!*]+tc+h+(es?|ing?|y|sl[a@4]p|[a@4]ss)?\M',   'profanity', 2, false),
 -- c-word
-('\mc+[u*]+n+t+(s|y|ish)?\M',                             'profanity', 2),
+('\mc+[u*]+n+t+(s|y|ish)?\M',                             'profanity', 2, false),
 -- a**hole
-('\m[a@4]+s+s+h+[o0*]+l+e+s?\M',                         'profanity', 2),
+('\m[a@4]+s+s+h+[o0*]+l+e+s?\M',                         'profanity', 2, false),
 -- d-word
-('\md+[i1!*]+c+k+(s|h[e3][a@4]d|w[a@4]d|f[a@4]ce|ish)?\M', 'profanity', 2),
+('\md+[i1!*]+c+k+(s|h[e3][a@4]d|w[a@4]d|f[a@4]ce|ish)?\M', 'profanity', 2, false),
 -- p-word (female anatomy)
-('\mp+[u*]+s+s+[yi*]+s?\M',                               'profanity', 2),
+('\mp+[u*]+s+s+[yi*]+s?\M',                               'profanity', 2, false),
 -- p-word (urine)
-('\mp+[i1!]+ss+(ing?|e[ds]|[e3]r)?\M',                   'profanity', 2),
+('\mp+[i1!]+ss+(ing?|e[ds]|[e3]r)?\M',                   'profanity', 2, false),
 -- b-word (illegitimate)
-('\mb+[a@4]+st[a@4]rd+(s|ly)?\M',                         'profanity', 2),
+('\mb+[a@4]+st[a@4]rd+(s|ly)?\M',                         'profanity', 2, false),
 -- w-word (sex work)
-('\mwh+[o0]+r+e+s?\M',                                    'profanity', 2),
+('\mwh+[o0]+r+e+s?\M',                                    'profanity', 2, false),
 -- s-word (excrement, short form)
-('\mc+r+[a@4]+p+(s|py|ping?)?\M',                         'profanity', 1),
+('\mc+r+[a@4]+p+(s|py|ping?)?\M',                         'profanity', 1, false),
 
 -- ── Low: spam patterns (severity 1) ──────────────────────────
 -- Same character repeated 10+ times
-('(.)\1{9,}',                                              'spam', 1),
--- All-caps words 5+ chars (aggressive tone indicator — low severity, flag only)
-('\m[A-Z]{5,}\M',                                          'spam', 1)
+('(.)\1{9,}',                                              'spam', 1, false),
+-- All-caps words 5+ chars (aggressive tone indicator — low severity, flag only).
+-- Must be case_sensitive: matched against the original text with ~ (not
+-- lower(text) ~*), otherwise [A-Z] matches any-case letters and this fires
+-- on any word with 5+ letters (e.g. "Season", "champ", "highest").
+('\m[A-Z]{5,}\M',                                          'spam', 1, true)
 
 ON CONFLICT (pattern) DO NOTHING;
+
+-- Backfill for installs where this row was already inserted before
+-- case_sensitive existed (ON CONFLICT DO NOTHING above wouldn't update it).
+UPDATE moderation_patterns
+   SET case_sensitive = true
+ WHERE pattern = '\m[A-Z]{5,}\M'
+   AND category = 'spam';
 
 -- ────────────────────────────────────────────────────────────
 -- Core moderation function
@@ -110,11 +125,16 @@ BEGIN
     RETURN NULL;
   END IF;
 
-  -- Check against active patterns, highest severity first
+  -- Check against active patterns, highest severity first.
+  -- case_sensitive patterns (e.g. ALL-CAPS detection) match the original
+  -- text with ~; everything else matches lower(text) with ~* as before.
   SELECT * INTO v_row
     FROM moderation_patterns
    WHERE active = true
-     AND lower(p_text) ~* pattern
+     AND (
+       (case_sensitive AND p_text ~ pattern)
+       OR (NOT case_sensitive AND lower(p_text) ~* pattern)
+     )
    ORDER BY severity DESC, id ASC
    LIMIT 1;
 
