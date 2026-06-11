@@ -19,7 +19,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { reportError } from "../lib/report-error";
-import { supabase } from "../lib/supabase";
+import { supabase } from "../../lib/supabase";
 
 /**
  * Drop-in replacement for inline red error text.
