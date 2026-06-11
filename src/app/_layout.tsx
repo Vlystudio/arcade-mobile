@@ -17,6 +17,7 @@ import { AuthProvider } from "../context/auth-context";
 import { CartProvider } from "../context/cart-context";
 import { LocationProvider } from "../context/location-context";
 import { EnvBanner } from "../components/env-banner";
+import { ScreenshotButton } from "../components/screenshot-button";
 
 export default function RootLayout() {
   return (
@@ -27,6 +28,7 @@ export default function RootLayout() {
       <CartProvider>
       <ThemeProvider value={DarkTheme}>
         <EnvBanner />
+        <ScreenshotButton />
         <Stack
           screenOptions={{
             headerStyle: { backgroundColor: "#000000" },
