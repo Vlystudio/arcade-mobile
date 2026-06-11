@@ -6,19 +6,31 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
 
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 type OwnerStats = {
   usersTotal: number;
   usersWeek: number;
   usersMonth: number;
+  usersLastMonth: number;
   scoresTotal: number;
   scoresWeek: number;
+  scoresMonth: number;
+  scoresLastMonth: number;
+  scoresPending: number;
   activePlayersWeek: number;
   teamsTotal: number;
   leaguesTotal: number;
   leagueMembersTotal: number;
   gameBreakdown: { type: string; count: number }[];
   topPlayers: { username: string; count: number }[];
+  topGameNames: { name: string; count: number }[];
   skeeballSessions: number;
+  postsWeek: number;
+  checkInsWeek: number;
+  reportsPending: number;
+  activeTournaments: number;
+  monthlyScores: { label: string; count: number }[];
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -42,32 +54,47 @@ export default function OwnerScreen() {
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
     if (!["owner", "architect"].includes(profile?.role ?? "")) { router.replace("/"); return; }
 
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const now = new Date();
+    const weekAgo        = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString();
+    const monthAgo       = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, 1).toISOString();
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+    const lastMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59).toISOString();
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
     const [
-      totalRes, weekRes, monthRes,
-      scoresTotalRes, scoresWeekRes,
+      totalRes, weekRes, monthRes, lastMonthUsersRes,
+      scoresTotalRes, scoresWeekRes, scoresMonthRes, scoresLastMonthRes, scoresPendingRes,
       teamsRes, leaguesRes, leagueMembersRes,
       recentScoresRes, skeeballRes,
+      threeMonthScoresRes,
+      postsWeekRes, checkInsWeekRes, reportsPendingRes, activeTournamentsRes,
     ] = await Promise.all([
       supabase.from("profiles").select("*", { count: "exact", head: true }),
       supabase.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
-      supabase.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", monthAgo),
+      supabase.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", thisMonthStart),
+      supabase.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", lastMonthStart).lte("created_at", lastMonthEnd),
       supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "approved"),
       supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "approved").gte("created_at", weekAgo),
+      supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "approved").gte("created_at", thisMonthStart),
+      supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "approved").gte("created_at", lastMonthStart).lte("created_at", lastMonthEnd),
+      supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("teams").select("*", { count: "exact", head: true }),
       supabase.from("leagues").select("*", { count: "exact", head: true }),
       supabase.from("league_members").select("*", { count: "exact", head: true }),
-      supabase.from("scores").select("user_id, games(type)").eq("status", "approved").gte("created_at", weekAgo),
+      supabase.from("scores").select("user_id, games(id, name, type)").eq("status", "approved").gte("created_at", weekAgo),
       supabase.from("skeeball_sessions").select("*", { count: "exact", head: true }),
+      supabase.from("scores").select("created_at").eq("status", "approved").gte("created_at", threeMonthsAgo),
+      supabase.from("posts").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("check_ins").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("content_reports").select("*", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("tournaments").select("*", { count: "exact", head: true }).neq("status", "completed").neq("status", "cancelled"),
     ]);
 
-    // Compute active players this week
     const recentRows = (recentScoresRes.data ?? []) as any[];
     const activePlayerIds = new Set(recentRows.map((r) => r.user_id));
 
-    // Game type breakdown
+    // Game type breakdown (this week)
     const gameMap: Record<string, number> = {};
     for (const row of recentRows) {
       const g = Array.isArray(row.games) ? row.games[0] : row.games;
@@ -78,7 +105,19 @@ export default function OwnerScreen() {
       .map(([type, count]) => ({ type, count }))
       .sort((a, b) => b.count - a.count);
 
-    // Top players by games this week
+    // Top individual game names this week
+    const gameNameMap: Record<string, number> = {};
+    for (const row of recentRows) {
+      const g = Array.isArray(row.games) ? row.games[0] : row.games;
+      const name = g?.name ?? TYPE_LABELS[g?.type ?? "arcade"] ?? "Unknown";
+      gameNameMap[name] = (gameNameMap[name] ?? 0) + 1;
+    }
+    const topGameNames = Object.entries(gameNameMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    // Top players by game count this week
     const playerMap: Record<string, number> = {};
     for (const row of recentRows) playerMap[row.user_id] = (playerMap[row.user_id] ?? 0) + 1;
     const topPlayerIds = Object.entries(playerMap).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([id]) => id);
@@ -91,19 +130,40 @@ export default function OwnerScreen() {
       }));
     }
 
+    // Monthly scores trend (3 months)
+    const monthlyScores = Array.from({ length: 3 }, (_, i) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - (2 - i), 1);
+      return { key: `${d.getFullYear()}-${d.getMonth()}`, label: MONTH_NAMES[d.getMonth()], count: 0 };
+    });
+    for (const row of (threeMonthScoresRes.data ?? []) as any[]) {
+      const d = new Date(row.created_at);
+      const bucket = monthlyScores.find((b) => b.key === `${d.getFullYear()}-${d.getMonth()}`);
+      if (bucket) bucket.count++;
+    }
+
     setStats({
-      usersTotal: totalRes.count ?? 0,
-      usersWeek: weekRes.count ?? 0,
-      usersMonth: monthRes.count ?? 0,
-      scoresTotal: scoresTotalRes.count ?? 0,
-      scoresWeek: scoresWeekRes.count ?? 0,
-      activePlayersWeek: activePlayerIds.size,
-      teamsTotal: teamsRes.count ?? 0,
-      leaguesTotal: leaguesRes.count ?? 0,
+      usersTotal:         totalRes.count ?? 0,
+      usersWeek:          weekRes.count ?? 0,
+      usersMonth:         monthRes.count ?? 0,
+      usersLastMonth:     lastMonthUsersRes.count ?? 0,
+      scoresTotal:        scoresTotalRes.count ?? 0,
+      scoresWeek:         scoresWeekRes.count ?? 0,
+      scoresMonth:        scoresMonthRes.count ?? 0,
+      scoresLastMonth:    scoresLastMonthRes.count ?? 0,
+      scoresPending:      scoresPendingRes.count ?? 0,
+      activePlayersWeek:  activePlayerIds.size,
+      teamsTotal:         teamsRes.count ?? 0,
+      leaguesTotal:       leaguesRes.count ?? 0,
       leagueMembersTotal: leagueMembersRes.count ?? 0,
       gameBreakdown,
       topPlayers,
-      skeeballSessions: skeeballRes.count ?? 0,
+      topGameNames,
+      skeeballSessions:   skeeballRes.count ?? 0,
+      postsWeek:          postsWeekRes.count ?? 0,
+      checkInsWeek:       checkInsWeekRes.count ?? 0,
+      reportsPending:     reportsPendingRes.count ?? 0,
+      activeTournaments:  activeTournamentsRes.count ?? 0,
+      monthlyScores:      monthlyScores.map(({ label, count }) => ({ label, count })),
     });
     setLoading(false);
     setRefreshing(false);
@@ -114,6 +174,14 @@ export default function OwnerScreen() {
   if (authLoading || loading) {
     return <View style={s.loader}><ActivityIndicator size="large" color="#f59e0b" /></View>;
   }
+
+  const st = stats!;
+  const scoreMoM = st.scoresLastMonth > 0
+    ? Math.round(((st.scoresMonth - st.scoresLastMonth) / st.scoresLastMonth) * 100)
+    : null;
+  const userMoM = st.usersLastMonth > 0
+    ? Math.round(((st.usersMonth - st.usersLastMonth) / st.usersLastMonth) * 100)
+    : null;
 
   return (
     <SafeAreaView style={s.safe} edges={["top"]}>
@@ -136,41 +204,85 @@ export default function OwnerScreen() {
         contentContainerStyle={s.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadStats(); }} tintColor="#f59e0b" />}
       >
+        {/* Score review callout — shown only when there are pending scores */}
+        {st.scoresPending > 0 && (
+          <View style={s.alertCard}>
+            <Ionicons name="time-outline" size={20} color="#f59e0b" />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={s.alertTitle}>{st.scoresPending} Score{st.scoresPending > 1 ? "s" : ""} Awaiting Review</Text>
+              <Text style={s.alertBody}>Open the Admin panel to approve or reject pending score submissions.</Text>
+            </View>
+          </View>
+        )}
+
         {/* User Activity */}
         <SectionLabel text="User Activity" />
         <View style={s.grid}>
-          <StatCard label="Total Users" value={stats!.usersTotal} color="#06b6d4" icon="people-outline" />
-          <StatCard label="New This Week" value={stats!.usersWeek} color="#22c55e" icon="person-add-outline" />
-          <StatCard label="New This Month" value={stats!.usersMonth} color="#a855f7" icon="trending-up-outline" />
-          <StatCard label="Active This Week" value={stats!.activePlayersWeek} color="#f59e0b" icon="flame-outline" />
+          <StatCard label="Total Users"    value={st.usersTotal}  color="#06b6d4" icon="people-outline" />
+          <StatCard label="New This Week"  value={st.usersWeek}   color="#22c55e" icon="person-add-outline" />
+          <StatCard
+            label="New This Month"
+            value={st.usersMonth}
+            color="#a855f7"
+            icon="trending-up-outline"
+            delta={userMoM}
+          />
+          <StatCard label="Active This Week" value={st.activePlayersWeek} color="#f59e0b" icon="flame-outline" />
         </View>
 
         {/* Engagement */}
         <SectionLabel text="Engagement" />
         <View style={s.grid}>
-          <StatCard label="Total Scores" value={stats!.scoresTotal} color="#06b6d4" icon="trophy-outline" />
-          <StatCard label="Scores This Week" value={stats!.scoresWeek} color="#22c55e" icon="checkmark-circle-outline" />
-          <StatCard label="Skee-Ball Sessions" value={stats!.skeeballSessions} color="#f59e0b" icon="bowling-ball-outline" />
+          <StatCard label="Total Scores"     value={st.scoresTotal}    color="#06b6d4" icon="trophy-outline" />
+          <StatCard label="Scores This Week" value={st.scoresWeek}     color="#22c55e" icon="checkmark-circle-outline" />
+          <StatCard
+            label="Scores This Month"
+            value={st.scoresMonth}
+            color="#a855f7"
+            icon="calendar-outline"
+            delta={scoreMoM}
+          />
+          <StatCard label="Skee-Ball Sessions" value={st.skeeballSessions} color="#f59e0b" icon="bowling-ball-outline" />
           <StatCard
             label="Avg Games/Player"
-            value={stats!.activePlayersWeek > 0 ? +(stats!.scoresWeek / stats!.activePlayersWeek).toFixed(1) : 0}
-            color="#a855f7"
+            value={st.activePlayersWeek > 0 ? +(st.scoresWeek / st.activePlayersWeek).toFixed(1) : 0}
+            color="#ef4444"
             icon="bar-chart-outline"
           />
+          <StatCard label="Active Tournaments" value={st.activeTournaments} color="#06b6d4" icon="ribbon-outline" />
+        </View>
+
+        {/* Monthly Scores Trend */}
+        <SectionLabel text="Monthly Games Tracked (3mo)" />
+        <View style={s.chartCard}>
+          {st.monthlyScores.map((m, i) => {
+            const maxCount = Math.max(...st.monthlyScores.map((x) => x.count), 1);
+            const pct = Math.round((m.count / maxCount) * 100);
+            const isLatest = i === st.monthlyScores.length - 1;
+            return (
+              <View key={i} style={s.barCol}>
+                <Text style={[s.barColValue, isLatest && { color: "#f59e0b" }]}>{m.count}</Text>
+                <View style={s.barColTrack}>
+                  <View style={[s.barColFill, { height: `${Math.max(pct, 4)}%` as any, backgroundColor: isLatest ? "#f59e0b" : "#333" }]} />
+                </View>
+                <Text style={[s.barColLabel, isLatest && { color: "#f59e0b" }]}>{m.label}</Text>
+              </View>
+            );
+          })}
         </View>
 
         {/* Game Type Breakdown */}
         <SectionLabel text="Games This Week" />
-        {stats!.gameBreakdown.length === 0 ? (
+        {st.gameBreakdown.length === 0 ? (
           <View style={s.emptyCard}><Text style={s.emptyText}>No scores this week.</Text></View>
         ) : (
           <View style={s.listCard}>
-            {stats!.gameBreakdown.map((g, i) => {
-              const total = stats!.scoresWeek || 1;
+            {st.gameBreakdown.map((g, i) => {
+              const total = st.scoresWeek || 1;
               const pct = Math.round((g.count / total) * 100);
               const color = TYPE_COLORS[g.type] ?? "#555";
               return (
-                <View key={g.type} style={[s.listRow, i < stats!.gameBreakdown.length - 1 && s.listDivider]}>
+                <View key={g.type} style={[s.listRow, i < st.gameBreakdown.length - 1 && s.listDivider]}>
                   <View style={[s.gameColorDot, { backgroundColor: color }]} />
                   <Text style={s.listLabel}>{TYPE_LABELS[g.type] ?? g.type}</Text>
                   <View style={s.barWrap}>
@@ -183,21 +295,37 @@ export default function OwnerScreen() {
           </View>
         )}
 
+        {/* Top Games by Name */}
+        {st.topGameNames.length > 0 && (
+          <>
+            <SectionLabel text="Top Machines This Week" />
+            <View style={s.listCard}>
+              {st.topGameNames.map((g, i) => (
+                <View key={g.name} style={[s.listRow, i < st.topGameNames.length - 1 && s.listDivider]}>
+                  <Text style={s.rankText}>#{i + 1}</Text>
+                  <Text style={s.listLabel}>{g.name}</Text>
+                  <Text style={s.listValue}>{g.count} games</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
         {/* League & Teams */}
         <SectionLabel text="Leagues & Teams" />
         <View style={s.grid}>
-          <StatCard label="Teams" value={stats!.teamsTotal} color="#06b6d4" icon="people-outline" />
-          <StatCard label="Leagues" value={stats!.leaguesTotal} color="#22c55e" icon="layers-outline" />
-          <StatCard label="League Players" value={stats!.leagueMembersTotal} color="#f59e0b" icon="person-outline" />
+          <StatCard label="Teams"         value={st.teamsTotal}         color="#06b6d4" icon="people-outline" />
+          <StatCard label="Leagues"       value={st.leaguesTotal}       color="#22c55e" icon="layers-outline" />
+          <StatCard label="League Players" value={st.leagueMembersTotal} color="#f59e0b" icon="person-outline" />
         </View>
 
         {/* Top Players */}
-        {stats!.topPlayers.length > 0 && (
+        {st.topPlayers.length > 0 && (
           <>
             <SectionLabel text="Top Players This Week" />
             <View style={s.listCard}>
-              {stats!.topPlayers.map((p, i) => (
-                <View key={p.username} style={[s.listRow, i < stats!.topPlayers.length - 1 && s.listDivider]}>
+              {st.topPlayers.map((p, i) => (
+                <View key={p.username} style={[s.listRow, i < st.topPlayers.length - 1 && s.listDivider]}>
                   <Text style={s.rankText}>#{i + 1}</Text>
                   <Text style={s.listLabel}>{p.username}</Text>
                   <Text style={s.listValue}>{p.count} games</Text>
@@ -207,14 +335,41 @@ export default function OwnerScreen() {
           </>
         )}
 
-        {/* Business Impact Note */}
+        {/* Social & Activity */}
+        <SectionLabel text="Social & Activity (this week)" />
+        <View style={s.listCard}>
+          <View style={[s.listRow, s.listDivider]}>
+            <Ionicons name="create-outline" size={16} color="#555" />
+            <Text style={s.listLabel}>New Posts</Text>
+            <Text style={s.listValue}>{st.postsWeek.toLocaleString()}</Text>
+          </View>
+          <View style={[s.listRow, s.listDivider]}>
+            <Ionicons name="qr-code-outline" size={16} color="#555" />
+            <Text style={s.listLabel}>Lane Check-ins</Text>
+            <Text style={s.listValue}>{st.checkInsWeek.toLocaleString()}</Text>
+          </View>
+          <View style={s.listRow}>
+            <Ionicons
+              name={st.reportsPending > 0 ? "flag-outline" : "flag-outline"}
+              size={16}
+              color={st.reportsPending > 0 ? "#ef4444" : "#555"}
+            />
+            <Text style={[s.listLabel, st.reportsPending > 0 && { color: "#ef4444" }]}>Content Reports Pending</Text>
+            <Text style={[s.listValue, st.reportsPending > 0 && { color: "#ef4444" }]}>
+              {st.reportsPending.toLocaleString()}
+            </Text>
+          </View>
+        </View>
+
+        {/* Business Impact */}
         <View style={s.impactCard}>
           <Ionicons name="trending-up" size={20} color="#f59e0b" />
           <View style={{ flex: 1, marginLeft: 12 }}>
             <Text style={s.impactTitle}>Business Impact</Text>
             <Text style={s.impactBody}>
-              {stats!.activePlayersWeek} unique players engaged this week across {stats!.scoresWeek} tracked games.
-              {stats!.usersMonth > 0 ? ` ${stats!.usersMonth} new accounts created this month.` : ""}
+              {st.activePlayersWeek} unique players engaged this week across {st.scoresWeek} tracked games.
+              {scoreMoM !== null && ` Games this month are ${scoreMoM >= 0 ? "up" : "down"} ${Math.abs(scoreMoM)}% vs last month.`}
+              {st.usersMonth > 0 ? ` ${st.usersMonth} new accounts created this month.` : ""}
             </Text>
           </View>
         </View>
@@ -229,14 +384,26 @@ function SectionLabel({ text }: { text: string }) {
   return <Text style={s.sectionLabel}>{text}</Text>;
 }
 
-function StatCard({ label, value, color, icon }: { label: string; value: number; color: string; icon: string }) {
+function StatCard({
+  label, value, color, icon, delta,
+}: {
+  label: string; value: number; color: string; icon: string; delta?: number | null;
+}) {
+  const displayValue = typeof value === "number" && !Number.isInteger(value)
+    ? value.toFixed(1)
+    : value.toLocaleString();
   return (
     <View style={s.statCard}>
       <View style={[s.statIcon, { backgroundColor: color + "18" }]}>
         <Ionicons name={icon as any} size={18} color={color} />
       </View>
-      <Text style={[s.statValue, { color }]}>{typeof value === "number" && !Number.isInteger(value) ? value.toFixed(1) : value.toLocaleString()}</Text>
+      <Text style={[s.statValue, { color }]}>{displayValue}</Text>
       <Text style={s.statLabel}>{label}</Text>
+      {delta !== undefined && delta !== null && (
+        <Text style={[s.deltaText, { color: delta >= 0 ? "#22c55e" : "#ef4444" }]}>
+          {delta >= 0 ? "▲" : "▼"} {Math.abs(delta)}% vs last month
+        </Text>
+      )}
     </View>
   );
 }
@@ -267,6 +434,25 @@ const s = StyleSheet.create({
     letterSpacing: 1.2, marginTop: 24, marginBottom: 10,
   },
 
+  alertCard: {
+    flexDirection: "row", alignItems: "flex-start",
+    backgroundColor: "rgba(245,158,11,0.08)", borderRadius: 16,
+    padding: 16, marginTop: 16, borderWidth: 1, borderColor: "rgba(245,158,11,0.25)",
+  },
+  alertTitle: { color: "#f59e0b", fontSize: 14, fontWeight: "900", marginBottom: 2 },
+  alertBody:  { color: "#777", fontSize: 12, lineHeight: 17 },
+
+  chartCard: {
+    flexDirection: "row", alignItems: "flex-end", justifyContent: "space-around",
+    backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e",
+    padding: 16, height: 110,
+  },
+  barCol: { flex: 1, alignItems: "center", height: "100%", justifyContent: "flex-end" },
+  barColValue: { color: "#555", fontSize: 11, fontWeight: "700", marginBottom: 4 },
+  barColTrack: { width: "60%", flex: 1, backgroundColor: "#1a1a1a", borderRadius: 3, overflow: "hidden", justifyContent: "flex-end" },
+  barColFill:  { width: "100%", borderRadius: 3 },
+  barColLabel: { color: "#444", fontSize: 11, fontWeight: "700", marginTop: 6 },
+
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   statCard: {
     flex: 1, minWidth: "45%", backgroundColor: "#111", borderRadius: 18,
@@ -275,6 +461,7 @@ const s = StyleSheet.create({
   statIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   statValue: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5, marginBottom: 2 },
   statLabel: { color: "#555", fontSize: 12, fontWeight: "600" },
+  deltaText: { fontSize: 11, fontWeight: "700", marginTop: 4 },
 
   listCard: {
     backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e",

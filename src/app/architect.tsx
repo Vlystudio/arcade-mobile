@@ -10,26 +10,36 @@ const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 type ArchitectStats = {
-  // Role breakdown
   roleCounts: Record<string, number>;
-  // Table health
   tableCounts: Record<string, number>;
-  // Monthly growth (last 6 months)
   monthlySignups: { label: string; count: number }[];
   monthlyScores: { label: string; count: number }[];
-  // Peak usage
   scoresByDay: number[];
   peakDay: number;
-  // Env var status
   envStatus: { key: string; present: boolean }[];
-  // Feature usage
   gameTypeCounts: Record<string, number>;
-  // Business impact
   usersTotal: number;
   scoresTotal: number;
   scoresThisMonth: number;
   uniquePlayersMonth: number;
   retentionRate: number;
+  // Score pipeline
+  scoresPending: number;
+  scoresRejected: number;
+  // Social
+  postsTotal: number;
+  postsWeek: number;
+  commentsWeek: number;
+  likesWeek: number;
+  // Content & safety
+  autoFlaggedPosts: number;
+  reportsPending: number;
+  securityEventsWeek: number;
+  // Engagement signals
+  checkInsWeek: number;
+  checkInsTotal: number;
+  messagesTotal: number;
+  activeTournaments: number;
 };
 
 export default function ArchitectScreen() {
@@ -46,24 +56,40 @@ export default function ArchitectScreen() {
     if (profile?.role !== "architect") { router.replace("/"); return; }
 
     const now = new Date();
-    const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const weekAgo   = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString();
+    const monthAgo  = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString();
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString();
+    const sixMonthsAgo   = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString();
 
     const [
       profilesAll,
-      scoresAll,
+      scoresApproved,
       scoresMonthRes,
+      scoresPendingRes,
+      scoresRejectedRes,
       teamsCount, leaguesCount, leagueMembersCount,
       tournamentsCount, skeeballCount,
       recentSignups,
       recentScores,
       monthScores,
       gameTypeScores,
+      postsTotalRes,
+      postsWeekRes,
+      commentsWeekRes,
+      likesWeekRes,
+      autoFlaggedRes,
+      reportsPendingRes,
+      securityEventsRes,
+      checkInsTotalRes,
+      checkInsWeekRes,
+      messagesTotalRes,
+      activeTournamentsRes,
     ] = await Promise.all([
       supabase.from("profiles").select("role, created_at"),
       supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "approved"),
       supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "approved").gte("created_at", monthAgo),
+      supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "rejected"),
       supabase.from("teams").select("*", { count: "exact", head: true }),
       supabase.from("leagues").select("*", { count: "exact", head: true }),
       supabase.from("league_members").select("*", { count: "exact", head: true }),
@@ -71,59 +97,64 @@ export default function ArchitectScreen() {
       supabase.from("skeeball_sessions").select("*", { count: "exact", head: true }),
       supabase.from("profiles").select("created_at").gte("created_at", sixMonthsAgo),
       supabase.from("scores").select("created_at, user_id").eq("status", "approved").gte("created_at", threeMonthsAgo),
-      supabase.from("scores").select("created_at").eq("status", "approved").gte("created_at", monthAgo),
+      supabase.from("scores").select("created_at, user_id").eq("status", "approved").gte("created_at", monthAgo),
       supabase.from("scores").select("games(type)").eq("status", "approved").gte("created_at", monthAgo),
+      supabase.from("posts").select("*", { count: "exact", head: true }),
+      supabase.from("posts").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("post_comments").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("post_likes").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("posts").select("*", { count: "exact", head: true }).eq("auto_flagged", true),
+      supabase.from("content_reports").select("*", { count: "exact", head: true }).eq("status", "pending"),
+      supabase.from("security_events").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("check_ins").select("*", { count: "exact", head: true }),
+      supabase.from("check_ins").select("*", { count: "exact", head: true }).gte("created_at", weekAgo),
+      supabase.from("messages").select("*", { count: "exact", head: true }),
+      supabase.from("tournaments").select("*", { count: "exact", head: true }).neq("status", "completed").neq("status", "cancelled"),
     ]);
 
-    // Role breakdown
     const roleCounts: Record<string, number> = { user: 0, admin: 0, owner: 0, architect: 0 };
     for (const p of (profilesAll.data ?? []) as any[]) {
       const r = p.role ?? "user";
       roleCounts[r] = (roleCounts[r] ?? 0) + 1;
     }
 
-    // Table counts
     const tableCounts: Record<string, number> = {
-      profiles: (profilesAll.data ?? []).length,
-      teams: teamsCount.count ?? 0,
-      leagues: leaguesCount.count ?? 0,
-      league_members: leagueMembersCount.count ?? 0,
-      tournaments: tournamentsCount.count ?? 0,
+      profiles:         (profilesAll.data ?? []).length,
+      teams:            teamsCount.count ?? 0,
+      tournaments:      tournamentsCount.count ?? 0,
+      leagues:          leaguesCount.count ?? 0,
+      league_members:   leagueMembersCount.count ?? 0,
       skeeball_sessions: skeeballCount.count ?? 0,
+      posts:            postsTotalRes.count ?? 0,
+      check_ins:        checkInsTotalRes.count ?? 0,
+      messages:         messagesTotalRes.count ?? 0,
     };
 
-    // Monthly signups (last 6 months)
     const monthlySignups = buildMonthBuckets(now, 6);
     for (const p of (recentSignups.data ?? []) as any[]) {
       const d = new Date(p.created_at);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      const bucket = monthlySignups.find((b) => b.key === key);
+      const bucket = monthlySignups.find((b) => b.key === `${d.getFullYear()}-${d.getMonth()}`);
       if (bucket) bucket.count++;
     }
 
-    // Monthly scores (last 3 months from recentScores)
     const monthlyScores = buildMonthBuckets(now, 3);
     for (const s of (recentScores.data ?? []) as any[]) {
       const d = new Date(s.created_at);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      const bucket = monthlyScores.find((b) => b.key === key);
+      const bucket = monthlyScores.find((b) => b.key === `${d.getFullYear()}-${d.getMonth()}`);
       if (bucket) bucket.count++;
     }
 
-    // Scores by day of week
     const scoresByDay = [0, 0, 0, 0, 0, 0, 0];
     for (const s of (recentScores.data ?? []) as any[]) {
       scoresByDay[new Date(s.created_at).getDay()]++;
     }
     const peakDay = scoresByDay.indexOf(Math.max(...scoresByDay));
 
-    // Unique players this month
     const uniquePlayerIds = new Set((monthScores.data ?? []).map((s: any) => s.user_id ?? ""));
     const uniquePlayersMonth = uniquePlayerIds.size;
 
-    // Retention: players active this month who also had scores last month
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString();
+    const lastMonthEnd   = new Date(now.getFullYear(), now.getMonth(), 0).toISOString();
     const { data: lastMonthScores } = await supabase
       .from("scores").select("user_id").eq("status", "approved")
       .gte("created_at", lastMonthStart).lte("created_at", lastMonthEnd);
@@ -131,7 +162,6 @@ export default function ArchitectScreen() {
     const returning = [...uniquePlayerIds].filter((id) => lastMonthIds.has(id)).length;
     const retentionRate = uniquePlayersMonth > 0 ? Math.round((returning / uniquePlayersMonth) * 100) : 0;
 
-    // Game type usage
     const gameTypeCounts: Record<string, number> = {};
     for (const row of (gameTypeScores.data ?? []) as any[]) {
       const g = Array.isArray(row.games) ? row.games[0] : row.games;
@@ -139,9 +169,6 @@ export default function ArchitectScreen() {
       gameTypeCounts[type] = (gameTypeCounts[type] ?? 0) + 1;
     }
 
-    // Env var status
-    // Must use static member access — Metro only inlines process.env.KEY literals,
-    // not dynamic process.env[key] bracket access.
     const envStatus = [
       { key: "EXPO_PUBLIC_SUPABASE_URL",          present: !!process.env.EXPO_PUBLIC_SUPABASE_URL },
       { key: "EXPO_PUBLIC_SUPABASE_ANON_KEY",     present: !!process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY },
@@ -149,7 +176,6 @@ export default function ArchitectScreen() {
       { key: "EXPO_PUBLIC_SITE_URL",              present: !!process.env.EXPO_PUBLIC_SITE_URL },
     ];
 
-    // Check Square API reachability
     try {
       const res = await fetch("/api/square/menu?location=arcade_bar");
       setApiStatus(res.status < 500 ? "ok" : "error");
@@ -161,16 +187,29 @@ export default function ArchitectScreen() {
       roleCounts,
       tableCounts,
       monthlySignups: monthlySignups.map(({ label, count }) => ({ label, count })),
-      monthlyScores: monthlyScores.map(({ label, count }) => ({ label, count })),
+      monthlyScores:  monthlyScores.map(({ label, count }) => ({ label, count })),
       scoresByDay,
       peakDay,
       envStatus,
       gameTypeCounts,
-      usersTotal: (profilesAll.data ?? []).length,
-      scoresTotal: scoresAll.count ?? 0,
-      scoresThisMonth: scoresMonthRes.count ?? 0,
+      usersTotal:        (profilesAll.data ?? []).length,
+      scoresTotal:       scoresApproved.count ?? 0,
+      scoresThisMonth:   scoresMonthRes.count ?? 0,
       uniquePlayersMonth,
       retentionRate,
+      scoresPending:     scoresPendingRes.count ?? 0,
+      scoresRejected:    scoresRejectedRes.count ?? 0,
+      postsTotal:        postsTotalRes.count ?? 0,
+      postsWeek:         postsWeekRes.count ?? 0,
+      commentsWeek:      commentsWeekRes.count ?? 0,
+      likesWeek:         likesWeekRes.count ?? 0,
+      autoFlaggedPosts:  autoFlaggedRes.count ?? 0,
+      reportsPending:    reportsPendingRes.count ?? 0,
+      securityEventsWeek: securityEventsRes.count ?? 0,
+      checkInsWeek:      checkInsWeekRes.count ?? 0,
+      checkInsTotal:     checkInsTotalRes.count ?? 0,
+      messagesTotal:     messagesTotalRes.count ?? 0,
+      activeTournaments: activeTournamentsRes.count ?? 0,
     });
     setLoading(false);
     setRefreshing(false);
@@ -207,48 +246,43 @@ export default function ArchitectScreen() {
         {/* Business Impact */}
         <SectionLabel text="Business Impact" />
         <View style={s.grid}>
-          <StatCard label="Total Users" value={st.usersTotal} color="#06b6d4" icon="people-outline" />
-          <StatCard label="Total Games" value={st.scoresTotal} color="#22c55e" icon="trophy-outline" />
-          <StatCard label="Games This Month" value={st.scoresThisMonth} color="#f59e0b" icon="calendar-outline" />
-          <StatCard label="Active Players/mo" value={st.uniquePlayersMonth} color="#a855f7" icon="flame-outline" />
-          <StatCard label="Retention Rate" value={st.retentionRate} color="#ef4444" icon="repeat-outline" suffix="%" />
+          <StatCard label="Total Users"       value={st.usersTotal}         color="#06b6d4" icon="people-outline" />
+          <StatCard label="Total Games"        value={st.scoresTotal}        color="#22c55e" icon="trophy-outline" />
+          <StatCard label="Games This Month"   value={st.scoresThisMonth}    color="#f59e0b" icon="calendar-outline" />
+          <StatCard label="Active Players/mo"  value={st.uniquePlayersMonth} color="#a855f7" icon="flame-outline" />
+          <StatCard label="Retention Rate"     value={st.retentionRate}      color="#ef4444" icon="repeat-outline" suffix="%" />
+          <StatCard label="Active Tournaments" value={st.activeTournaments}  color="#06b6d4" icon="ribbon-outline" />
+        </View>
+
+        {/* Score Review Pipeline */}
+        <SectionLabel text="Score Review Pipeline" />
+        <View style={s.listCard}>
+          <View style={[s.listRow, s.listDivider]}>
+            <View style={[s.dot, { backgroundColor: "#f59e0b" }]} />
+            <Text style={s.listLabel}>Pending Review</Text>
+            <Text style={[s.listValue, st.scoresPending > 0 && { color: "#f59e0b" }]}>
+              {st.scoresPending.toLocaleString()}
+            </Text>
+          </View>
+          <View style={[s.listRow, s.listDivider]}>
+            <View style={[s.dot, { backgroundColor: "#22c55e" }]} />
+            <Text style={s.listLabel}>Approved (all time)</Text>
+            <Text style={s.listValue}>{st.scoresTotal.toLocaleString()}</Text>
+          </View>
+          <View style={s.listRow}>
+            <View style={[s.dot, { backgroundColor: "#ef4444" }]} />
+            <Text style={s.listLabel}>Rejected (all time)</Text>
+            <Text style={s.listValue}>{st.scoresRejected.toLocaleString()}</Text>
+          </View>
         </View>
 
         {/* Monthly Growth */}
         <SectionLabel text="Monthly Signups (6mo)" />
-        <View style={s.chartCard}>
-          {st.monthlySignups.map((m, i) => {
-            const maxCount = Math.max(...st.monthlySignups.map((x) => x.count), 1);
-            const pct = Math.round((m.count / maxCount) * 100);
-            return (
-              <View key={i} style={s.barCol}>
-                <Text style={s.barColValue}>{m.count}</Text>
-                <View style={s.barColTrack}>
-                  <View style={[s.barColFill, { height: `${Math.max(pct, 4)}%` as any, backgroundColor: "#06b6d4" }]} />
-                </View>
-                <Text style={s.barColLabel}>{m.label}</Text>
-              </View>
-            );
-          })}
-        </View>
+        <BarChart data={st.monthlySignups} color="#06b6d4" />
 
         {/* Monthly Score Activity */}
         <SectionLabel text="Monthly Games Tracked (3mo)" />
-        <View style={s.chartCard}>
-          {st.monthlyScores.map((m, i) => {
-            const maxCount = Math.max(...st.monthlyScores.map((x) => x.count), 1);
-            const pct = Math.round((m.count / maxCount) * 100);
-            return (
-              <View key={i} style={s.barCol}>
-                <Text style={s.barColValue}>{m.count}</Text>
-                <View style={s.barColTrack}>
-                  <View style={[s.barColFill, { height: `${Math.max(pct, 4)}%` as any, backgroundColor: "#22c55e" }]} />
-                </View>
-                <Text style={s.barColLabel}>{m.label}</Text>
-              </View>
-            );
-          })}
-        </View>
+        <BarChart data={st.monthlyScores} color="#22c55e" />
 
         {/* Peak Usage by Day */}
         <SectionLabel text="Activity by Day of Week (90 days)" />
@@ -272,6 +306,70 @@ export default function ArchitectScreen() {
           <Text style={s.peakNote}>Peak day: {DAY_LABELS[st.peakDay]} ({st.scoresByDay[st.peakDay]} games in 90 days)</Text>
         )}
 
+        {/* Social & Community */}
+        <SectionLabel text="Social & Community (this week)" />
+        <View style={s.grid}>
+          <StatCard label="New Posts"     value={st.postsWeek}    color="#06b6d4" icon="create-outline" />
+          <StatCard label="Comments"      value={st.commentsWeek} color="#22c55e" icon="chatbubble-outline" />
+          <StatCard label="Likes"         value={st.likesWeek}    color="#a855f7" icon="heart-outline" />
+          <StatCard label="Lane Check-ins" value={st.checkInsWeek} color="#f59e0b" icon="qr-code-outline" />
+        </View>
+        <View style={s.listCard}>
+          <View style={[s.listRow, s.listDivider]}>
+            <Ionicons name="albums-outline" size={14} color="#555" />
+            <Text style={s.listLabel}>Total Posts (all time)</Text>
+            <Text style={s.listValue}>{st.postsTotal.toLocaleString()}</Text>
+          </View>
+          <View style={[s.listRow, s.listDivider]}>
+            <Ionicons name="scan-outline" size={14} color="#555" />
+            <Text style={s.listLabel}>Total Check-ins (all time)</Text>
+            <Text style={s.listValue}>{st.checkInsTotal.toLocaleString()}</Text>
+          </View>
+          <View style={s.listRow}>
+            <Ionicons name="chatbubbles-outline" size={14} color="#555" />
+            <Text style={s.listLabel}>Total DMs (all time)</Text>
+            <Text style={s.listValue}>{st.messagesTotal.toLocaleString()}</Text>
+          </View>
+        </View>
+
+        {/* Content & Safety */}
+        <SectionLabel text="Content & Safety" />
+        <View style={s.listCard}>
+          <View style={[s.listRow, s.listDivider]}>
+            <Ionicons
+              name={st.autoFlaggedPosts > 0 ? "warning-outline" : "checkmark-circle"}
+              size={14}
+              color={st.autoFlaggedPosts > 0 ? "#f59e0b" : "#22c55e"}
+            />
+            <Text style={s.listLabel}>Auto-flagged Posts</Text>
+            <Text style={[s.listValue, st.autoFlaggedPosts > 0 && { color: "#f59e0b" }]}>
+              {st.autoFlaggedPosts.toLocaleString()}
+            </Text>
+          </View>
+          <View style={[s.listRow, s.listDivider]}>
+            <Ionicons
+              name={st.reportsPending > 0 ? "flag-outline" : "checkmark-circle"}
+              size={14}
+              color={st.reportsPending > 0 ? "#ef4444" : "#22c55e"}
+            />
+            <Text style={s.listLabel}>Reports Pending Review</Text>
+            <Text style={[s.listValue, st.reportsPending > 0 && { color: "#ef4444" }]}>
+              {st.reportsPending.toLocaleString()}
+            </Text>
+          </View>
+          <View style={s.listRow}>
+            <Ionicons
+              name={st.securityEventsWeek > 20 ? "shield-outline" : "shield-checkmark-outline"}
+              size={14}
+              color={st.securityEventsWeek > 20 ? "#f59e0b" : "#22c55e"}
+            />
+            <Text style={s.listLabel}>Security Events (7 days)</Text>
+            <Text style={[s.listValue, st.securityEventsWeek > 20 && { color: "#f59e0b" }]}>
+              {st.securityEventsWeek.toLocaleString()}
+            </Text>
+          </View>
+        </View>
+
         {/* Feature Usage */}
         <SectionLabel text="Feature Usage This Month" />
         <View style={s.listCard}>
@@ -292,9 +390,9 @@ export default function ArchitectScreen() {
         <View style={s.listCard}>
           {[
             { role: "architect", color: "#a855f7" },
-            { role: "owner", color: "#f59e0b" },
-            { role: "admin", color: "#3b82f6" },
-            { role: "user", color: "#444" },
+            { role: "owner",     color: "#f59e0b" },
+            { role: "admin",     color: "#3b82f6" },
+            { role: "user",      color: "#444" },
           ].map(({ role, color }, i) => (
             <View key={role} style={[s.listRow, i < 3 && s.listDivider]}>
               <Ionicons name="checkmark-circle" size={14} color={color} />
@@ -380,6 +478,26 @@ function StatCard({ label, value, color, icon, suffix = "" }: { label: string; v
       </View>
       <Text style={[s.statValue, { color }]}>{value.toLocaleString()}{suffix}</Text>
       <Text style={s.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function BarChart({ data, color }: { data: { label: string; count: number }[]; color: string }) {
+  const maxCount = Math.max(...data.map((x) => x.count), 1);
+  return (
+    <View style={s.chartCard}>
+      {data.map((m, i) => {
+        const pct = Math.round((m.count / maxCount) * 100);
+        return (
+          <View key={i} style={s.barCol}>
+            <Text style={s.barColValue}>{m.count}</Text>
+            <View style={s.barColTrack}>
+              <View style={[s.barColFill, { height: `${Math.max(pct, 4)}%` as any, backgroundColor: color }]} />
+            </View>
+            <Text style={s.barColLabel}>{m.label}</Text>
+          </View>
+        );
+      })}
     </View>
   );
 }
