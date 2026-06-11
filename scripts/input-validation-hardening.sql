@@ -80,10 +80,7 @@ BEGIN
       NOT VALID;
   END IF;
 
-  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'scores_value_bounds') THEN
-    ALTER TABLE public.scores
-      ADD CONSTRAINT scores_value_bounds
-      CHECK (score BETWEEN 0 AND 999999999)
-      NOT VALID;
-  END IF;
+  -- scores_value_bounds: dropped by scripts/score-bigint-migration.sql
+  -- (run order 24), which raises the score ceiling to 100B via
+  -- scores_score_range. Do not re-add this constraint.
 END $$;

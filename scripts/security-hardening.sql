@@ -325,6 +325,8 @@ GRANT  EXECUTE ON FUNCTION public.rpc_admin_update_forum_status(uuid, text) TO a
 
 -- ────────────────────────────────────────────────────────────
 -- P3: rpc_submit_score (validates & inserts score server-side)
+-- Superseded by scripts/score-bigint-migration.sql (run order 24) —
+-- that script is the source of truth for rpc_submit_score (p_score bigint).
 -- ────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION public.rpc_submit_score(
   p_game_id     uuid,

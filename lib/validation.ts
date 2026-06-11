@@ -43,7 +43,7 @@ export const VALIDATION_LIMITS = {
   supportFeedback: 2000,
   foodInstructions: 300,
   tableNumber: 40,
-  scoreMax: 999999999,
+  scoreMax: 100000000000,
 };
 
 export function normalizeUserText(value: unknown): string {

@@ -138,11 +138,16 @@ UPDATE lanes
 
 
 -- ── A6: Score upper bound ─────────────────────────────────────
+-- Superseded by scripts/score-bigint-migration.sql (run order 24),
+-- which migrates scores.score to bigint and raises this to 100B.
+-- Kept here for historical/idempotent re-run purposes only.
 ALTER TABLE scores DROP CONSTRAINT IF EXISTS scores_score_range;
 ALTER TABLE scores ADD CONSTRAINT scores_score_range
   CHECK (score >= 0 AND score <= 9999999999);
 
 -- Rebuild rpc_submit_score with upper-bound check
+-- Superseded by scripts/score-bigint-migration.sql (run order 24) —
+-- that script is the source of truth for rpc_submit_score (p_score bigint).
 CREATE OR REPLACE FUNCTION public.rpc_submit_score(
   p_game_id     uuid,
   p_lane_id     uuid,
