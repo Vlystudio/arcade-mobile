@@ -262,14 +262,21 @@ async function publishApprovedImage(
     contentType: string;
   }
 ): Promise<{ ok: true; publicUrl: string } | { ok: false }> {
-  const { error: uploadErr } = await admin.storage
-    .from(params.targetBucket)
-    .upload(params.targetPath, params.bytes, {
-      contentType: params.contentType,
-      upsert: true,
-    });
+  let uploadErr: { message: string; status?: number } | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 300 * attempt));
+    const { error } = await admin.storage
+      .from(params.targetBucket)
+      .upload(params.targetPath, params.bytes, {
+        contentType: params.contentType,
+        upsert: true,
+      });
+    uploadErr = error as { message: string; status?: number } | null;
+    if (!uploadErr) break;
+    console.warn(`[moderate-image] publish upload attempt ${attempt} failed:`, uploadErr.message, "status:", uploadErr.status);
+  }
   if (uploadErr) {
-    console.error("[moderate-image] publish upload error:", uploadErr.message);
+    console.error("[moderate-image] publish upload error:", uploadErr.message, "status:", uploadErr.status);
     return { ok: false };
   }
 
