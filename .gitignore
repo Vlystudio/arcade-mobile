@@ -53,3 +53,6 @@ skeeball-lane-qrs/
 .env*
 
 .env.local
+
+# local-only helper scripts and credential dumps (e.g. scripts/.staging-db-pass.txt)
+scripts/.*
