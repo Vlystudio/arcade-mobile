@@ -16,6 +16,7 @@ import {
 import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { reportError } from "../lib/report-error";
+import { BugReportBanner } from "../components/bug-report";
 import { supabase } from "../../lib/supabase";
 import { validateScoreValue } from "../../lib/validation";
 
@@ -344,12 +345,7 @@ export default function SubmitScoreScreen() {
                 </View>
 
                 <RequirementsChecklist isSkeeball={true} gameComplete={gameComplete} proofUri={proofUri} arcadeScore={arcadeScore} />
-                {submitError && (
-                  <View style={styles.submitErrorBox}>
-                    <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
-                    <Text style={styles.submitErrorText}>{submitError}</Text>
-                  </View>
-                )}
+                <BugReportBanner error={submitError} />
                 <SubmitButton
                   label={submitting ? "Submitting…" : "Submit for Review"}
                   onPress={handleSubmit}

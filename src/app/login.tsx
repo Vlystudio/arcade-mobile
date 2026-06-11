@@ -18,6 +18,7 @@ import { getEmailRedirectTo } from "../../lib/auth-redirect";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../context/auth-context";
 import { reportError } from "../lib/report-error";
+import { BugReportBanner } from "../components/bug-report";
 import { CURRENT_TOS_VERSION } from "./terms";
 
 const TOS_SECTIONS = [
@@ -270,12 +271,7 @@ export default function LoginScreen() {
               </View>
             </View>
 
-            {error && (
-              <View style={styles.errorBox}>
-                <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
+            <BugReportBanner error={error} />
 
             <Pressable
               style={[styles.submitBtn, loading && styles.submitBtnLoading]}
@@ -415,12 +411,7 @@ export default function LoginScreen() {
                   />
                 </View>
 
-                {forgotUsernameError && (
-                  <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
-                    <Text style={styles.errorText}>{forgotUsernameError}</Text>
-                  </View>
-                )}
+                <BugReportBanner error={forgotUsernameError} />
 
                 <Pressable
                   style={[styles.sheetBtn, lookingUpUsername && styles.sheetBtnDisabled]}
@@ -481,12 +472,7 @@ export default function LoginScreen() {
                   />
                 </View>
 
-                {forgotPasswordError && (
-                  <View style={styles.errorBox}>
-                    <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
-                    <Text style={styles.errorText}>{forgotPasswordError}</Text>
-                  </View>
-                )}
+                <BugReportBanner error={forgotPasswordError} />
 
                 <Pressable
                   style={[styles.sheetBtn, sendingReset && styles.sheetBtnDisabled]}

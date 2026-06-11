@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getEmailRedirectTo } from "../../lib/auth-redirect";
 import { reportError } from "../lib/report-error";
+import { BugReportBanner } from "../components/bug-report";
 import { supabase } from "../../lib/supabase";
 import { CURRENT_TOS_VERSION } from "./terms";
 
@@ -231,12 +232,7 @@ export default function SignupScreen() {
               </Text>
             </Pressable>
 
-            {error && (
-              <View style={styles.errorBox}>
-                <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            )}
+            <BugReportBanner error={error} />
 
             <Pressable
               style={({ pressed }) => [styles.submitBtn, loading && styles.submitBtnLoading, pressed && { opacity: 0.85 }]}
