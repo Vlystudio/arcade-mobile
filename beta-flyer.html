@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArcadeTracker — Beta Testers Wanted</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0a0a0a;
+    color: #ffffff;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px;
+  }
+
+  .flyer {
+    width: 100%;
+    max-width: 860px;
+    background: #111111;
+    border: 1.5px solid #1e1e1e;
+    border-radius: 28px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .flyer::before {
+    content: '';
+    position: absolute;
+    top: -80px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 500px;
+    height: 160px;
+    background: radial-gradient(ellipse, rgba(6,182,212,0.2) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 52px 56px 40px;
+    text-align: center;
+    border-bottom: 1px solid #1a1a1a;
+    position: relative;
+    z-index: 1;
+  }
+
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(6,182,212,0.1);
+    border: 1px solid rgba(6,182,212,0.28);
+    color: #06b6d4;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    border-radius: 999px;
+    padding: 6px 18px;
+    margin-bottom: 24px;
+  }
+
+  .badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #06b6d4;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .headline {
+    font-size: 52px;
+    font-weight: 900;
+    line-height: 1.04;
+    letter-spacing: -0.025em;
+    margin-bottom: 16px;
+  }
+
+  .headline span { color: #06b6d4; }
+
+  .subheadline {
+    font-size: 17px;
+    color: #666;
+    font-weight: 400;
+    line-height: 1.6;
+    max-width: 540px;
+    margin: 0 auto;
+  }
+
+  /* ── Body ── */
+  .body {
+    display: grid;
+    grid-template-columns: 1fr 270px;
+  }
+
+  /* ── Features ── */
+  .features {
+    padding: 40px 44px 40px 56px;
+    border-right: 1px solid #1a1a1a;
+  }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: #333;
+    margin-bottom: 20px;
+  }
+
+  .feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .feature-card {
+    background: #0d0d0d;
+    border: 1px solid #1c1c1c;
+    border-radius: 16px;
+    padding: 18px 16px;
+  }
+
+  .feature-icon {
+    font-size: 24px;
+    margin-bottom: 10px;
+    display: block;
+  }
+
+  .feature-name {
+    font-size: 13px;
+    font-weight: 700;
+    color: #e5e5e5;
+    margin-bottom: 5px;
+  }
+
+  .feature-desc {
+    font-size: 11.5px;
+    color: #4a4a4a;
+    line-height: 1.55;
+  }
+
+  .feature-card.accent {
+    border-color: rgba(6,182,212,0.18);
+    background: rgba(6,182,212,0.035);
+  }
+
+  .feature-card.accent .feature-name { color: #06b6d4; }
+
+  /* ── QR side panel ── */
+  .qr-panel {
+    padding: 40px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    text-align: center;
+  }
+
+  .qr-outer {
+    background: linear-gradient(135deg, rgba(6,182,212,0.15), rgba(6,182,212,0.04));
+    border: 1px solid rgba(6,182,212,0.2);
+    border-radius: 24px;
+    padding: 3px;
+  }
+
+  .qr-wrap {
+    background: #ffffff;
+    border-radius: 22px;
+    padding: 14px;
+    display: block;
+  }
+
+  .qr-wrap img {
+    width: 190px;
+    height: 190px;
+    display: block;
+    border-radius: 4px;
+  }
+
+  .qr-cta {
+    font-size: 15px;
+    font-weight: 800;
+    color: #fff;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+  }
+
+  .qr-sub {
+    font-size: 12px;
+    color: #444;
+    line-height: 1.5;
+  }
+
+  .qr-url {
+    font-size: 12px;
+    font-weight: 600;
+    color: #06b6d4;
+    letter-spacing: 0.02em;
+  }
+
+  .web-chip {
+    background: rgba(6,182,212,0.08);
+    border: 1px solid rgba(6,182,212,0.2);
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #06b6d4;
+    padding: 4px 14px;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    padding: 22px 56px;
+    border-top: 1px solid #1a1a1a;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+
+  .footer-note {
+    font-size: 11.5px;
+    color: #2e2e2e;
+    line-height: 1.6;
+    max-width: 500px;
+  }
+
+  .footer-note strong { color: #484848; }
+
+  .perks {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+
+  .perk {
+    font-size: 11px;
+    color: #3a3a3a;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    white-space: nowrap;
+  }
+
+  .dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #06b6d4;
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  /* ── Print ── */
+  @media print {
+    @page { size: letter; margin: 0.25in; }
+    html, body {
+      background: #fff;
+      padding: 0;
+      display: block;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .flyer {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      max-width: 100%;
+      zoom: 0.8;
+    }
+    .flyer::before { display: none; }
+    /* Header */
+    .header { padding: 28px 44px 22px; }
+    .badge { background: #e0f2fe; border-color: #7dd3fc; color: #0284c7; margin-bottom: 14px; }
+    .badge::before { background: #0284c7; animation: none; }
+    .headline { color: #111; font-size: 40px; margin-bottom: 10px; }
+    .headline span { color: #0284c7; }
+    .subheadline { color: #555; font-size: 14px; }
+    /* Body */
+    .header, .features, .footer { border-color: #e5e5e5; }
+    .features { padding: 22px 32px 22px 44px; }
+    .section-label { color: #aaa; margin-bottom: 12px; }
+    .feature-grid { gap: 8px; }
+    .feature-card { background: #f7f7f7; border-color: #e0e0e0; padding: 13px 12px; }
+    .feature-card.accent { background: #f0f9ff; border-color: #bae6fd; }
+    .feature-icon { font-size: 18px; margin-bottom: 6px; }
+    .feature-name { color: #111; font-size: 12px; }
+    .feature-card.accent .feature-name { color: #0284c7; }
+    .feature-desc { color: #666; font-size: 10.5px; }
+    /* QR panel */
+    .qr-panel { padding: 22px 24px; gap: 10px; }
+    .qr-outer { background: #f0f9ff; border-color: #7dd3fc; }
+    .qr-wrap img { width: 155px; height: 155px; }
+    .qr-cta { color: #111; font-size: 13px; }
+    .qr-url { color: #0284c7; }
+    .qr-sub { color: #888; font-size: 10.5px; }
+    .web-chip { background: #e0f2fe; border-color: #7dd3fc; color: #0284c7; }
+    /* Footer */
+    .footer { padding: 14px 44px; }
+    .footer-note { color: #999; font-size: 10.5px; }
+    .footer-note strong { color: #666; }
+    .perk { color: #aaa; font-size: 10px; }
+    .dot { background: #0284c7; }
+  }
+</style>
+</head>
+<body>
+<div class="flyer">
+
+  <div class="header">
+    <div class="badge">Beta Program — Now Open</div>
+    <h1 class="headline">Your Arcade.<br><span>Smarter.</span></h1>
+    <p class="subheadline">
+      ArcadeTracker is a web platform that turns your night out into a full
+      competitive experience — live scores, teams, tournaments, food ordering,
+      and real-time leaderboards, all from your browser.
+    </p>
+  </div>
+
+  <div class="body">
+    <div class="features">
+      <p class="section-label">What's on the site</p>
+      <div class="feature-grid">
+
+        <div class="feature-card accent">
+          <span class="feature-icon">🏆</span>
+          <div class="feature-name">Live Leaderboards</div>
+          <div class="feature-desc">Real-time global rankings across every game. Track your personal bests and watch yourself climb.</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">🎯</span>
+          <div class="feature-name">Score Submission</div>
+          <div class="feature-desc">Submit your score with a photo as proof. Scores go into a review queue and hit the leaderboard once approved.</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">🎳</span>
+          <div class="feature-name">Skee-Ball Tracker</div>
+          <div class="feature-desc">Pick your lane, enter per-ball scores for 1–3 players. Anyone on the team can keep score for the whole group.</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">👥</span>
+          <div class="feature-name">Teams & Leagues</div>
+          <div class="feature-desc">Create a team, compete in seasons, view standings, and stay in sync with a built-in team chat.</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">🥇</span>
+          <div class="feature-name">Tournaments</div>
+          <div class="feature-desc">Enter official events, track live brackets, and earn a spot in the Hall of Champions.</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">🍕</span>
+          <div class="feature-name">Food & Ordering</div>
+          <div class="feature-desc">Browse the full menu and check out via Square — no account required to place an order.</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">💬</span>
+          <div class="feature-name">Social Feed & Chat</div>
+          <div class="feature-desc">Post score highlights, react to friends, and message your team in real time.</div>
+        </div>
+
+        <div class="feature-card">
+          <span class="feature-icon">🎱</span>
+          <div class="feature-name">Trivia & More</div>
+          <div class="feature-desc">Trivia Night sign-ups, community forums, and a guided demo mode for first-time visitors.</div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="qr-panel">
+      <div class="qr-outer">
+        <div class="qr-wrap">
+          <img src="data:image/png;base64,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" alt="Scan to open ArcadeTracker at vlystudios.com" />
+        </div>
+      </div>
+      <p class="qr-cta">Scan to open<br>the site</p>
+      <p class="qr-url">vlystudios.com</p>
+      <p class="qr-sub">Opens in your browser —<br>no download needed</p>
+      <span class="web-chip">Web Platform</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p class="footer-note">
+      <strong>Beta testers help shape what ships.</strong>
+      Try every feature, break things, and tell us what you love or hate.
+      Your feedback directly influences the roadmap — no arcade experience required,
+      just an opinion and a willingness to explore.
+    </p>
+    <div class="perks">
+      <div class="perk"><span class="dot"></span>Free early access</div>
+      <div class="perk"><span class="dot"></span>Direct line to the dev team</div>
+      <div class="perk"><span class="dot"></span>Shape the roadmap</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

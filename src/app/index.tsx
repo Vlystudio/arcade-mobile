@@ -32,6 +32,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ReportSheet, type ReportTarget } from "../components/report-sheet";
 import { MentionText } from "../components/mention-text";
 import { showToast } from "../components/toast";
+import { WhatsNewSheet } from "../components/whats-new";
+import { fetchInbox, unseenInboxCount } from "../lib/inbox";
 import { validateCommentContent, validatePostContent } from "../../lib/validation";
 import { AppTour } from "../components/app-tour";
 import { useTour } from "../hooks/use-tour";
@@ -121,6 +123,10 @@ export default function FeedScreen() {
   const [announcement, setAnnouncement] = useState<{ id: string; title: string; body: string } | null>(null);
   const [newPostCount, setNewPostCount] = useState(0);
   const feedScrollRef = useRef<ScrollView>(null);
+  const [inboxUnseen, setInboxUnseen] = useState(0);
+
+  // Onboarding checklist for fresh accounts
+  const [onboarding, setOnboarding] = useState<{ photo: boolean; team: boolean; rsvp: boolean; pick: boolean } | null>(null);
 
   const [userRole, setUserRole] = useState<AppRole>("user");
   const { tourVisible, dismissTour } = useTour(user?.id);
@@ -245,8 +251,48 @@ export default function FeedScreen() {
   }
 
   useEffect(() => {
-    if (user) { loadProfile(); loadFeed(tab); loadAnnouncement(); }
+    if (user) { loadProfile(); loadFeed(tab); loadAnnouncement(); loadInboxDot(); loadOnboarding(); }
   }, [user]);
+
+  async function loadInboxDot() {
+    if (!user) return;
+    try {
+      const items = await fetchInbox(user.id);
+      setInboxUnseen(await unseenInboxCount(items));
+    } catch {}
+  }
+
+  async function loadOnboarding() {
+    if (!user) return;
+    const dismissed = await AsyncStorage.getItem("onboarding_dismissed");
+    if (dismissed) return;
+    const monday = new Date();
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const weekOf = monday.toISOString().slice(0, 10);
+    const [profRes, teamRes, rsvpRes, pickRes] = await Promise.all([
+      supabase.from("profiles").select("avatar_url").eq("id", user.id).single(),
+      supabase.from("team_members").select("team_id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("league_rsvps").select("user_id", { count: "exact", head: true }).eq("user_id", user.id).eq("week_of", weekOf),
+      supabase.from("pickem_picks").select("user_id", { count: "exact", head: true }).eq("user_id", user.id).eq("week_of", weekOf),
+    ]);
+    const state = {
+      photo: !!profRes.data?.avatar_url,
+      team: (teamRes.count ?? 0) > 0,
+      rsvp: (rsvpRes.count ?? 0) > 0,
+      pick: (pickRes.count ?? 0) > 0,
+    };
+    // Fully done? Never show again.
+    if (Object.values(state).every(Boolean)) {
+      AsyncStorage.setItem("onboarding_dismissed", "1").catch(() => {});
+      return;
+    }
+    setOnboarding(state);
+  }
+
+  function dismissOnboarding() {
+    AsyncStorage.setItem("onboarding_dismissed", "1").catch(() => {});
+    setOnboarding(null);
+  }
 
   async function loadAnnouncement() {
     const { data } = await supabase
@@ -613,6 +659,13 @@ export default function FeedScreen() {
             <Pressable style={styles.iconBtn} onPress={() => router.push("/chat" as any)}>
               <Ionicons name="chatbubble-outline" size={21} color="#888" />
             </Pressable>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => { setInboxUnseen(0); router.push("/notifications" as any); }}
+            >
+              <Ionicons name="notifications-outline" size={21} color="#888" />
+              {inboxUnseen > 0 && <View style={styles.bellDot} />}
+            </Pressable>
             <Pressable style={styles.iconBtnCyan} onPress={() => setCreateVisible(true)}>
               <Ionicons name="add" size={20} color="#000" />
             </Pressable>
@@ -630,6 +683,46 @@ export default function FeedScreen() {
             <Pressable onPress={dismissAnnouncement} hitSlop={8}>
               <Ionicons name="close" size={18} color="#777" />
             </Pressable>
+          </View>
+        )}
+
+        {/* Quick composer */}
+        <Pressable style={styles.quickComposer} onPress={() => setCreateVisible(true)}>
+          <Avatar uri={myAvatarUrl} name={username ?? "Y"} size={34} />
+          <Text style={styles.quickComposerText}>What's happening at the lanes?</Text>
+          <Ionicons name="image-outline" size={18} color="#555" />
+        </Pressable>
+
+        {/* New-player onboarding checklist */}
+        {onboarding && (
+          <View style={styles.onboardCard}>
+            <View style={styles.onboardHeader}>
+              <Text style={styles.onboardTitle}>Get set for league night 🎳</Text>
+              <Pressable onPress={dismissOnboarding} hitSlop={8}>
+                <Ionicons name="close" size={16} color="#777" />
+              </Pressable>
+            </View>
+            {([
+              { done: onboarding.photo, label: "Add a profile photo", route: "/profile" },
+              { done: onboarding.team, label: "Join (or create) a team", route: "/teams" },
+              { done: onboarding.rsvp, label: "RSVP for Monday on your team page", route: "/teams" },
+              { done: onboarding.pick, label: "Make your weekly Pick'em pick", route: "/leagues" },
+            ] as const).map((step) => (
+              <Pressable
+                key={step.label}
+                style={styles.onboardRow}
+                onPress={() => !step.done && router.push(step.route as any)}
+                disabled={step.done}
+              >
+                <Ionicons
+                  name={step.done ? "checkmark-circle" : "ellipse-outline"}
+                  size={18}
+                  color={step.done ? "#22c55e" : "#555"}
+                />
+                <Text style={[styles.onboardLabel, step.done && styles.onboardLabelDone]}>{step.label}</Text>
+                {!step.done && <Ionicons name="chevron-forward" size={13} color="#444" />}
+              </Pressable>
+            ))}
           </View>
         )}
 
@@ -720,6 +813,7 @@ export default function FeedScreen() {
       <BottomTabBar />
 
       <ImageLightbox uri={lightboxUri} onClose={() => setLightboxUri(null)} />
+      <WhatsNewSheet />
 
 
       {/* Comments modal */}
@@ -1499,6 +1593,30 @@ const styles = StyleSheet.create({
   // Comments
   cmtEmpty: { alignItems: "center", justifyContent: "center", paddingVertical: 36, gap: 10 },
   cmtEmptyText: { color: "#777", fontSize: 14 },
+  bellDot: {
+    position: "absolute", top: 6, right: 6,
+    width: 9, height: 9, borderRadius: 5, backgroundColor: "#ef4444",
+    borderWidth: 1.5, borderColor: "#0a0a0a",
+  },
+  quickComposer: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "#0d0d0d", borderRadius: 16,
+    paddingHorizontal: 14, paddingVertical: 11,
+    marginHorizontal: 16, marginBottom: 10,
+    borderWidth: 1, borderColor: "#1a1a1a",
+  },
+  quickComposerText: { flex: 1, color: "#555", fontSize: 14 },
+  onboardCard: {
+    backgroundColor: "rgba(6,182,212,0.04)", borderRadius: 16,
+    padding: 14, marginHorizontal: 16, marginBottom: 10,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.2)", gap: 4,
+  },
+  onboardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  onboardTitle: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  onboardRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7 },
+  onboardLabel: { flex: 1, color: "#ccc", fontSize: 13.5, fontWeight: "600" },
+  onboardLabelDone: { color: "#555", textDecorationLine: "line-through" },
+
   broadcastBanner: {
     flexDirection: "row", alignItems: "flex-start", gap: 10,
     backgroundColor: "rgba(245,158,11,0.06)", borderRadius: 14,

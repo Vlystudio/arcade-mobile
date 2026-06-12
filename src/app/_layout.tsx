@@ -21,6 +21,7 @@ import { EnvBanner } from "../components/env-banner";
 import { ScreenshotButton } from "../components/screenshot-button";
 import { configureNotificationHandler, registerForPush } from "../lib/push";
 import { ToastHost } from "../components/toast";
+import { UpdateBanner } from "../components/update-banner";
 
 configureNotificationHandler();
 
@@ -72,6 +73,7 @@ export default function RootLayout() {
       <ThemeProvider value={DarkTheme}>
         <AppColumn>
         <EnvBanner />
+        <UpdateBanner />
         <PushRegistrar />
         <ScreenshotButton />
         <Stack
@@ -142,6 +144,7 @@ export default function RootLayout() {
           <Stack.Screen name="events" options={{ headerShown: false }} />
           <Stack.Screen name="saved-posts" options={{ headerShown: false }} />
           <Stack.Screen name="welcome" options={{ headerShown: false }} />
+          <Stack.Screen name="notifications" options={{ headerShown: false }} />
         </Stack>
         <ToastHost />
         </AppColumn>

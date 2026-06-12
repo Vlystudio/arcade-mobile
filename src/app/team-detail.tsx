@@ -31,6 +31,7 @@ import {
   fetchPlayerStats,
   fetchPositionStats,
   fetchSkeeSeasons,
+  fetchStandings,
   fetchTeamStats,
   fetchTeamWeekHistory,
   suggestOrder,
@@ -144,6 +145,7 @@ export default function TeamDetailScreen() {
   const [selectedSkeeSeasonId, setSelectedSkeeSeasonId] = useState<string | "all">("all");
   const [skeePickerVisible, setSkeePickerVisible] = useState(false);
   const [leagueTeam, setLeagueTeam] = useState<LeagueTeamStats | null>(null);
+  const [leagueRank, setLeagueRank] = useState<number | null>(null);
   const [leagueLoading, setLeagueLoading] = useState(false);
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
   const [expandedMemberStats, setExpandedMemberStats] = useState<LeaguePlayerStats | null>(null);
@@ -461,6 +463,10 @@ export default function TeamDetailScreen() {
       fetchTeamStats(teamId, selectedSkeeSeason),
       fetchPositionStats(teamId, selectedSkeeSeason),
       fetchTeamWeekHistory(teamId, selectedSkeeSeason),
+      fetchStandings(selectedSkeeSeason).then((rows) => {
+        const idx = rows.findIndex((r) => r.team_id === teamId);
+        setLeagueRank(idx >= 0 ? idx + 1 : null);
+      }),
     ]).then(([stats, posStats, history]) => {
       setLeagueTeam(stats);
       setPositionStats(posStats);
@@ -862,6 +868,26 @@ export default function TeamDetailScreen() {
             {members.length} {members.length === 1 ? "member" : "members"}
             {seasons.length > 0 ? `  ·  ${seasons.length} season${seasons.length !== 1 ? "s" : ""}` : ""}
           </Text>
+          {leagueTeam && leagueTeam.weeks.length > 0 && (
+            <View style={styles.heroStatsRow}>
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatValue}>{leagueRank ? `#${leagueRank}` : "—"}</Text>
+                <Text style={styles.heroStatLabel}>Rank</Text>
+              </View>
+              <View style={styles.heroStatDivider} />
+              <View style={styles.heroStat}>
+                <Text style={[styles.heroStatValue, { color: "#f59e0b" }]}>{leagueTeam.season_points}</Text>
+                <Text style={styles.heroStatLabel}>Points</Text>
+              </View>
+              <View style={styles.heroStatDivider} />
+              <View style={styles.heroStat}>
+                <Text style={styles.heroStatValue}>
+                  {"🥇"} {leagueTeam.weeks.filter((w) => w.best_placement === 1).length}
+                </Text>
+                <Text style={styles.heroStatLabel}>Wins</Text>
+              </View>
+            </View>
+          )}
           {isTeamMember && (
             <View style={styles.trackActions}>
               <Pressable
@@ -885,7 +911,7 @@ export default function TeamDetailScreen() {
           <View style={styles.slotPrefRow}>
             <Ionicons name="time-outline" size={14} color="#444" />
             <Text style={styles.slotPrefText}>
-              {slotPref1 ? `${slotPref1}${slotPref2 ? ` · ${slotPref2}` : ""}` : "No time preference set"}
+              {slotPref1 ? `Preferred: ${slotPref1}${slotPref2 ? ` · ${slotPref2}` : ""}` : "No time preference set"}
             </Text>
             {isCaptain && (
               <Pressable
@@ -2003,6 +2029,17 @@ const styles = StyleSheet.create({
   },
   teamTitle: { color: "#fff", fontSize: 28, fontWeight: "900", letterSpacing: -0.4, marginBottom: 5 },
   teamSub: { color: "#8a8a8a", fontSize: 13 },
+  heroStatsRow: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#0d0d0d", borderRadius: 14,
+    borderWidth: 1, borderColor: "#1a1a1a",
+    paddingVertical: 10, paddingHorizontal: 8,
+    marginTop: 12, alignSelf: "stretch", marginHorizontal: 16,
+  },
+  heroStat: { flex: 1, alignItems: "center", gap: 2 },
+  heroStatValue: { color: "#fff", fontSize: 17, fontWeight: "900" },
+  heroStatLabel: { color: "#666", fontSize: 10.5, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  heroStatDivider: { width: 1, height: 26, backgroundColor: "#1e1e1e" },
   trackActions: { flexDirection: "row", gap: 10, marginTop: 16, flexWrap: "wrap", justifyContent: "center" },
   trackBtn: {
     flexDirection: "row", alignItems: "center", gap: 7,
