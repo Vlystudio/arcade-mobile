@@ -146,6 +146,8 @@ export default function TeamDetailScreen() {
   const [skeePickerVisible, setSkeePickerVisible] = useState(false);
   const [leagueTeam, setLeagueTeam] = useState<LeagueTeamStats | null>(null);
   const [leagueRank, setLeagueRank] = useState<number | null>(null);
+  const [activeSession, setActiveSession] = useState<{ id: string; lane_number: number } | null>(null);
+  const [checkingOut, setCheckingOut] = useState(false);
   const [leagueLoading, setLeagueLoading] = useState(false);
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
   const [expandedMemberStats, setExpandedMemberStats] = useState<LeaguePlayerStats | null>(null);
@@ -450,6 +452,22 @@ export default function TeamDetailScreen() {
     });
   }, [user]);
 
+  async function handleLaneCheckout() {
+    if (!activeSession || checkingOut) return;
+    setCheckingOut(true);
+    const { data, error } = await supabase.rpc("rpc_skeeball_cancel_session", {
+      p_session_id: activeSession.id,
+    });
+    setCheckingOut(false);
+    if (error || data?.error) {
+      showToast(data?.message ?? "Couldn't check out of the lane.", "error");
+      if (data?.error === "not_found") setActiveSession(null);
+      return;
+    }
+    showToast(`Checked out of Lane ${data.lane_number} — it's free again`);
+    setActiveSession(null);
+  }
+
   const selectedSkeeSeason = skeeSeasons.find((s) => s.id === selectedSkeeSeasonId) ?? null;
 
   // Load team league stats whenever the season selection changes
@@ -467,6 +485,11 @@ export default function TeamDetailScreen() {
         const idx = rows.findIndex((r) => r.team_id === teamId);
         setLeagueRank(idx >= 0 ? idx + 1 : null);
       }),
+      supabase.from("skeeball_sessions")
+        .select("id, lane_number")
+        .eq("team_id", teamId).eq("status", "active")
+        .maybeSingle()
+        .then(({ data }) => setActiveSession(data ? { id: (data as any).id, lane_number: (data as any).lane_number } : null)),
     ]).then(([stats, posStats, history]) => {
       setLeagueTeam(stats);
       setPositionStats(posStats);
@@ -908,6 +931,22 @@ export default function TeamDetailScreen() {
               )}
             </View>
           )}
+          {isTeamMember && activeSession && (
+            <View style={styles.activeLaneBanner}>
+              <Ionicons name="locate" size={14} color="#22c55e" />
+              <Text style={styles.activeLaneText}>Checked in — Lane {activeSession.lane_number}</Text>
+              <Pressable
+                style={[styles.checkoutBtn, checkingOut && { opacity: 0.5 }]}
+                onPress={handleLaneCheckout}
+                disabled={checkingOut}
+              >
+                {checkingOut
+                  ? <ActivityIndicator size="small" color="#ef4444" />
+                  : <Text style={styles.checkoutBtnText}>Check out</Text>}
+              </Pressable>
+            </View>
+          )}
+
           <View style={styles.slotPrefRow}>
             <Ionicons name="time-outline" size={14} color="#444" />
             <Text style={styles.slotPrefText}>
@@ -2029,6 +2068,19 @@ const styles = StyleSheet.create({
   },
   teamTitle: { color: "#fff", fontSize: 28, fontWeight: "900", letterSpacing: -0.4, marginBottom: 5 },
   teamSub: { color: "#8a8a8a", fontSize: 13 },
+  activeLaneBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "rgba(34,197,94,0.06)", borderRadius: 12,
+    borderWidth: 1, borderColor: "rgba(34,197,94,0.25)",
+    paddingHorizontal: 12, paddingVertical: 8, marginTop: 10,
+  },
+  activeLaneText: { flex: 1, color: "#22c55e", fontSize: 13, fontWeight: "800" },
+  checkoutBtn: {
+    borderWidth: 1, borderColor: "rgba(239,68,68,0.4)", borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 6,
+  },
+  checkoutBtnText: { color: "#ef4444", fontSize: 12.5, fontWeight: "800" },
+
   heroStatsRow: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#0d0d0d", borderRadius: 14,

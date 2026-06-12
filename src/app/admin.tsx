@@ -527,7 +527,7 @@ export default function AdminScreen() {
     if (mainTab === "support") { loadSupportTickets(); setUnreadSupport(0); }
     if (mainTab === "karaoke") loadKaraokeQueue();
     if (mainTab === "trivia") loadTriviaData();
-    if (mainTab === "skeeball") { loadSkeeAdminSessions(); loadSkeeSeason(); loadDisputes(); }
+    if (mainTab === "skeeball") { loadSkeeAdminSessions(); loadSkeeActiveLanes(); loadSkeeSeason(); loadDisputes(); }
     if (mainTab === "reports") { if (reportsTab === "beta") loadBetaReports(); else loadContentReports(reportsTab); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
@@ -1732,6 +1732,43 @@ export default function AdminScreen() {
       g.id === gameId ? { ...g, participant_count: Math.max(0, (g.participant_count ?? 1) - 1) } : g
     ));
     setKickingParticipant(null);
+  }
+
+  type ActiveLane = { id: string; lane_number: number; team_name: string; created_at: string };
+  const [skeeActiveLanes, setSkeeActiveLanes] = useState<ActiveLane[]>([]);
+  const [kickingLane, setKickingLane] = useState<string | null>(null);
+
+  async function loadSkeeActiveLanes() {
+    const { data } = await supabase
+      .from("skeeball_sessions")
+      .select("id, lane_number, team_id, created_at")
+      .eq("status", "active")
+      .order("lane_number");
+    const rows = data ?? [];
+    const teamIds = [...new Set(rows.map((r: any) => r.team_id))];
+    let names: Record<string, string> = {};
+    if (teamIds.length) {
+      const { data: teams } = await supabase.from("teams").select("id, name").in("id", teamIds);
+      for (const t of teams ?? []) names[(t as any).id] = (t as any).name;
+    }
+    setSkeeActiveLanes(rows.map((r: any) => ({
+      id: r.id, lane_number: r.lane_number,
+      team_name: names[r.team_id] ?? "Unknown team", created_at: r.created_at,
+    })));
+  }
+
+  async function kickLane(sessionId: string) {
+    setKickingLane(sessionId);
+    const { data, error } = await supabase.rpc("rpc_admin_skeeball_kick_session", {
+      p_session_id: sessionId,
+    });
+    setKickingLane(null);
+    if (error || data?.error) {
+      showToast(data?.message ?? "Couldn't kick that session.", "error");
+      return;
+    }
+    showToast(`Lane ${data.lane_number} cleared`);
+    loadSkeeActiveLanes();
   }
 
   async function loadSkeeAdminSessions() {
@@ -4123,8 +4160,29 @@ export default function AdminScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={skeeAdminLoading} onRefresh={loadSkeeAdminSessions} tintColor="#06b6d4" />}
+          refreshControl={<RefreshControl refreshing={skeeAdminLoading} onRefresh={() => { loadSkeeAdminSessions(); loadSkeeActiveLanes(); }} tintColor="#06b6d4" />}
         >
+          {/* Active lanes — kick a stuck/wrong team off a lane */}
+          {skeeActiveLanes.length > 0 && (
+            <View style={[styles.skeeWeekCard, { borderColor: "rgba(34,197,94,0.25)", backgroundColor: "rgba(34,197,94,0.04)", flexDirection: "column", alignItems: "stretch" }]}>
+              <Text style={[styles.skeeWeekLabel, { marginBottom: 8 }]}>Active lanes right now</Text>
+              {skeeActiveLanes.map((l) => (
+                <View key={l.id} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a" }}>
+                  <Text style={{ color: "#22c55e", fontSize: 13.5, fontWeight: "900", width: 60 }}>Lane {l.lane_number}</Text>
+                  <Text style={{ flex: 1, color: "#fff", fontSize: 13.5, fontWeight: "700" }} numberOfLines={1}>{l.team_name}</Text>
+                  <Pressable
+                    style={[styles.userRoleBtn, { borderColor: "rgba(239,68,68,0.4)" }, kickingLane === l.id && { opacity: 0.4 }]}
+                    onPress={() => kickLane(l.id)}
+                    disabled={kickingLane === l.id}
+                  >
+                    {kickingLane === l.id
+                      ? <ActivityIndicator size="small" color="#ef4444" />
+                      : <Text style={[styles.userRoleBtnText, { color: "#ef4444" }]}>Kick off lane</Text>}
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
           <View style={styles.sectionHeader}>
             <Ionicons name="bowling-ball-outline" size={20} color="#06b6d4" />
             <Text style={styles.sectionTitle}>Skee-Ball League Overrides</Text>
