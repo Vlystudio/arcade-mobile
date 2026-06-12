@@ -395,6 +395,10 @@ export default function AdminScreen() {
   const [skeeAdjNote, setSkeeAdjNote]   = useState("");
   const [savingSkeeAdj, setSavingSkeeAdj] = useState(false);
   const [skeeAdminError, setSkeeAdminError] = useState<string | null>(null);
+  const [skeeWeekTeams, setSkeeWeekTeams] = useState("4");
+  const [skeeWeekSaving, setSkeeWeekSaving] = useState(false);
+  const [skeeOpenMatch, setSkeeOpenMatch] = useState<{ id: string; expected: number; completed: number; checkedIn: number } | null>(null);
+  const [skeeForceFinalizing, setSkeeForceFinalizing] = useState(false);
 
   // Player list management (all tournaments)
   type RegPlayer = { id: string; user_id: string | null; guest_name: string | null; username: string; status: string };
@@ -1650,7 +1654,66 @@ export default function AdminScreen() {
       completed_at: s.completed_at,
     }));
     setSkeeAdminSessions(mapped);
+
+    // This week's round settings (Monday-based week, same as skeeball_current_week())
+    const mondayDate = new Date();
+    mondayDate.setDate(mondayDate.getDate() - ((mondayDate.getDay() + 6) % 7));
+    const monday = mondayDate.toISOString().slice(0, 10);
+    const { data: weekMatches } = await supabase
+      .from("skeeball_league_matches")
+      .select("id, status, expected_teams, created_at")
+      .eq("week_of", monday)
+      .order("created_at", { ascending: false });
+    const latest = (weekMatches ?? [])[0] as any;
+    if (latest) setSkeeWeekTeams(String(latest.expected_teams ?? 4));
+    const open = (weekMatches ?? []).find((m: any) => (m.status ?? "active") !== "completed") as any;
+    if (open) {
+      const { data: sess } = await supabase
+        .from("skeeball_sessions")
+        .select("id, status")
+        .eq("league_match_id", open.id);
+      const checkedIn = (sess ?? []).filter((s: any) => s.status !== "abandoned").length;
+      const completed = (sess ?? []).filter((s: any) => s.status === "completed").length;
+      setSkeeOpenMatch({ id: open.id, expected: open.expected_teams ?? 4, completed, checkedIn });
+    } else {
+      setSkeeOpenMatch(null);
+    }
+
     setSkeeAdminLoading(false);
+  }
+
+  async function saveSkeeWeekTeams() {
+    const n = parseInt(skeeWeekTeams, 10);
+    if (!Number.isInteger(n) || n < 2 || n > 8) {
+      setSkeeAdminError("Teams per round must be between 2 and 8.");
+      return;
+    }
+    setSkeeWeekSaving(true);
+    setSkeeAdminError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_skeeball_set_week_teams", {
+      p_expected_teams: n,
+    });
+    setSkeeWeekSaving(false);
+    if (error || (data as any)?.error) {
+      setSkeeAdminError((data as any)?.message ?? (data as any)?.error ?? error?.message ?? "Failed to save.");
+      return;
+    }
+    await loadSkeeAdminSessions();
+  }
+
+  async function forceFinalizeSkeeRound() {
+    if (!skeeOpenMatch || skeeForceFinalizing) return;
+    setSkeeForceFinalizing(true);
+    setSkeeAdminError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_skeeball_force_finalize", {
+      p_match_id: skeeOpenMatch.id,
+    });
+    setSkeeForceFinalizing(false);
+    if (error || (data as any)?.error || (data as any)?.ok === false) {
+      setSkeeAdminError((data as any)?.message ?? (data as any)?.error ?? error?.message ?? "Failed to finalize.");
+      return;
+    }
+    await loadSkeeAdminSessions();
   }
 
   async function handleSkeeAdjust() {
@@ -3398,6 +3461,58 @@ export default function AdminScreen() {
           <Text style={styles.skeeAdminSubtitle}>
             Adjust league standing points or game score for any completed session. Adjustments are additive on top of the original values.
           </Text>
+
+          {/* Teams-per-round setting for this week */}
+          <View style={styles.skeeWeekCard}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.skeeWeekLabel}>Teams per round this week</Text>
+              <Text style={styles.skeeWeekHint}>
+                Rounds auto-finalize and award points (1st = N … last = 1) once this many teams finish all 9 balls.
+              </Text>
+            </View>
+            <TextInput
+              style={styles.skeeWeekInput}
+              value={skeeWeekTeams}
+              onChangeText={setSkeeWeekTeams}
+              keyboardType="number-pad"
+              maxLength={1}
+            />
+            <Pressable
+              style={[styles.skeeWeekSaveBtn, skeeWeekSaving && { opacity: 0.5 }]}
+              onPress={saveSkeeWeekTeams}
+              disabled={skeeWeekSaving}
+            >
+              {skeeWeekSaving
+                ? <ActivityIndicator size="small" color="#000" />
+                : <Text style={styles.skeeWeekSaveText}>Save</Text>}
+            </Pressable>
+          </View>
+
+          {/* Current open round status + force finalize */}
+          {skeeOpenMatch && (
+            <View style={styles.skeeRoundCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.skeeWeekLabel}>Current round</Text>
+                <Text style={styles.skeeWeekHint}>
+                  {skeeOpenMatch.completed}/{skeeOpenMatch.expected} teams finished · {skeeOpenMatch.checkedIn} checked in
+                </Text>
+              </View>
+              {skeeOpenMatch.completed >= 2 && (
+                <Pressable
+                  style={[styles.skeeForceBtn, skeeForceFinalizing && { opacity: 0.5 }]}
+                  onPress={forceFinalizeSkeeRound}
+                  disabled={skeeForceFinalizing}
+                >
+                  {skeeForceFinalizing
+                    ? <ActivityIndicator size="small" color="#f59e0b" />
+                    : <>
+                        <Ionicons name="flag-outline" size={14} color="#f59e0b" />
+                        <Text style={styles.skeeForceBtnText}>Force Finalize</Text>
+                      </>}
+                </Pressable>
+              )}
+            </View>
+          )}
 
           {skeeAdminError && (
             <View style={[styles.inlineError, { marginBottom: 12 }]}>
@@ -5345,6 +5460,35 @@ const styles = StyleSheet.create({
 
   // ── Skeeball Admin ───────────────────────────────────────────────────────────
   skeeAdminSubtitle: { color: "#555", fontSize: 13, lineHeight: 19, marginBottom: 16 },
+  skeeWeekCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "rgba(6,182,212,0.05)", borderRadius: 16, padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.18)",
+  },
+  skeeWeekLabel: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 2 },
+  skeeWeekHint: { color: "#555", fontSize: 11.5, lineHeight: 16 },
+  skeeWeekInput: {
+    width: 48, textAlign: "center",
+    backgroundColor: "#0a0a0a", borderRadius: 12, borderWidth: 1, borderColor: "#222",
+    color: "#fff", fontSize: 18, fontWeight: "900", paddingVertical: 10,
+  },
+  skeeWeekSaveBtn: {
+    backgroundColor: "#06b6d4", borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 11,
+  },
+  skeeWeekSaveText: { color: "#000", fontWeight: "900", fontSize: 13 },
+  skeeRoundCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  skeeForceBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "rgba(245,158,11,0.1)", borderRadius: 12,
+    paddingHorizontal: 13, paddingVertical: 10,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.25)",
+  },
+  skeeForceBtnText: { color: "#f59e0b", fontWeight: "800", fontSize: 12.5 },
   skeeMatchGroup: { marginBottom: 20 },
   skeeMatchGroupLabel: { color: "#06b6d4", fontSize: 12, fontWeight: "900", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8 },
   skeeAdminCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e" },

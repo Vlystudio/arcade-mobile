@@ -468,136 +468,19 @@ export default function TeamsScreen() {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
   }
 
-  // Determine paywall gate state
-  const needsPaywall = activeSeason !== null && (
-    !myRegistration ||
-    myRegistration.status === "pending_payment" ||
-    myRegistration.status === "cancelled"
-  );
+  // Everyone can browse teams and request to join. Only a paid team
+  // registration ($200) unlocks creating a team during an active season.
+  const canCreateTeam = !activeSeason ||
+    (myRegistration?.status === "paid" && myRegistration?.registration_type === "team");
   const isIndividualWaiting = activeSeason !== null &&
     myRegistration?.status === "paid" &&
     myRegistration?.registration_type === "individual" &&
     !myRegistration?.team_id;
-  // Users with paid team registration (or no active season) can create/manage teams
-  const canCreateTeam = !activeSeason ||
-    (myRegistration?.status === "paid" && myRegistration?.registration_type === "team");
-  // Individual registrants can't freely join teams — admin assigns them
-  const canJoinTeams = !activeSeason ||
-    (myRegistration?.status === "paid" && myRegistration?.registration_type === "team");
-
-  // ── Paywall: registration required ──────────────────────────────────────────
-  if (needsPaywall) {
-    const isPending = myRegistration?.status === "pending_payment";
-    return (
-      <View style={styles.root}>
-        <SafeAreaView style={styles.safe} edges={["top"]}>
-          <View style={styles.content}>
-            <View style={styles.pageHeader}>
-              <View>
-                <Text style={styles.pageTitle}>Teams</Text>
-                <Text style={styles.pageSub}>Season registration required</Text>
-              </View>
-              <Pressable style={styles.leaguesBtn} onPress={() => router.push("/leagues")}>
-                <Ionicons name="trophy-outline" size={14} color="#f59e0b" />
-                <Text style={styles.leaguesBtnText}>Leagues</Text>
-              </Pressable>
-            </View>
-
-            <View style={styles.paywallCard}>
-              <View style={styles.paywallIconWrap}>
-                <Ionicons name="lock-closed" size={32} color="#f59e0b" />
-              </View>
-              <Text style={styles.paywallTitle}>
-                {isPending ? "Complete Your Payment" : "Registration Required"}
-              </Text>
-              <Text style={styles.paywallSub}>
-                {isPending
-                  ? "You started a registration but haven't completed payment yet. Tap below to finish."
-                  : `Season "${activeSeason.name}" requires registration to create or join teams.`}
-              </Text>
-
-              {/* Prize summary */}
-              <View style={styles.paywallPrizes}>
-                <View style={styles.paywallPrize}>
-                  <Text style={styles.paywallPrizePlace}>🥇 1st</Text>
-                  <Text style={styles.paywallPrizeAmt}>{centsDisplay(activeSeason.prize_1st_cents)}</Text>
-                </View>
-                <View style={styles.paywallPrize}>
-                  <Text style={styles.paywallPrizePlace}>🥈 2nd</Text>
-                  <Text style={styles.paywallPrizeAmt}>{centsDisplay(activeSeason.prize_2nd_cents)}</Text>
-                </View>
-                <View style={styles.paywallPrize}>
-                  <Text style={styles.paywallPrizePlace}>🥉 3rd/4th</Text>
-                  <Text style={styles.paywallPrizeAmt}>{centsDisplay(activeSeason.prize_3rd_cents)}</Text>
-                </View>
-              </View>
-
-              <View style={styles.paywallOptions}>
-                <View style={styles.paywallOptionChip}>
-                  <Ionicons name="people-outline" size={13} color="#06b6d4" />
-                  <Text style={styles.paywallOptionText}>Team — {centsDisplay(activeSeason.team_fee_cents)}</Text>
-                </View>
-                <View style={styles.paywallOptionChip}>
-                  <Ionicons name="person-outline" size={13} color="#06b6d4" />
-                  <Text style={styles.paywallOptionText}>Individual — {centsDisplay(activeSeason.individual_fee_cents)}</Text>
-                </View>
-              </View>
-
-              <Pressable
-                style={styles.paywallBtn}
-                onPress={() => router.push("/team-registration" as any)}
-              >
-                <Ionicons name="card-outline" size={16} color="#000" />
-                <Text style={styles.paywallBtnText}>
-                  {isPending ? "Complete Payment" : "Register to Compete"}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </SafeAreaView>
-        <BottomTabBar />
-      </View>
-    );
-  }
-
-  // ── Individual waiting for team assignment ───────────────────────────────────
-  if (isIndividualWaiting) {
-    return (
-      <View style={styles.root}>
-        <SafeAreaView style={styles.safe} edges={["top"]}>
-          <View style={styles.content}>
-            <View style={styles.pageHeader}>
-              <View>
-                <Text style={styles.pageTitle}>Teams</Text>
-                <Text style={styles.pageSub}>{activeSeason!.name}</Text>
-              </View>
-              <Pressable style={styles.leaguesBtn} onPress={() => router.push("/leagues")}>
-                <Ionicons name="trophy-outline" size={14} color="#f59e0b" />
-                <Text style={styles.leaguesBtnText}>Leagues</Text>
-              </Pressable>
-            </View>
-            <View style={styles.paywallCard}>
-              <View style={[styles.paywallIconWrap, { backgroundColor: "rgba(6,182,212,0.1)" }]}>
-                <Ionicons name="time-outline" size={32} color="#06b6d4" />
-              </View>
-              <Text style={styles.paywallTitle}>Waiting for Team Assignment</Text>
-              <Text style={styles.paywallSub}>
-                Your individual registration is confirmed. An admin will assign you to a team shortly. Check back soon!
-              </Text>
-              <Pressable
-                style={[styles.paywallBtn, { backgroundColor: "#1a1a1a" }]}
-                onPress={() => { setRefreshing(true); loadTeams(); }}
-              >
-                <Ionicons name="refresh-outline" size={16} color="#06b6d4" />
-                <Text style={[styles.paywallBtnText, { color: "#06b6d4" }]}>Refresh Status</Text>
-              </Pressable>
-            </View>
-          </View>
-        </SafeAreaView>
-        <BottomTabBar />
-      </View>
-    );
-  }
+  const showSeasonPromo = activeSeason !== null && (
+    !myRegistration ||
+    myRegistration.status === "pending_payment" ||
+    myRegistration.status === "cancelled"
+  );
 
   const searchLower = searchText.toLowerCase().trim();
   const myTeams = teams.filter((t) => t.isMember && (!searchLower || t.name.toLowerCase().includes(searchLower)));
@@ -623,14 +506,54 @@ export default function TeamsScreen() {
                   <Ionicons name="trophy-outline" size={14} color="#f59e0b" />
                   <Text style={styles.leaguesBtnText}>Leagues</Text>
                 </Pressable>
-                {canCreateTeam && (
+                {canCreateTeam ? (
                   <Pressable style={styles.newBtn} onPress={() => { setCreateError(null); setCreateVisible(true); }}>
                     <Ionicons name="add" size={16} color="#000" />
                     <Text style={styles.newBtnText}>New</Text>
                   </Pressable>
+                ) : (
+                  <Pressable style={styles.newBtnLocked} onPress={() => router.push("/team-registration" as any)}>
+                    <Ionicons name="lock-closed" size={13} color="#f59e0b" />
+                    <Text style={styles.newBtnLockedText}>New</Text>
+                  </Pressable>
                 )}
               </View>
             </View>
+
+            {/* Season registration promo (browsing & joining stay open to everyone) */}
+            {showSeasonPromo && (
+              <Pressable style={styles.seasonBanner} onPress={() => router.push("/team-registration" as any)}>
+                <View style={styles.seasonBannerIcon}>
+                  <Ionicons name="trophy" size={16} color="#f59e0b" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.seasonBannerTitle}>
+                    {myRegistration?.status === "pending_payment"
+                      ? "Finish your season registration"
+                      : `${activeSeason!.name} is open`}
+                  </Text>
+                  <Text style={styles.seasonBannerSub}>
+                    {myRegistration?.status === "pending_payment"
+                      ? "Complete payment to unlock creating a team."
+                      : `Pay ${centsDisplay(activeSeason!.team_fee_cents)} to create a team, or ${centsDisplay(activeSeason!.individual_fee_cents)} solo · 1st prize ${centsDisplay(activeSeason!.prize_1st_cents)}`}
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={15} color="#f59e0b" />
+              </Pressable>
+            )}
+
+            {/* Individual registrant waiting on admin assignment */}
+            {isIndividualWaiting && (
+              <View style={[styles.seasonBanner, styles.seasonBannerInfo]}>
+                <View style={[styles.seasonBannerIcon, { backgroundColor: "rgba(6,182,212,0.1)" }]}>
+                  <Ionicons name="time-outline" size={16} color="#06b6d4" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.seasonBannerTitle, { color: "#06b6d4" }]}>You're registered!</Text>
+                  <Text style={styles.seasonBannerSub}>An admin will assign you to a team soon. You can still browse and request teams below.</Text>
+                </View>
+              </View>
+            )}
 
             {/* Search bar */}
             <View style={styles.searchWrap}>
@@ -769,7 +692,7 @@ export default function TeamsScreen() {
                   <Pressable style={styles.pendingBtn} onPress={() => handleCancelRequest(t.id)}>
                     <Text style={styles.pendingBtnText}>Pending</Text>
                   </Pressable>
-                ) : canJoinTeams ? (
+                ) : (
                   <Pressable style={styles.requestBtn} onPress={() => {
                     if (myTeamCount >= MAX_TEAMS) {
                       Alert.alert("Team Limit Reached", `You can only be in ${MAX_TEAMS} teams at a time. Leave a team before joining another.`);
@@ -779,7 +702,7 @@ export default function TeamsScreen() {
                   }}>
                     <Text style={styles.requestBtnText}>Request</Text>
                   </Pressable>
-                ) : null}
+                )}
               </View>
             ))}
           </View>
@@ -1311,39 +1234,31 @@ const styles = StyleSheet.create({
   slotChipTextActive: { color: "#06b6d4", fontWeight: "800" },
   slotChipTextActive2: { color: "#f59e0b", fontWeight: "800" },
 
-  // Paywall styles
-  paywallCard: {
-    backgroundColor: "#0d0d0d", borderRadius: 24, padding: 24, marginTop: 8,
-    borderWidth: 1, borderColor: "#1e1e1e", alignItems: "center", gap: 12,
+  // Locked "New" button (active season, no paid team registration)
+  newBtnLocked: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "rgba(245,158,11,0.1)", borderRadius: 12,
+    paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.25)",
   },
-  paywallIconWrap: {
-    width: 72, height: 72, borderRadius: 36,
-    backgroundColor: "rgba(245,158,11,0.1)",
-    alignItems: "center", justifyContent: "center", marginBottom: 4,
+  newBtnLockedText: { color: "#f59e0b", fontWeight: "800", fontSize: 14 },
+
+  // Season registration banner
+  seasonBanner: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "rgba(245,158,11,0.06)", borderRadius: 16,
+    padding: 14, marginBottom: 16,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.2)",
   },
-  paywallTitle: { color: "#fff", fontSize: 20, fontWeight: "900", textAlign: "center" },
-  paywallSub: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
-  paywallPrizes: {
-    flexDirection: "row", gap: 8, marginTop: 4, marginBottom: 4, width: "100%",
+  seasonBannerInfo: {
+    backgroundColor: "rgba(6,182,212,0.05)",
+    borderColor: "rgba(6,182,212,0.18)",
   },
-  paywallPrize: {
-    flex: 1, backgroundColor: "#111", borderRadius: 14, padding: 12,
-    alignItems: "center", gap: 4, borderWidth: 1, borderColor: "#1e1e1e",
+  seasonBannerIcon: {
+    width: 36, height: 36, borderRadius: 11,
+    backgroundColor: "rgba(245,158,11,0.12)",
+    alignItems: "center", justifyContent: "center",
   },
-  paywallPrizePlace: { color: "#888", fontSize: 11, fontWeight: "700" },
-  paywallPrizeAmt: { color: "#f59e0b", fontSize: 16, fontWeight: "900" },
-  paywallOptions: { flexDirection: "row", gap: 8, flexWrap: "wrap", justifyContent: "center" },
-  paywallOptionChip: {
-    flexDirection: "row", alignItems: "center", gap: 6,
-    backgroundColor: "rgba(6,182,212,0.08)", borderRadius: 10,
-    paddingHorizontal: 12, paddingVertical: 7,
-    borderWidth: 1, borderColor: "rgba(6,182,212,0.2)",
-  },
-  paywallOptionText: { color: "#06b6d4", fontSize: 13, fontWeight: "700" },
-  paywallBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    backgroundColor: "#f59e0b", borderRadius: 16, paddingVertical: 16,
-    width: "100%", marginTop: 4,
-  },
-  paywallBtnText: { color: "#000", fontSize: 15, fontWeight: "900" },
+  seasonBannerTitle: { color: "#f59e0b", fontSize: 14, fontWeight: "800", marginBottom: 2 },
+  seasonBannerSub: { color: "#777", fontSize: 12, lineHeight: 17 },
 });
