@@ -24,10 +24,12 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { showToast } from "../components/toast";
 import { openUserProfile } from "../lib/open-profile";
 
 type LeaderEntry = {
   rank: number;
+  id: string;
   user_id: string;
   username: string;
   game_name: string;
@@ -89,7 +91,7 @@ export default function LeaderboardScreen() {
     if (!user) return;
     let query = supabase
       .from("scores")
-      .select("user_id, score, created_at, game_id, games(name, type)")
+      .select("id, user_id, score, created_at, game_id, games(name, type)")
       .eq("status", "approved")
       .order("score", { ascending: false })
       .limit(50);
@@ -118,6 +120,7 @@ export default function LeaderboardScreen() {
 
     const mapped: LeaderEntry[] = (data ?? []).map((row: any, i: number) => ({
       rank: i + 1,
+      id: row.id,
       user_id: row.user_id,
       username: usernameMap[row.user_id] ?? "Unknown",
       game_name: Array.isArray(row.games) ? (row.games[0]?.name ?? "Game") : (row.games?.name ?? "Game"),
@@ -257,7 +260,7 @@ export default function LeaderboardScreen() {
     }
 
     const whose = shareEntry.user_id === user.id ? "my" : `${shareEntry.username}'s`;
-    const content = `🏆 Check out ${whose} leaderboard score!\n#${shareEntry.rank} · ${shareEntry.score.toLocaleString()} pts\n${shareEntry.game_name}`;
+    const content = `🏆 Check out ${whose} leaderboard score!\n#${shareEntry.rank} · ${shareEntry.score.toLocaleString()} pts\n${shareEntry.game_name}\n${process.env.EXPO_PUBLIC_SITE_URL ?? "https://www.vlystudios.com"}/score-share?id=${shareEntry.id}`;
     await supabase.from("messages").insert({ conversation_id: convId, sender_id: user.id, content });
     await supabase.from("conversations").update({
       last_message: `🏆 Shared a score`,
@@ -270,14 +273,18 @@ export default function LeaderboardScreen() {
 
   async function shareScore(entry: LeaderEntry) {
     const mine = entry.user_id === user?.id;
+    const url = `${process.env.EXPO_PUBLIC_SITE_URL ?? "https://www.vlystudios.com"}/score-share?id=${entry.id}`;
     const msg = mine
       ? `I ranked #${entry.rank} on the ${entry.game_name} leaderboard with ${entry.score.toLocaleString()} pts! 🎯`
       : `${entry.username} ranks #${entry.rank} on the ${entry.game_name} leaderboard with ${entry.score.toLocaleString()} pts! 🎯`;
     try {
       if (Platform.OS === "web" && typeof navigator !== "undefined" && (navigator as any).share) {
-        await (navigator as any).share({ title: "My Arcade Score", text: msg });
+        await (navigator as any).share({ title: "Arcade Score", text: msg, url });
+      } else if (Platform.OS === "web" && typeof navigator !== "undefined" && (navigator as any).clipboard) {
+        await (navigator as any).clipboard.writeText(`${msg}\n${url}`);
+        showToast("Link copied to clipboard");
       } else {
-        await Share.share({ message: msg });
+        await Share.share({ message: `${msg}\n${url}` });
       }
     } catch {}
   }

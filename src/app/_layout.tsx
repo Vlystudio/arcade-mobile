@@ -147,6 +147,7 @@ export default function RootLayout() {
           <Stack.Screen name="notifications" options={{ headerShown: false }} />
           <Stack.Screen name="fantasy" options={{ headerShown: false }} />
           <Stack.Screen name="beta-feedback" options={{ headerShown: false }} />
+          <Stack.Screen name="score-share" options={{ headerShown: false }} />
         </Stack>
         <ToastHost />
         </AppColumn>
