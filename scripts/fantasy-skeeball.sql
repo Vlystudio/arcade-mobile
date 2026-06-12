@@ -9,7 +9,7 @@
 --   hit-rate history and locked into the pick. Weeks settle automatically;
 --   the week's top net winner earns a +25 coin bonus.
 --
--- Phase 2 (UNLOCKS after 3 counted full seasons, or admin override) —
+-- Phase 2 (UNLOCKS after 4 counted full seasons — targeted early 2027 — or admin override) —
 --   "Transfer Market": every player gets a price from their per-game
 --   scoring average across counted seasons (individual skee-ball
 --   tournament results included). Salary-cap rosters, buy/sell transfers,
@@ -18,7 +18,7 @@
 --   of provisional prices while data accumulates.
 --
 -- Seasons: skeeball_seasons.counts_for_fantasy lets admins exclude short
--- seasons (e.g. the upcoming half-season) from the 3-season requirement
+-- seasons (e.g. the upcoming half-season) from the 4-season requirement
 -- and from price math.
 --
 -- Run AFTER: skeeball-seasons-stats.sql, skeeball-qr-lane-checkin.sql,
@@ -36,7 +36,7 @@ ALTER TABLE public.skeeball_seasons
 CREATE TABLE IF NOT EXISTS public.fantasy_config (
   id                int PRIMARY KEY DEFAULT 1 CHECK (id = 1),
   full_mode_enabled boolean NOT NULL DEFAULT false,
-  seasons_required  int NOT NULL DEFAULT 3,
+  seasons_required  int NOT NULL DEFAULT 4,
   updated_at        timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO public.fantasy_config (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
@@ -670,7 +670,7 @@ BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', 'not_authenticated'); END IF;
   IF NOT public.fantasy_full_mode() THEN
     RETURN json_build_object('error', 'locked',
-      'message', 'The transfer market unlocks after 3 full seasons of league data.');
+      'message', 'The transfer market unlocks with the full fantasy launch — early 2027.');
   END IF;
   -- Full implementation lands with the Phase 2 launch (roster create,
   -- budget check, price lock, transfer log). Hard-gated until then.
@@ -689,7 +689,7 @@ BEGIN
   IF auth.uid() IS NULL THEN RETURN json_build_object('error', 'not_authenticated'); END IF;
   IF NOT public.fantasy_full_mode() THEN
     RETURN json_build_object('error', 'locked',
-      'message', 'The transfer market unlocks after 3 full seasons of league data.');
+      'message', 'The transfer market unlocks with the full fantasy launch — early 2027.');
   END IF;
   RETURN json_build_object('error', 'coming_soon',
     'message', 'Roster building opens with the full fantasy launch.');

@@ -553,7 +553,7 @@ export default function TeamsScreen() {
                 <Ionicons name="sparkles" size={16} color="#a855f7" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.fantasyTeaserTitle}>Fantasy Skee-Ball League — coming next year</Text>
+                <Text style={styles.fantasyTeaserTitle}>Fantasy Skee-Ball League — coming early 2027</Text>
                 <Text style={styles.fantasyTeaserSub}>
                   Player drafts, transfer market, weekly over/unders. Every game you roll this season builds your player value.
                 </Text>

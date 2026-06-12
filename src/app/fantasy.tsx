@@ -44,9 +44,9 @@ type FantasyState = {
   last_week_results: { team_name: string; points: number }[]; leaderboard: Leader[];
 };
 
-// Flip to true at launch (planned: next season cycle, ~2027). The whole
-// engine — wallets, odds, settlement, market — is deployed and accumulating
-// data behind this flag, so launch is just this constant + an announcement.
+// Flip to true at launch (target: early 2027, after 4 counted full seasons).
+// The whole engine — wallets, odds, settlement, market — is deployed and
+// accumulating data behind this flag, so launch is this constant + an announcement.
 const FANTASY_LIVE = false;
 
 const STAKES = [5, 10, 25, 50];
@@ -147,10 +147,11 @@ export default function FantasyScreen() {
           <View style={s.teaserBadge}>
             <Ionicons name="sparkles" size={36} color="#a855f7" />
           </View>
-          <Text style={s.teaserTitle}>The Fantasy League{"\n"}is coming.</Text>
+          <Text style={s.teaserTitle}>Fantasy League{"\n"}coming early 2027.</Text>
           <Text style={s.teaserBody}>
-            Next year, every roller gets a price. Draft your dream squad under a salary cap,
-            ride hot streaks, work the transfer market, and bet Skee-Coins on weekly over/unders.
+            Once the league has four full seasons of history, every roller gets a price.
+            Draft your dream squad under a salary cap, ride hot streaks, work the transfer
+            market, and bet Skee-Coins on weekly over/unders.
           </Text>
           <View style={s.teaserNote}>
             <Ionicons name="stats-chart" size={14} color="#22c55e" />
