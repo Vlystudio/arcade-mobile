@@ -86,7 +86,7 @@ export function BetaBadge({
       onHoverOut={() => setTooltipVisible(false)}
       hitSlop={8}
     >
-      <Ionicons name="flask" size={size} color="#2dd4bf" />
+      <Ionicons name="checkmark-circle" size={size} color="#2dd4bf" />
       {displayLabel && (
         <Text style={[styles.label, { color: "#2dd4bf", fontSize: size - 3 }]}>
           Beta Tester
