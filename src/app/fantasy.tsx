@@ -44,6 +44,11 @@ type FantasyState = {
   last_week_results: { team_name: string; points: number }[]; leaderboard: Leader[];
 };
 
+// Flip to true at launch (planned: next season cycle, ~2027). The whole
+// engine — wallets, odds, settlement, market — is deployed and accumulating
+// data behind this flag, so launch is just this constant + an announcement.
+const FANTASY_LIVE = false;
+
 const STAKES = [5, 10, 25, 50];
 
 function Coin({ size = 13 }: { size?: number }) {
@@ -125,6 +130,38 @@ export default function FantasyScreen() {
     }
     showToast("Pick cancelled — stake refunded");
     load();
+  }
+
+  // Pre-launch: show the teaser instead of the live board, even via deep link.
+  if (!FANTASY_LIVE) {
+    return (
+      <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+        <Head><title>Fantasy Skee-Ball · ArcadeTracker</title></Head>
+        <View style={s.header}>
+          <Pressable style={s.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace("/teams" as any)}>
+            <Ionicons name="chevron-back" size={22} color="#fff" />
+          </Pressable>
+          <Text style={s.headerTitle}>Fantasy Skee-Ball</Text>
+        </View>
+        <View style={s.teaserWrap}>
+          <View style={s.teaserBadge}>
+            <Ionicons name="sparkles" size={36} color="#a855f7" />
+          </View>
+          <Text style={s.teaserTitle}>The Fantasy League{"\n"}is coming.</Text>
+          <Text style={s.teaserBody}>
+            Next year, every roller gets a price. Draft your dream squad under a salary cap,
+            ride hot streaks, work the transfer market, and bet Skee-Coins on weekly over/unders.
+          </Text>
+          <View style={s.teaserNote}>
+            <Ionicons name="stats-chart" size={14} color="#22c55e" />
+            <Text style={s.teaserNoteText}>
+              Your stats are already counting. Every league night and solo tournament you play
+              from now on builds your player value for draft day.
+            </Text>
+          </View>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   if (authLoading || loading) {
@@ -568,4 +605,19 @@ const s = StyleSheet.create({
   },
   confirmText: { color: "#000", fontSize: 15, fontWeight: "900" },
   insufficientText: { color: "#f59e0b", fontSize: 12, textAlign: "center", marginTop: 10 },
+
+  teaserWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, gap: 16, marginTop: -40 },
+  teaserBadge: {
+    width: 88, height: 88, borderRadius: 28,
+    backgroundColor: "rgba(168,85,247,0.08)", borderWidth: 1, borderColor: "rgba(168,85,247,0.3)",
+    alignItems: "center", justifyContent: "center",
+  },
+  teaserTitle: { color: "#fff", fontSize: 28, fontWeight: "900", textAlign: "center", lineHeight: 34 },
+  teaserBody: { color: "#999", fontSize: 14.5, textAlign: "center", lineHeight: 21, maxWidth: 420 },
+  teaserNote: {
+    flexDirection: "row", alignItems: "flex-start", gap: 8,
+    backgroundColor: "rgba(34,197,94,0.06)", borderRadius: 14, padding: 13,
+    borderWidth: 1, borderColor: "rgba(34,197,94,0.2)", maxWidth: 420,
+  },
+  teaserNoteText: { flex: 1, color: "#86efac", fontSize: 12.5, lineHeight: 18 },
 });

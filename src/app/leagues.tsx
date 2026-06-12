@@ -419,19 +419,6 @@ export default function LeaguesScreen() {
                 </Pressable>
               </View>
 
-              {/* Fantasy Skee-Ball */}
-              <Pressable
-                style={[styles.scheduleCard, { borderColor: "rgba(168,85,247,0.35)", backgroundColor: "rgba(168,85,247,0.05)" }]}
-                onPress={() => router.push("/fantasy" as any)}
-              >
-                <Ionicons name="sparkles" size={18} color="#a855f7" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.liveCardTitle}>Fantasy Skee-Ball</Text>
-                  <Text style={styles.liveCardSub}>Bet your coins on this week's board — over/unders, streaks & bragging rights</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#444" />
-              </Pressable>
-
               {/* Weekly Pick'em */}
               {(() => {
                 const sel = skeeSeasons.find((sn) => sn.id === skeeSeasonId);

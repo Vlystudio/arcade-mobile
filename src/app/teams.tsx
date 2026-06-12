@@ -547,6 +547,20 @@ export default function TeamsScreen() {
               </View>
             </View>
 
+            {/* Fantasy Skee-Ball teaser — launches with the full feature next year */}
+            <Pressable style={styles.fantasyTeaser} onPress={() => router.push("/fantasy" as any)}>
+              <View style={styles.fantasyTeaserIcon}>
+                <Ionicons name="sparkles" size={16} color="#a855f7" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fantasyTeaserTitle}>Fantasy Skee-Ball League — coming next year</Text>
+                <Text style={styles.fantasyTeaserSub}>
+                  Player drafts, transfer market, weekly over/unders. Every game you roll this season builds your player value.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={15} color="#a855f7" />
+            </Pressable>
+
             {/* Season registration promo (browsing & joining stay open to everyone) */}
             {showSeasonPromo && (
               <Pressable style={styles.seasonBanner} onPress={() => router.push("/team-registration" as any)}>
@@ -1292,4 +1306,18 @@ const styles = StyleSheet.create({
   },
   seasonBannerTitle: { color: "#f59e0b", fontSize: 14, fontWeight: "800", marginBottom: 2 },
   seasonBannerSub: { color: "#777", fontSize: 12, lineHeight: 17 },
+
+  fantasyTeaser: {
+    flexDirection: "row", alignItems: "center", gap: 11,
+    backgroundColor: "rgba(168,85,247,0.05)", borderRadius: 16,
+    padding: 13, marginBottom: 12,
+    borderWidth: 1, borderColor: "rgba(168,85,247,0.28)",
+  },
+  fantasyTeaserIcon: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: "rgba(168,85,247,0.12)",
+    alignItems: "center", justifyContent: "center",
+  },
+  fantasyTeaserTitle: { color: "#d8b4fe", fontSize: 13.5, fontWeight: "900" },
+  fantasyTeaserSub: { color: "#999", fontSize: 11.5, lineHeight: 16, marginTop: 2 },
 });
