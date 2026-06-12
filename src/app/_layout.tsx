@@ -82,6 +82,12 @@ export default function RootLayout() {
           <Stack.Screen name="ff-tournament" options={{ headerShown: false }} />
           <Stack.Screen name="karaoke" options={{ headerShown: false }} />
           <Stack.Screen name="karaoke-display" options={{ headerShown: false }} />
+          <Stack.Screen name="forums" options={{ headerShown: false }} />
+          <Stack.Screen name="forum-detail" options={{ headerShown: false }} />
+          <Stack.Screen name="user-profile" options={{ headerShown: false }} />
+          <Stack.Screen name="team-chat" options={{ headerShown: false }} />
+          <Stack.Screen name="owner" options={{ headerShown: false }} />
+          <Stack.Screen name="architect" options={{ headerShown: false }} />
         </Stack>
       </ThemeProvider>
       </CartProvider>
