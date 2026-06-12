@@ -4096,9 +4096,9 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
         >
           <View style={[styles.skeeWeekCard, { borderColor: "rgba(6,182,212,0.2)", backgroundColor: "rgba(6,182,212,0.04)" }]}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.skeeWeekLabel}>AI proof verification — {aiMode === "full_auto" ? "FULL AUTO" : aiMode === "off" ? "OFF" : "deny-only (conservative)"}</Text>
+              <Text style={styles.skeeWeekLabel}>Automatic proof verification — {aiMode === "full_auto" ? "FULL AUTO" : aiMode === "off" ? "OFF" : "deny-only (conservative)"}</Text>
               <Text style={[styles.reportMeta, { marginTop: 4 }]}>
-                Games with a reference photo get AI checks on every score proof: blatant mismatches are auto-denied,
+                Games with a reference photo get every score proof automatically checked against it: blatant mismatches are auto-denied,
                 everything else is annotated for your review queue. Games without a reference stay fully manual.
                 Auto-approval stays off until you flip the mode.
               </Text>
@@ -4124,7 +4124,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
                     <Text style={[styles.reportMeta, { color: "#fff", fontWeight: "800", fontSize: 14.5 }]}>{g.name}</Text>
                     <View style={[styles.reportTypeChip, { alignSelf: "flex-start", marginTop: 5, borderColor: g.ref_path ? "rgba(34,197,94,0.4)" : "rgba(245,158,11,0.4)", backgroundColor: g.ref_path ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)" }]}>
                       <Text style={[styles.reportTypeChipText, { color: g.ref_path ? "#22c55e" : "#f59e0b" }]}>
-                        {g.ref_path ? "AI verification active" : "Manual review"}
+                        {g.ref_path ? "Auto-verify active" : "Manual review"}
                       </Text>
                     </View>
                   </View>
@@ -5558,11 +5558,11 @@ function ScoreCard({ item, tab, actioning, proofLoading, onApprove, onDeny, onRe
   const aiColor = item.ai_verdict === "looks_good" ? "#22c55e"
     : item.ai_verdict === "needs_review" ? "#f59e0b"
     : item.ai_verdict === "auto_denied" ? "#ef4444" : "#777";
-  const aiLabel = item.ai_verdict === "looks_good" ? "AI: looks legit"
-    : item.ai_verdict === "needs_review" ? "AI: needs a human look"
-    : item.ai_verdict === "auto_denied" ? "AI: auto-denied"
-    : item.ai_verdict === "no_reference" ? "AI: no reference photo"
-    : item.ai_verdict === "error" ? "AI: check failed" : null;
+  const aiLabel = item.ai_verdict === "looks_good" ? "Auto-check: looks legit"
+    : item.ai_verdict === "needs_review" ? "Auto-check: needs a human look"
+    : item.ai_verdict === "auto_denied" ? "Auto-denied"
+    : item.ai_verdict === "no_reference" ? "No reference photo — manual"
+    : item.ai_verdict === "error" ? "Auto-check failed" : null;
   return (
     <View style={styles.card}>
       {aiLabel && (

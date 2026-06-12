@@ -80,7 +80,13 @@ export default function PrivacyScreen() {
           {"\nText content including posts, bios, and submitted text may be analyzed by OpenAI's " +
            "moderation API to identify hate speech, harassment, and other prohibited content. " +
            "Text is transmitted to OpenAI solely for moderation purposes. OpenAI processes this " +
-           "data subject to their Privacy Policy and API usage terms."}
+           "data subject to their Privacy Policy and API usage terms.\n\n"}
+          <Text style={s.bold}>Score-Proof Photo Review</Text>
+          {"\nPhotos submitted as score proof may be automatically analyzed by AI vision services " +
+           "to verify they show the correct machine and that the displayed score matches the " +
+           "submission. This automated review supports leaderboard integrity; final decisions " +
+           "remain subject to human review by venue staff. Proof photos are processed solely " +
+           "for verification and are not used for any other purpose."}
         </Section>
 
         <Section title="Crash Reporting & Performance">
