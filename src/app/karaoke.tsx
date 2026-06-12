@@ -299,6 +299,17 @@ export default function KaraokeScreen() {
                 </Pressable>
               </View>
 
+              {/* Request limits — match rpc_karaoke_add so a rate-limit
+                  rejection never comes as a surprise */}
+              <View style={s.limitNote}>
+                <Ionicons name="information-circle-outline" size={14} color="#06b6d4" />
+                <Text style={s.limitNoteText}>
+                  {user
+                    ? "You can request up to 3 songs every 10 minutes, with at most 3 of your songs waiting in the queue."
+                    : "Guests share a pool of 5 queued songs. Sign in to request up to 3 songs every 10 minutes."}
+                </Text>
+              </View>
+
               {/* Requester name */}
               <TextInput
                 style={s.input}
@@ -460,6 +471,13 @@ const s = StyleSheet.create({
   modalSheet: { backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1e1e1e", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24, maxHeight: "85%" },
   modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
   modalTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  limitNote: {
+    flexDirection: "row", alignItems: "flex-start", gap: 7,
+    backgroundColor: "rgba(6,182,212,0.06)", borderRadius: 10,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.18)",
+    paddingHorizontal: 10, paddingVertical: 8, marginBottom: 12,
+  },
+  limitNoteText: { flex: 1, color: "#7dd3e0", fontSize: 12, lineHeight: 17 },
 
   input: { backgroundColor: "#0d0d0d", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: "#fff", fontSize: 14, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12 },
 
