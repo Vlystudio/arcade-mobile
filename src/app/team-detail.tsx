@@ -65,6 +65,12 @@ type Announcement = {
   created_at: string;
 };
 
+function currentMondayStr(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+
 const SEASON_WEEKS = 8;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 const SEASON_MS = SEASON_WEEKS * WEEK_MS;
@@ -166,6 +172,18 @@ export default function TeamDetailScreen() {
   const [disputeReason, setDisputeReason] = useState("");
   const [disputeSessionId, setDisputeSessionId] = useState<string | null>(null);
   const [raisingDispute, setRaisingDispute] = useState(false);
+
+  // Captain tools: invites + join requests (under the gear menu)
+  const [inviteVisible, setInviteVisible] = useState(false);
+  const [inviteSearch, setInviteSearch] = useState("");
+  const [inviteResults, setInviteResults] = useState<{ id: string; username: string }[]>([]);
+  const [inviteSearching, setInviteSearching] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const [inviteSentTo, setInviteSentTo] = useState<string | null>(null);
+  const [requestsVisible, setRequestsVisible] = useState(false);
+  const [joinRequests, setJoinRequests] = useState<{ id: string; user_id: string; username: string; message: string | null }[]>([]);
+  const [requestsLoading, setRequestsLoading] = useState(false);
+  const [pendingReqCount, setPendingReqCount] = useState(0);
 
   // Team settings (captain gear menu)
   const [teamSettingsVisible, setTeamSettingsVisible] = useState(false);
@@ -448,7 +466,8 @@ export default function TeamDetailScreen() {
       setPositionStats(posStats);
       setWeekHistory(history);
       setLeagueLoading(false);
-      if (history?.upcoming) loadNightOps(history.upcoming.week_of);
+      loadNightOps(history?.upcoming?.week_of ?? currentMondayStr());
+      loadPendingReqCount();
     });
   }, [user, teamId, selectedSkeeSeasonId, skeeSeasons.length]);
 
@@ -490,6 +509,83 @@ export default function TeamDetailScreen() {
     } finally {
       setCoachLoading(false);
     }
+  }
+
+  async function loadPendingReqCount() {
+    if (!teamId) return;
+    const { count } = await supabase
+      .from("team_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("team_id", teamId)
+      .eq("status", "pending");
+    setPendingReqCount(count ?? 0);
+  }
+
+  async function searchInviteUsers(text: string) {
+    setInviteSearch(text);
+    if (!text.trim() || !user) { setInviteResults([]); return; }
+    setInviteSearching(true);
+    const { data } = await supabase
+      .from("public_profiles")
+      .select("id, username")
+      .ilike("username", `%${text.trim()}%`)
+      .neq("id", user.id)
+      .limit(8);
+    setInviteResults((data ?? []).map((r: any) => ({ id: r.id, username: r.username ?? "Unknown" })));
+    setInviteSearching(false);
+  }
+
+  async function handleInviteUser(inviteeId: string, username: string) {
+    if (!teamId || inviting) return;
+    setInviting(true);
+    const { error } = await supabase.from("team_requests").upsert(
+      { team_id: teamId, user_id: inviteeId, direction: "invite", status: "pending", message: null },
+      { onConflict: "team_id,user_id" },
+    );
+    setInviting(false);
+    if (error) { Alert.alert("Error", error.message); return; }
+    setInviteSentTo(username);
+    setInviteSearch("");
+    setInviteResults([]);
+  }
+
+  async function loadJoinRequests() {
+    if (!teamId) return;
+    setRequestsLoading(true);
+    const { data: reqData } = await supabase
+      .from("team_requests")
+      .select("id, user_id, message")
+      .eq("team_id", teamId)
+      .eq("status", "pending")
+      .eq("direction", "request");
+    const userIds = (reqData ?? []).map((r: any) => r.user_id);
+    let nameMap: Record<string, string> = {};
+    if (userIds.length) {
+      const { data: profs } = await supabase.from("public_profiles").select("id, username").in("id", userIds);
+      for (const pr of profs ?? []) nameMap[(pr as any).id] = (pr as any).username ?? "Unknown";
+    }
+    setJoinRequests((reqData ?? []).map((r: any) => ({
+      id: r.id, user_id: r.user_id, username: nameMap[r.user_id] ?? "Unknown", message: r.message ?? null,
+    })));
+    setRequestsLoading(false);
+  }
+
+  async function approveJoinRequest(requestId: string, userId: string) {
+    if (!teamId) return;
+    const { error: updErr } = await supabase.from("team_requests").update({ status: "approved" }).eq("id", requestId);
+    if (updErr) { Alert.alert("Error", updErr.message); return; }
+    const { error: insErr } = await supabase.from("team_members").insert({ team_id: teamId, user_id: userId, role: "member" });
+    if (insErr) { Alert.alert("Error", insErr.message); return; }
+    setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+    setPendingReqCount((n) => Math.max(n - 1, 0));
+    showToast("Player added to the team");
+    loadData();
+  }
+
+  async function denyJoinRequest(requestId: string) {
+    await supabase.from("team_requests").update({ status: "denied" }).eq("id", requestId);
+    setJoinRequests((prev) => prev.filter((r) => r.id !== requestId));
+    setPendingReqCount((n) => Math.max(n - 1, 0));
   }
 
   async function loadNightOps(weekOf: string) {
@@ -735,6 +831,7 @@ export default function TeamDetailScreen() {
             {isCaptain && (
               <Pressable style={styles.iconBtn} onPress={() => setTeamSettingsVisible(true)}>
                 <Ionicons name="settings-outline" size={19} color="#555" />
+                {pendingReqCount > 0 && <View style={styles.gearDot} />}
               </Pressable>
             )}
           </View>
@@ -1140,26 +1237,28 @@ export default function TeamDetailScreen() {
         )}
 
         {/* ── Season Schedule ── */}
-        {(weekHistory?.upcoming || (weekHistory?.weeks.length ?? 0) > 0) && (
+        {(weekHistory?.upcoming || (weekHistory?.weeks.length ?? 0) > 0 || isTeamMember) && (
           <>
             <SectionLabel text="Season Schedule" />
             <View style={styles.leagueCard}>
-              {weekHistory?.upcoming && (
+              {(weekHistory?.upcoming || isTeamMember) && (
                 <View style={{ gap: 8, marginBottom: 6 }}>
-                  <View style={styles.upcomingRow}>
-                    <View style={styles.upcomingIcon}>
-                      <Ionicons name="calendar-outline" size={16} color="#22c55e" />
+                  {weekHistory?.upcoming && (
+                    <View style={styles.upcomingRow}>
+                      <View style={styles.upcomingIcon}>
+                        <Ionicons name="calendar-outline" size={16} color="#22c55e" />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.upcomingTitle}>
+                          This week · {weekHistory.upcoming.slot_time}
+                        </Text>
+                        <Text style={styles.upcomingSub}>
+                          {weekLabel(weekHistory.upcoming.week_of, selectedSkeeSeason)}
+                          {weekHistory.upcoming.week_label ? ` · ${weekHistory.upcoming.week_label}` : ""}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.upcomingTitle}>
-                        This week · {weekHistory.upcoming.slot_time}
-                      </Text>
-                      <Text style={styles.upcomingSub}>
-                        {weekLabel(weekHistory.upcoming.week_of, selectedSkeeSeason)}
-                        {weekHistory.upcoming.week_label ? ` · ${weekHistory.upcoming.week_label}` : ""}
-                      </Text>
-                    </View>
-                  </View>
+                  )}
 
                   {/* RSVP (members only) */}
                   {isTeamMember && (
@@ -1167,14 +1266,14 @@ export default function TeamDetailScreen() {
                       <Text style={styles.rsvpLabel}>Are you in Monday?</Text>
                       <Pressable
                         style={[styles.rsvpBtn, rsvps[user?.id ?? ""] === "in" && styles.rsvpBtnIn]}
-                        onPress={() => setMyRsvp(weekHistory.upcoming!.week_of, "in")}
+                        onPress={() => setMyRsvp(weekHistory?.upcoming?.week_of ?? currentMondayStr(), "in")}
                         disabled={savingRsvp}
                       >
                         <Text style={[styles.rsvpBtnText, rsvps[user?.id ?? ""] === "in" && { color: "#000" }]}>In</Text>
                       </Pressable>
                       <Pressable
                         style={[styles.rsvpBtn, rsvps[user?.id ?? ""] === "out" && styles.rsvpBtnOut]}
-                        onPress={() => setMyRsvp(weekHistory.upcoming!.week_of, "out")}
+                        onPress={() => setMyRsvp(weekHistory?.upcoming?.week_of ?? currentMondayStr(), "out")}
                         disabled={savingRsvp}
                       >
                         <Text style={[styles.rsvpBtnText, rsvps[user?.id ?? ""] === "out" && { color: "#fff" }]}>Out</Text>
@@ -1197,7 +1296,7 @@ export default function TeamDetailScreen() {
                       ) : Object.values(rsvps).includes("out") ? (
                         <Pressable
                           style={styles.subChip}
-                          onPress={() => requestSub(weekHistory.upcoming!.week_of)}
+                          onPress={() => requestSub(weekHistory?.upcoming?.week_of ?? currentMondayStr())}
                           disabled={requestingSub}
                         >
                           {requestingSub
@@ -1359,6 +1458,96 @@ export default function TeamDetailScreen() {
         </Pressable>
       </Modal>
 
+      {/* Invite player (captain) */}
+      <Modal visible={inviteVisible} transparent animationType="slide" onRequestClose={() => setInviteVisible(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setInviteVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Invite Player</Text>
+            {inviteSentTo ? (
+              <View style={{ alignItems: "center", paddingVertical: 20, gap: 10 }}>
+                <Ionicons name="checkmark-circle" size={30} color="#22c55e" />
+                <Text style={{ color: "#fff", fontSize: 15, fontWeight: "800" }}>Invite sent to {inviteSentTo}!</Text>
+                <Pressable style={styles.renameSaveBtn} onPress={() => setInviteSentTo(null)}>
+                  <Text style={styles.renameSaveText}>Invite another</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.renameInput}
+                  placeholder="Search by username…"
+                  placeholderTextColor="#555"
+                  autoFocus
+                  autoCapitalize="none"
+                  value={inviteSearch}
+                  onChangeText={searchInviteUsers}
+                />
+                <ScrollView style={{ maxHeight: 280 }} keyboardShouldPersistTaps="handled">
+                  {inviteSearching && <ActivityIndicator color="#06b6d4" style={{ marginVertical: 12 }} />}
+                  {inviteResults.map((u) => (
+                    <Pressable
+                      key={u.id}
+                      style={styles.inviteResultRow}
+                      onPress={() => handleInviteUser(u.id, u.username)}
+                      disabled={inviting}
+                    >
+                      <Avatar uri={null} name={u.username} size={36} />
+                      <Text style={styles.inviteResultName}>{u.username}</Text>
+                      <View style={styles.inviteSendChip}>
+                        <Ionicons name="paper-plane-outline" size={13} color="#000" />
+                        <Text style={styles.inviteSendChipText}>Invite</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                  {inviteSearch.trim() !== "" && inviteResults.length === 0 && !inviteSearching && (
+                    <Text style={{ color: "#777", textAlign: "center", paddingVertical: 16 }}>No users found</Text>
+                  )}
+                </ScrollView>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Join requests (captain) */}
+      <Modal visible={requestsVisible} transparent animationType="slide" onRequestClose={() => setRequestsVisible(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setRequestsVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Join Requests</Text>
+            {requestsLoading ? (
+              <ActivityIndicator color="#06b6d4" style={{ marginVertical: 20 }} />
+            ) : joinRequests.length === 0 ? (
+              <View style={{ alignItems: "center", paddingVertical: 24, gap: 8 }}>
+                <Ionicons name="checkmark-done-circle-outline" size={36} color="#2a2a2a" />
+                <Text style={{ color: "#777", fontSize: 14 }}>No pending requests</Text>
+              </View>
+            ) : (
+              <ScrollView style={{ maxHeight: 380 }}>
+                {joinRequests.map((r) => (
+                  <View key={r.id} style={styles.inviteResultRow}>
+                    <Pressable onPress={() => { setRequestsVisible(false); openUserProfile(r.user_id); }}>
+                      <Avatar uri={null} name={r.username} size={36} />
+                    </Pressable>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.inviteResultName}>{r.username}</Text>
+                      {r.message ? <Text style={{ color: "#777", fontSize: 12, marginTop: 2 }}>{r.message}</Text> : null}
+                    </View>
+                    <Pressable style={styles.reqApproveBtn} onPress={() => approveJoinRequest(r.id, r.user_id)}>
+                      <Ionicons name="checkmark" size={16} color="#000" />
+                    </Pressable>
+                    <Pressable style={styles.reqDenyBtn} onPress={() => denyJoinRequest(r.id)}>
+                      <Ionicons name="close" size={16} color="#ef4444" />
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Score dispute */}
       <Modal visible={disputeVisible} transparent animationType="slide" onRequestClose={() => setDisputeVisible(false)}>
         <Pressable style={styles.modalBg} onPress={() => setDisputeVisible(false)}>
@@ -1455,11 +1644,28 @@ export default function TeamDetailScreen() {
               <Ionicons name="chevron-forward" size={15} color="#333" />
             </Pressable>
             <Pressable
-              style={[styles.settingsRow, { borderBottomWidth: 0 }]}
-              onPress={() => { setTeamSettingsVisible(false); router.push("/teams" as any); }}
+              style={styles.settingsRow}
+              onPress={() => {
+                setTeamSettingsVisible(false);
+                setTimeout(() => { setInviteSentTo(null); setInviteSearch(""); setInviteResults([]); setInviteVisible(true); }, 150);
+              }}
             >
-              <Ionicons name="people-outline" size={19} color="#8a8a8a" />
-              <Text style={[styles.settingsRowText, { color: "#8a8a8a" }]}>Invites & Requests (Teams tab)</Text>
+              <Ionicons name="person-add-outline" size={19} color="#06b6d4" />
+              <Text style={styles.settingsRowText}>Invite Player</Text>
+              <Ionicons name="chevron-forward" size={15} color="#333" />
+            </Pressable>
+            <Pressable
+              style={[styles.settingsRow, { borderBottomWidth: 0 }]}
+              onPress={() => {
+                setTeamSettingsVisible(false);
+                setTimeout(() => { setRequestsVisible(true); loadJoinRequests(); }, 150);
+              }}
+            >
+              <Ionicons name="people-outline" size={19} color="#06b6d4" />
+              <Text style={styles.settingsRowText}>Join Requests</Text>
+              {pendingReqCount > 0 && (
+                <View style={styles.reqCountDot}><Text style={styles.reqCountDotText}>{pendingReqCount}</Text></View>
+              )}
               <Ionicons name="chevron-forward" size={15} color="#333" />
             </Pressable>
           </Pressable>
@@ -2059,6 +2265,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
   },
   settingsRowText: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
+  reqCountDot: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
+  reqCountDotText: { color: "#000", fontSize: 11, fontWeight: "900" },
+  gearDot: { position: "absolute", top: 6, right: 6, width: 8, height: 8, borderRadius: 4, backgroundColor: "#06b6d4" },
+  inviteResultRow: {
+    flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  inviteResultName: { flex: 1, color: "#fff", fontSize: 14.5, fontWeight: "700" },
+  inviteSendChip: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#06b6d4", borderRadius: 10, paddingHorizontal: 11, paddingVertical: 7,
+  },
+  inviteSendChipText: { color: "#000", fontSize: 12.5, fontWeight: "800" },
+  reqApproveBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center" },
+  reqDenyBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: "#2a2a2a", alignItems: "center", justifyContent: "center" },
   renameInput: {
     backgroundColor: "#0a0a0a", color: "#fff", padding: 15, borderRadius: 14,
     fontSize: 16, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12,

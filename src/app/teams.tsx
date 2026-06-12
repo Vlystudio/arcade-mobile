@@ -659,24 +659,10 @@ export default function TeamsScreen() {
                       )}
                     </View>
                     <View style={styles.memberActions}>
-                      {t.isCaptain && (
-                        <>
-                          <Pressable
-                            style={[styles.requestsBtn, t.pendingRequestCount > 0 && styles.requestsBtnActive]}
-                            onPress={(e) => { e.stopPropagation(); loadRequests(t); }}
-                          >
-                            <Ionicons name="people-outline" size={14} color={t.pendingRequestCount > 0 ? "#000" : "#06b6d4"} />
-                            <Text style={[styles.requestsBtnText, t.pendingRequestCount > 0 && styles.requestsBtnTextActive]}>
-                              {t.pendingRequestCount > 0 ? `${t.pendingRequestCount} Request${t.pendingRequestCount > 1 ? "s" : ""}` : "Requests"}
-                            </Text>
-                          </Pressable>
-                          <Pressable style={styles.inviteIconBtn} onPress={(e) => { e.stopPropagation(); setInviteError(null); setInviteSentTo(null); setInviteTeamId(t.id); }}>
-                            <Ionicons name="person-add-outline" size={18} color="#06b6d4" />
-                          </Pressable>
-                          <Pressable style={styles.inviteIconBtn} onPress={(e) => { e.stopPropagation(); setRenameText(t.name); setRenameTarget(t); }}>
-                            <Ionicons name="pencil-outline" size={17} color="#06b6d4" />
-                          </Pressable>
-                        </>
+                      {t.isCaptain && t.pendingRequestCount > 0 && (
+                        <View style={styles.reqDot}>
+                          <Text style={styles.reqDotText}>{t.pendingRequestCount}</Text>
+                        </View>
                       )}
                       <Pressable style={styles.leaveBtn} onPress={(e) => { e.stopPropagation(); handleLeavePress(t); }}>
                         <Text style={styles.leaveBtnText}>Leave</Text>
@@ -1171,14 +1157,16 @@ const styles = StyleSheet.create({
   teamCardInvite: { borderColor: "rgba(245,158,11,0.3)" },
   teamAvatar: { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
   teamAvatarText: { color: "#06b6d4", fontSize: 14, fontWeight: "900" },
-  teamInfo: { flex: 1 },
-  teamNameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 },
-  teamName: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  teamMeta: { color: "#8a8a8a", fontSize: 13 },
+  teamInfo: { flex: 1, minWidth: 0 },
+  teamNameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2, flexWrap: "wrap" },
+  teamName: { color: "#fff", fontSize: 15, fontWeight: "800", flexShrink: 1 },
+  teamMeta: { color: "#8a8a8a", fontSize: 13, flexShrink: 1 },
   captainTag: { backgroundColor: "rgba(245,158,11,0.12)", borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
   captainTagText: { color: "#f59e0b", fontSize: 10, fontWeight: "800" },
 
-  memberActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  memberActions: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 0 },
+  reqDot: { minWidth: 20, height: 20, borderRadius: 10, backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
+  reqDotText: { color: "#000", fontSize: 11, fontWeight: "900" },
   requestsBadgeBtn: { width: 24, height: 24, borderRadius: 12, backgroundColor: "#ef4444", alignItems: "center", justifyContent: "center" },
   requestsBadgeText: { color: "#fff", fontSize: 11, fontWeight: "900" },
   requestsBtn: {

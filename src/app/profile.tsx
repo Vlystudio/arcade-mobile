@@ -82,6 +82,10 @@ export default function ProfileScreen() {
   const [savingSkeeToggle, setSavingSkeeToggle] = useState(false);
   const [sharingStats, setSharingStats] = useState(false);
   const [subAvailable, setSubAvailable] = useState(false);
+  const [blockedVisible, setBlockedVisible] = useState(false);
+  const [blockedUsers, setBlockedUsers] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
+  const [blockedLoading, setBlockedLoading] = useState(false);
+  const [unblocking, setUnblocking] = useState<string | null>(null);
   const [savingSubAvail, setSavingSubAvail] = useState(false);
   const statCardRef = useRef<View>(null);
 
@@ -392,6 +396,29 @@ export default function ProfileScreen() {
     setSavingPrivacy(false);
   }
 
+  async function openBlockedList() {
+    setBlockedVisible(true);
+    setBlockedLoading(true);
+    const { data } = await supabase
+      .from("user_blocks")
+      .select("blocked_id, profiles!user_blocks_blocked_id_fkey(username, avatar_url)")
+      .eq("blocker_id", user!.id);
+    setBlockedUsers((data ?? []).map((b: any) => {
+      const prof = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles;
+      return { id: b.blocked_id, username: prof?.username ?? "Unknown", avatar_url: prof?.avatar_url ?? null };
+    }));
+    setBlockedLoading(false);
+  }
+
+  async function unblockUser(blockedId: string) {
+    if (!user || unblocking) return;
+    setUnblocking(blockedId);
+    await supabase.from("user_blocks").delete().eq("blocker_id", user.id).eq("blocked_id", blockedId);
+    setBlockedUsers((prev) => prev.filter((b) => b.id !== blockedId));
+    setUnblocking(null);
+    showToast("User unblocked", "info");
+  }
+
   async function toggleSubAvailable(next: boolean) {
     if (!user || savingSubAvail) return;
     setSavingSubAvail(true);
@@ -501,9 +528,7 @@ export default function ProfileScreen() {
         {/* ── Top bar: @username + actions (IG style) ── */}
         <View style={styles.topBar}>
           <View style={styles.topBarLeft}>
-            {isPrivate && <Ionicons name="lock-closed" size={14} color="#888" />}
             <Text style={styles.topBarUsername} numberOfLines={1}>{username ?? "Profile"}</Text>
-            <Ionicons name="chevron-down" size={14} color="#666" />
           </View>
           <View style={styles.topBarActions}>
             <Pressable style={styles.topBarIconBtn} onPress={() => setSearchVisible(true)} hitSlop={6}>
@@ -777,6 +802,14 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.settingsDivider} />
                 <SettingsRow
+                  icon="ban-outline"
+                  iconColor="#ef4444"
+                  iconBg="rgba(239,68,68,0.1)"
+                  label="Blocked Users"
+                  onPress={() => { setSettingsVisible(false); setTimeout(openBlockedList, 200); }}
+                />
+                <View style={styles.settingsDivider} />
+                <SettingsRow
                   icon="key-outline"
                   label="Change Password"
                   onPress={() => { setSettingsVisible(false); setTimeout(() => setPwVisible(true), 200); }}
@@ -802,6 +835,8 @@ export default function ProfileScreen() {
                 <SettingsRow icon="people-circle-outline" label="Friends" onPress={() => navFromSettings("/friends")} />
                 <View style={styles.settingsDivider} />
                 <SettingsRow icon="paper-plane-outline" label="Messages" badge={unreadMessages} onPress={() => navFromSettings("/chat")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="time-outline" iconColor="#22c55e" iconBg="rgba(34,197,94,0.1)" label="Monday Night Schedule" onPress={() => navFromSettings("/skeeball-schedule")} />
                 <View style={styles.settingsDivider} />
                 <SettingsRow icon="bookmark-outline" label="Saved Posts" onPress={() => navFromSettings("/saved-posts")} />
                 <View style={styles.settingsDivider} />
@@ -1156,6 +1191,44 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
+      {/* Blocked users */}
+      <Modal visible={blockedVisible} transparent animationType="slide" onRequestClose={() => setBlockedVisible(false)}>
+        <View style={styles.sheetBg}>
+          <Pressable style={styles.sheetDismiss} onPress={() => setBlockedVisible(false)} />
+          <View style={styles.pickerSheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.pickerTitle}>Blocked Users</Text>
+            <Text style={styles.pickerSub}>Blocked users' posts, comments, and chats are hidden from you.</Text>
+            {blockedLoading ? (
+              <ActivityIndicator color="#06b6d4" style={{ marginVertical: 24 }} />
+            ) : blockedUsers.length === 0 ? (
+              <View style={styles.searchNoResults}>
+                <Ionicons name="checkmark-circle-outline" size={28} color="#2a2a2a" />
+                <Text style={styles.searchNoResultsText}>You haven't blocked anyone</Text>
+              </View>
+            ) : (
+              <ScrollView style={{ maxHeight: 360 }}>
+                {blockedUsers.map((b) => (
+                  <View key={b.id} style={styles.searchResultRow}>
+                    <Avatar uri={b.avatar_url} name={b.username} size={38} />
+                    <Text style={[styles.searchResultName, { flex: 1 }]}>{b.username}</Text>
+                    <Pressable
+                      style={styles.unblockBtn}
+                      onPress={() => unblockUser(b.id)}
+                      disabled={unblocking === b.id}
+                    >
+                      {unblocking === b.id
+                        ? <ActivityIndicator size="small" color="#06b6d4" />
+                        : <Text style={styles.unblockBtnText}>Unblock</Text>}
+                    </Pressable>
+                  </View>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       <AppTour
         visible={tourVisible}
         steps={getTourSteps(role)}
@@ -1468,6 +1541,12 @@ const styles = StyleSheet.create({
     width: 40, height: 40, borderRadius: 12,
     backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center",
   },
+  unblockBtn: {
+    borderRadius: 10, paddingHorizontal: 13, paddingVertical: 8, minWidth: 76, alignItems: "center",
+    backgroundColor: "rgba(6,182,212,0.08)", borderWidth: 1, borderColor: "rgba(6,182,212,0.3)",
+  },
+  unblockBtnText: { color: "#06b6d4", fontSize: 12.5, fontWeight: "800" },
+
   pwInput: {
     backgroundColor: "#0a0a0a", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
     color: "#fff", fontSize: 15, paddingHorizontal: 16, paddingVertical: 13,
