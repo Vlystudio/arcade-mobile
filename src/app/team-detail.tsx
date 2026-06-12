@@ -22,7 +22,7 @@ import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
 import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
 import { useRequireAuth } from "../hooks/use-require-auth";
-import { validateChatMessage } from "../../lib/validation";
+import { validateChatMessage, validateTeamName } from "../../lib/validation";
 import { InsightChips, LaneStats, RingBreakdown, TrendBadge, WeeklyBarChart } from "../components/skeeball-stats";
 import {
   fetchHeadToHead,
@@ -44,6 +44,7 @@ import {
   type TeamWeekHistory,
 } from "../lib/skeeball-stats";
 import { API_BASE } from "../../lib/api-base";
+import { showToast } from "../components/toast";
 
 type CoachResult = {
   order: { username: string; position: number; reason: string }[];
@@ -154,6 +155,13 @@ export default function TeamDetailScreen() {
   const [recapResult, setRecapResult] = useState<{ recap: string; highlights: string[]; mode: string } | null>(null);
   const [recapLoading, setRecapLoading] = useState<"week" | "season" | null>(null);
   const [recapError, setRecapError] = useState<string | null>(null);
+
+  // Team settings (captain gear menu)
+  const [teamSettingsVisible, setTeamSettingsVisible] = useState(false);
+  const [renameVisible, setRenameVisible] = useState(false);
+  const [renameText, setRenameText] = useState("");
+  const [renaming, setRenaming] = useState(false);
+  const [displayName, setDisplayName] = useState<string | null>(null);
 
   // Announcements
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -496,6 +504,21 @@ export default function TeamDetailScreen() {
     fetchHeadToHead(teamId, coachOpponent.id, selectedSkeeSeason).then(setHeadToHead);
   }, [teamId, coachOpponent?.id, selectedSkeeSeasonId]);
 
+  async function handleRenameTeam() {
+    const name = validateTeamName(renameText);
+    if (!teamId || !name.ok || renaming) return;
+    setRenaming(true);
+    const { error } = await supabase.from("teams").update({ name: name.value }).eq("id", teamId);
+    setRenaming(false);
+    if (error) {
+      Alert.alert("Error", error.message);
+      return;
+    }
+    setDisplayName(name.value);
+    setRenameVisible(false);
+    showToast("Team renamed");
+  }
+
   async function askRecap(mode: "week" | "season") {
     if (!teamId || recapLoading) return;
     setRecapLoading(mode);
@@ -629,7 +652,7 @@ export default function TeamDetailScreen() {
               </Pressable>
             )}
             {isCaptain && (
-              <Pressable style={styles.iconBtn} onPress={() => router.push({ pathname: "/teams" as any })}>
+              <Pressable style={styles.iconBtn} onPress={() => setTeamSettingsVisible(true)}>
                 <Ionicons name="settings-outline" size={19} color="#555" />
               </Pressable>
             )}
@@ -656,7 +679,7 @@ export default function TeamDetailScreen() {
               </View>
             )}
           </Pressable>
-          <Text style={styles.teamTitle}>{teamName}</Text>
+          <Text style={styles.teamTitle}>{displayName ?? teamName}</Text>
           <Text style={styles.teamSub}>
             {members.length} {members.length === 1 ? "member" : "members"}
             {seasons.length > 0 ? `  ·  ${seasons.length} season${seasons.length !== 1 ? "s" : ""}` : ""}
@@ -1222,6 +1245,86 @@ export default function TeamDetailScreen() {
         </Pressable>
       </Modal>
 
+      {/* Team settings (captain gear) */}
+      <Modal visible={teamSettingsVisible} transparent animationType="slide" onRequestClose={() => setTeamSettingsVisible(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setTeamSettingsVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Team Settings</Text>
+            <Text style={styles.modalSub}>{displayName ?? teamName}</Text>
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => { setTeamSettingsVisible(false); setTimeout(() => setPhotoSourceVisible(true), 150); }}
+            >
+              <Ionicons name="camera-outline" size={19} color="#06b6d4" />
+              <Text style={styles.settingsRowText}>Change Team Photo</Text>
+              <Ionicons name="chevron-forward" size={15} color="#333" />
+            </Pressable>
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => {
+                setTeamSettingsVisible(false);
+                setTimeout(() => { setEditSlot1(slotPref1); setEditSlot2(slotPref2); setEditSlotsVisible(true); }, 150);
+              }}
+            >
+              <Ionicons name="time-outline" size={19} color="#06b6d4" />
+              <Text style={styles.settingsRowText}>Preferred Play Times</Text>
+              <Ionicons name="chevron-forward" size={15} color="#333" />
+            </Pressable>
+            <Pressable
+              style={styles.settingsRow}
+              onPress={() => {
+                setTeamSettingsVisible(false);
+                setTimeout(() => { setRenameText(displayName ?? teamName ?? ""); setRenameVisible(true); }, 150);
+              }}
+            >
+              <Ionicons name="pencil-outline" size={19} color="#06b6d4" />
+              <Text style={styles.settingsRowText}>Rename Team</Text>
+              <Ionicons name="chevron-forward" size={15} color="#333" />
+            </Pressable>
+            <Pressable
+              style={[styles.settingsRow, { borderBottomWidth: 0 }]}
+              onPress={() => { setTeamSettingsVisible(false); router.push("/teams" as any); }}
+            >
+              <Ionicons name="people-outline" size={19} color="#8a8a8a" />
+              <Text style={[styles.settingsRowText, { color: "#8a8a8a" }]}>Invites & Requests (Teams tab)</Text>
+              <Ionicons name="chevron-forward" size={15} color="#333" />
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Rename team */}
+      <Modal visible={renameVisible} transparent animationType="slide" onRequestClose={() => setRenameVisible(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setRenameVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Rename Team</Text>
+            <Text style={styles.modalSub}>Current name: {displayName ?? teamName}</Text>
+            <TextInput
+              style={styles.renameInput}
+              value={renameText}
+              onChangeText={setRenameText}
+              placeholder="New team name"
+              placeholderTextColor="#555"
+              autoFocus
+              maxLength={40}
+              returnKeyType="done"
+              onSubmitEditing={handleRenameTeam}
+            />
+            <Pressable
+              style={[styles.renameSaveBtn, (renaming || !renameText.trim()) && { opacity: 0.4 }]}
+              onPress={handleRenameTeam}
+              disabled={renaming || !renameText.trim()}
+            >
+              {renaming
+                ? <ActivityIndicator size="small" color="#000" />
+                : <Text style={styles.renameSaveText}>Save</Text>}
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Team photo source picker */}
       <Modal visible={photoSourceVisible} transparent animationType="fade" onRequestClose={() => setPhotoSourceVisible(false)}>
         <View style={styles.photoPickerBg}>
@@ -1757,6 +1860,21 @@ const styles = StyleSheet.create({
   histSlot: { color: "#06b6d4", fontSize: 10.5, fontWeight: "700", marginTop: 2 },
   histResult: { color: "#ccc", fontSize: 13, fontWeight: "700" },
   histOpponents: { color: "#8a8a8a", fontSize: 11.5, marginTop: 2, lineHeight: 16 },
+
+  settingsRow: {
+    flexDirection: "row", alignItems: "center", gap: 13,
+    paddingVertical: 15,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  settingsRowText: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
+  renameInput: {
+    backgroundColor: "#0a0a0a", color: "#fff", padding: 15, borderRadius: 14,
+    fontSize: 16, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12,
+  },
+  renameSaveBtn: {
+    backgroundColor: "#06b6d4", borderRadius: 14, padding: 15, alignItems: "center",
+  },
+  renameSaveText: { color: "#000", fontWeight: "900", fontSize: 15 },
 
   photoPickerBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   photoPickerDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },

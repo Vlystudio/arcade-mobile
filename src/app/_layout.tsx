@@ -135,6 +135,7 @@ export default function RootLayout() {
           <Stack.Screen name="architect" options={{ headerShown: false }} />
           <Stack.Screen name="skeeball-compare" options={{ headerShown: false }} />
           <Stack.Screen name="skeeball-live" options={{ headerShown: false }} />
+          <Stack.Screen name="skeeball-schedule" options={{ headerShown: false }} />
         </Stack>
         <ToastHost />
         </AppColumn>
