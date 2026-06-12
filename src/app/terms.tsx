@@ -169,7 +169,7 @@ export default function TermsScreen() {
         </Section>
 
         <Section title="15. Contact Us">
-          {"Questions about these Terms of Service? Contact us at:\n\nsupport@arcadetracker.app\n\n" +
+          {"Questions about these Terms of Service? Contact us at:\n\nvaleyardvisuals@vlystudios.com\n\n" +
            "Or use the Support Chat feature available from your Profile."}
         </Section>
 

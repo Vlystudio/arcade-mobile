@@ -37,7 +37,7 @@ const TOS_SECTIONS = [
   { title: "12. Indemnification", body: "You agree to indemnify, defend, and hold harmless ArcadeTracker and its affiliates, officers, directors, employees, and agents from and against any claims, liabilities, damages, losses, and expenses arising out of or in any way connected with your use of the App, your content, or your violation of these Terms." },
   { title: "13. Governing Law", body: "These Terms are governed by the laws of the state in which ArcadeTracker's principal place of business is located, without regard to its conflict of law provisions. Any disputes arising under these Terms shall be resolved in the courts of that jurisdiction." },
   { title: "14. Changes to These Terms", body: "We may update these Terms at any time. When we make material changes, we will notify you through the App and require you to affirmatively accept the updated Terms before continuing to use the service." },
-  { title: "15. Contact Us", body: "Questions about these Terms of Service? Contact us at:\n\nsupport@arcadetracker.app\n\nOr use the Support Chat feature available from your Profile." },
+  { title: "15. Contact Us", body: "Questions about these Terms of Service? Contact us at:\n\nvaleyardvisuals@vlystudios.com\n\nOr use the Support Chat feature available from your Profile." },
 ];
 
 export default function LoginScreen() {

@@ -192,7 +192,7 @@ export default function PrivacyScreen() {
 
         <Section title="Contact">
           {"Questions or concerns about this Privacy Policy? Contact us at:\n\n" +
-           "support@arcadetracker.app\n\n" +
+           "valeyardvisuals@vlystudios.com\n\n" +
            "Or use the Support Chat feature available from your Profile."}
         </Section>
 
