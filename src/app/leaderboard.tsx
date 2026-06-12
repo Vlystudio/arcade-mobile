@@ -256,7 +256,8 @@ export default function LeaderboardScreen() {
       convId = created.id;
     }
 
-    const content = `🏆 Check out my leaderboard score!\n#${shareEntry.rank} · ${shareEntry.score.toLocaleString()} pts\n${shareEntry.game_name}`;
+    const whose = shareEntry.user_id === user.id ? "my" : `${shareEntry.username}'s`;
+    const content = `🏆 Check out ${whose} leaderboard score!\n#${shareEntry.rank} · ${shareEntry.score.toLocaleString()} pts\n${shareEntry.game_name}`;
     await supabase.from("messages").insert({ conversation_id: convId, sender_id: user.id, content });
     await supabase.from("conversations").update({
       last_message: `🏆 Shared a score`,
@@ -268,7 +269,10 @@ export default function LeaderboardScreen() {
   }
 
   async function shareScore(entry: LeaderEntry) {
-    const msg = `I ranked #${entry.rank} on the ${entry.game_name} leaderboard with ${entry.score.toLocaleString()} pts! 🎯`;
+    const mine = entry.user_id === user?.id;
+    const msg = mine
+      ? `I ranked #${entry.rank} on the ${entry.game_name} leaderboard with ${entry.score.toLocaleString()} pts! 🎯`
+      : `${entry.username} ranks #${entry.rank} on the ${entry.game_name} leaderboard with ${entry.score.toLocaleString()} pts! 🎯`;
     try {
       if (Platform.OS === "web" && typeof navigator !== "undefined" && (navigator as any).share) {
         await (navigator as any).share({ title: "My Arcade Score", text: msg });
@@ -638,11 +642,9 @@ function RankRow({ entry, isLast, isMe, onShare }: { entry: LeaderEntry; isLast:
         <Text style={styles.listGame}>{entry.game_name}</Text>
       </Pressable>
       <Text style={styles.listScore}>{entry.score.toLocaleString()}</Text>
-      {isMe && (
-        <Pressable style={styles.listShareBtn} onPress={onShare}>
-          <Ionicons name="share-outline" size={16} color="#06b6d4" />
-        </Pressable>
-      )}
+      <Pressable style={styles.listShareBtn} onPress={onShare}>
+        <Ionicons name="share-outline" size={16} color="#06b6d4" />
+      </Pressable>
     </View>
   );
 }
@@ -687,12 +689,10 @@ function PodiumCard({ entry, isMe, delay, onShare }: { entry: LeaderEntry; isMe:
       <Text style={styles.podiumUsername} numberOfLines={1}>{entry.username}</Text>
       <Text style={[styles.podiumScore, { color: accent }]}>{entry.score.toLocaleString()}</Text>
       <Text style={styles.podiumGame} numberOfLines={1}>{entry.game_name}</Text>
-      {isMe && (
-        <Pressable style={styles.shareBtn} onPress={onShare}>
-          <Ionicons name="share-outline" size={14} color="#06b6d4" />
-          <Text style={styles.shareBtnText}>Share</Text>
-        </Pressable>
-      )}
+      <Pressable style={styles.shareBtn} onPress={onShare}>
+        <Ionicons name="share-outline" size={14} color="#06b6d4" />
+        <Text style={styles.shareBtnText}>Share</Text>
+      </Pressable>
     </Animated.View>
   );
 }
