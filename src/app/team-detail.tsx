@@ -446,10 +446,11 @@ export default function TeamDetailScreen() {
     setCoachError(null);
     setCoachResult(null);
     try {
-      const resp = await fetch(`${API_BASE}/api/skeeball/coach`, {
+      const resp = await fetch(`${API_BASE}/api/skeeball/ai`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          tool: "coach",
           teamId,
           opponentTeamId: coachOpponent?.id ?? undefined,
           seasonStart: selectedSkeeSeason?.start_week ?? undefined,
@@ -501,10 +502,11 @@ export default function TeamDetailScreen() {
     setRecapError(null);
     setRecapResult(null);
     try {
-      const resp = await fetch(`${API_BASE}/api/skeeball/recap`, {
+      const resp = await fetch(`${API_BASE}/api/skeeball/ai`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          tool: "recap",
           teamId,
           mode,
           seasonStart: selectedSkeeSeason?.start_week ?? undefined,
