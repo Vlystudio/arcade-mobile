@@ -607,7 +607,8 @@ const s = StyleSheet.create({
   confirmText: { color: "#000", fontSize: 15, fontWeight: "900" },
   insufficientText: { color: "#f59e0b", fontSize: 12, textAlign: "center", marginTop: 10 },
 
-  teaserWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, gap: 16, marginTop: -40 },
+  // No negative margin here — overlapping the header steals its clicks.
+  teaserWrap: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32, gap: 16, marginBottom: 40 },
   teaserBadge: {
     width: 88, height: 88, borderRadius: 28,
     backgroundColor: "rgba(168,85,247,0.08)", borderWidth: 1, borderColor: "rgba(168,85,247,0.3)",
