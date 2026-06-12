@@ -1110,7 +1110,7 @@ export default function TeamDetailScreen() {
               <Text style={styles.compareBtnText}>Compare Players</Text>
             </Pressable>
 
-            {/* AI recaps */}
+            {/* Recaps (generated server-side; presented as league write-ups) */}
             {isTeamMember && (
               <>
                 <View style={styles.recapBtnRow}>
@@ -1221,9 +1221,9 @@ export default function TeamDetailScreen() {
                 );
               })()}
 
-              {/* AI Coach */}
+              {/* Matchup planner (model-assisted server-side; presented as a stats feature) */}
               <View style={styles.coachDivider} />
-              <Text style={styles.leagueSubLabel}>AI Coach</Text>
+              <Text style={styles.leagueSubLabel}>Matchup Planner</Text>
               <Pressable style={styles.opponentSelect} onPress={openOpponentPicker}>
                 <Ionicons name="people-outline" size={14} color="#a855f7" />
                 <Text style={styles.opponentSelectText}>
@@ -1253,7 +1253,7 @@ export default function TeamDetailScreen() {
                 {coachLoading
                   ? <ActivityIndicator size="small" color="#000" />
                   : <>
-                      <Ionicons name="sparkles" size={15} color="#000" />
+                      <Ionicons name="clipboard-outline" size={15} color="#000" />
                       <Text style={styles.coachBtnText}>
                         {coachOpponent ? "Analyze Matchup" : "Analyze My Team"}
                       </Text>
@@ -1268,14 +1268,14 @@ export default function TeamDetailScreen() {
               {coachResult && (
                 <View style={styles.coachResult}>
                   <View style={styles.coachResultHeader}>
-                    <Ionicons name="sparkles" size={13} color="#a855f7" />
+                    <Ionicons name="clipboard-outline" size={13} color="#a855f7" />
                     <Text style={styles.coachResultTitle}>Coach's Call</Text>
                     <View style={[styles.confChip, {
                       backgroundColor: coachResult.confidence === "high" ? "rgba(34,197,94,0.12)" : coachResult.confidence === "medium" ? "rgba(245,158,11,0.12)" : "rgba(100,100,100,0.12)",
                     }]}>
                       <Text style={[styles.confChipText, {
                         color: coachResult.confidence === "high" ? "#22c55e" : coachResult.confidence === "medium" ? "#f59e0b" : "#777",
-                      }]}>{coachResult.confidence} confidence</Text>
+                      }]}>{coachResult.confidence === "high" ? "strong data" : coachResult.confidence === "medium" ? "decent data" : "thin data"}</Text>
                     </View>
                   </View>
                   {coachResult.order.map((o) => (

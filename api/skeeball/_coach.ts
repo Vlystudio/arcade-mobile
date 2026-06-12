@@ -77,7 +77,7 @@ export default async function handler(req: any, res: any) {
   try {
     const result = await callLLM(prompt);
     if (!result) {
-      return sendJson(res, 503, { error: "AI coach is not configured. Add ANTHROPIC_API_KEY or OPENAI_API_KEY." });
+      return sendJson(res, 503, { error: "The matchup planner is not configured. Add ANTHROPIC_API_KEY or OPENAI_API_KEY." });
     }
     return sendJson(res, 200, { ok: true, ...result });
   } catch (err: any) {
@@ -102,7 +102,7 @@ function buildPrompt(
   opponentName: string | null,
   opponentPlayers: any[],
 ): string {
-  let prompt = `You are a skee-ball league coach. In this league, 3 players per team each shoot 3 balls per game (9 total). Shooting position P1 goes first, P2 second, P3 last. Higher scores are better (rings: 10-100 per ball, max 300/game per player... realistically 30-150).
+  let prompt = `You are a veteran skee-ball league captain giving lineup advice to a teammate. Write plainly and concretely, like a text message from a friend who knows the stats — never like an AI assistant or a press release.  In this league, 3 players per team each shoot 3 balls per game (9 total). Shooting position P1 goes first, P2 second, P3 last. Higher scores are better (rings: 10-100 per ball, max 300/game per player... realistically 30-150).
 
 TEAM "${teamName}" season stats by shooting position:
 ${describePlayers(players)}

@@ -131,7 +131,7 @@ export default async function handler(req: any, res: any) {
     return `- ${p.name}: ${p.games} games, avg ${p.avg}, best ${p.best}${season && season.games > p.games ? ` (season avg ${season.avg})` : ""}`;
   }).join("\n");
 
-  const prompt = `You are a skee-ball league commentator writing a short, fun, encouraging recap for team "${team.name}". 3 players per team, 9 balls per game, placements earn league points (1st is best).
+  const prompt = `You write the weekly results blurb for a bar's skee-ball league, covering team "${team.name}". 3 players per team, 9 balls per game, placements earn league points (1st is best). Write like a league commissioner posting in the group chat: plain, dry, specific. NEVER sound like marketing copy or an AI assistant.
 
 ${mode === "week" ? "THIS WEEK'S RESULTS" : "SEASON RESULTS"}:
 ${weekLines}
@@ -140,7 +140,8 @@ PLAYER PERFORMANCES${mode === "week" ? " (this week, with season context)" : ""}
 ${playerLines}
 
 Write the recap. Rules:
-- 3 to 5 sentences, energetic but grounded in the numbers above.
+- 3 to 4 sentences, casual and matter-of-fact. At most ONE exclamation point total, ideally none.
+- Banned: "electrifying", "force to be reckoned with", "shined", "dazzling", "made strides", "winning momentum", "what a week", and any similar hype phrasing. Just say what happened with the numbers.
 - Call out the top performer and anyone who beat their season average.
 - Mention the placement result and what it means for league points.
 - One concrete, actionable focus for next ${mode === "week" ? "week" : "season"}.
@@ -150,7 +151,7 @@ Respond with ONLY valid JSON: {"recap": "...", "highlights": ["short bullet", "s
   try {
     const result = await callLLM(prompt);
     if (!result) {
-      return sendJson(res, 503, { error: "AI recap is not configured. Add ANTHROPIC_API_KEY or OPENAI_API_KEY." });
+      return sendJson(res, 503, { error: "Recaps are not configured. Add ANTHROPIC_API_KEY or OPENAI_API_KEY." });
     }
     return sendJson(res, 200, { ok: true, mode, ...result });
   } catch (err: any) {
