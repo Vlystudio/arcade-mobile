@@ -18,6 +18,7 @@ import { ListSkeleton } from "../components/skeleton";
 import { showToast } from "../components/toast";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { openUserProfile } from "../lib/open-profile";
 import { Avatar } from "../components/avatar";
 import {
   fetchSkeeSeasons,
@@ -56,7 +57,7 @@ export default function LeaguesScreen() {
 
   // Pick'em
   const [myPick, setMyPick] = useState<string | null>(null);
-  const [pickemBoard, setPickemBoard] = useState<{ username: string; correct: number; picks: number }[]>([]);
+  const [pickemBoard, setPickemBoard] = useState<{ user_id: string; username: string; correct: number; picks: number }[]>([]);
   const [picking, setPicking] = useState<string | null>(null);
   const [picksLocked, setPicksLocked] = useState(false);
 
@@ -454,11 +455,11 @@ export default function LeaguesScreen() {
                       <View style={{ marginTop: 8 }}>
                         <Text style={styles.pickemBoardLabel}>Predictors Leaderboard</Text>
                         {pickemBoard.map((b, i) => (
-                          <View key={b.username + i} style={styles.pickemBoardRow}>
+                          <Pressable key={b.username + i} style={styles.pickemBoardRow} onPress={() => openUserProfile(b.user_id)}>
                             <Text style={styles.pickemBoardRank}>{i + 1}</Text>
                             <Text style={styles.pickemBoardName} numberOfLines={1}>{b.username}</Text>
                             <Text style={styles.pickemBoardScore}>{b.correct}/{b.picks}</Text>
-                          </View>
+                          </Pressable>
                         ))}
                       </View>
                     )}
@@ -475,7 +476,7 @@ export default function LeaguesScreen() {
                       Player of the Week · {skeeAwards.week_of ? fmtDate(skeeAwards.week_of) : ""}
                     </Text>
                   </View>
-                  <View style={styles.potwRow}>
+                  <Pressable style={styles.potwRow} onPress={() => openUserProfile(skeeAwards.top!.user_id)}>
                     <Avatar uri={skeeAwards.top.avatar_url} name={skeeAwards.top.username} size={40} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.potwName}>{skeeAwards.top.username}</Text>
@@ -484,14 +485,14 @@ export default function LeaguesScreen() {
                       </Text>
                     </View>
                     <Text style={styles.potwEmoji}>👑</Text>
-                  </View>
+                  </Pressable>
                   {skeeAwards.most_improved && skeeAwards.most_improved.user_id !== skeeAwards.top.user_id && (
-                    <View style={styles.improvedRow}>
+                    <Pressable style={styles.improvedRow} onPress={() => openUserProfile(skeeAwards.most_improved!.user_id)}>
                       <Ionicons name="trending-up" size={13} color="#22c55e" />
                       <Text style={styles.improvedText}>
                         Most improved: {skeeAwards.most_improved.username} (+{skeeAwards.most_improved.delta_pct}% vs last week)
                       </Text>
-                    </View>
+                    </Pressable>
                   )}
                 </View>
               )}

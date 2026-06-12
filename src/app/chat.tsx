@@ -26,6 +26,7 @@ import BottomTabBar from "../components/bottom-tab-bar";
 import { Avatar } from "../components/avatar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { openUserProfile } from "../lib/open-profile";
 
 type Conversation = {
   id: string;
@@ -436,7 +437,9 @@ function SwipeableConvRow({
               if (isOpen.value) { close(); } else { onOpen(); }
             }}
           >
-            <Avatar uri={conv.other_avatar_url} name={conv.other_username} size={46} />
+            <Pressable onPress={() => openUserProfile(conv.other_user_id)}>
+              <Avatar uri={conv.other_avatar_url} name={conv.other_username} size={46} />
+            </Pressable>
             <View style={styles.convBody}>
               <Text style={[styles.convName, isUnread && styles.convNameUnread]}>
                 {conv.other_username}

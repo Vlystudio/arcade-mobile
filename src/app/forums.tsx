@@ -22,6 +22,7 @@ import { ListSkeleton } from "../components/skeleton";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
+import { openUserProfile } from "../lib/open-profile";
 import { moderateText } from "../../lib/moderate-text";
 import { isElevatedRole } from "../components/role-badge";
 import { validateForumDescription, validateForumTitle } from "../../lib/validation";
@@ -275,9 +276,15 @@ export default function ForumsScreen() {
                             {forum.description ? (
                               <Text style={styles.boardDesc} numberOfLines={2}>{forum.description}</Text>
                             ) : null}
-                            <Text style={styles.boardByline}>
-                              by {forum.creator_username} · created {relTime(forum.created_at)}
-                            </Text>
+                            <Pressable
+                              onPress={() => forum.creator_id && openUserProfile(forum.creator_id)}
+                              disabled={!forum.creator_id}
+                              hitSlop={4}
+                            >
+                              <Text style={styles.boardByline}>
+                                by <Text style={{ color: "#06b6d4" }}>{forum.creator_username}</Text> · created {relTime(forum.created_at)}
+                              </Text>
+                            </Pressable>
                           </View>
 
                           {/* Stats column */}

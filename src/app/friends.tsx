@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../components/avatar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { openUserProfile } from "../lib/open-profile";
 
 type Tab = "friends" | "requests" | "find";
 
@@ -270,10 +271,12 @@ export default function FriendsScreen() {
             }
             renderItem={({ item }) => (
               <View style={styles.row}>
-                <View style={styles.avatarWrap}>
+                <Pressable style={styles.avatarWrap} onPress={() => openUserProfile(item.id)}>
+                  <Pressable onPress={() => openUserProfile(item.id)}>
                   <Avatar uri={item.avatar_url} name={item.username} size={46} />
+                </Pressable>
                   <View style={[styles.dot, item.online_status === "online" ? styles.dotOn : styles.dotOff]} />
-                </View>
+                </Pressable>
                 <View style={styles.info}>
                   <Text style={styles.name}>{item.username}</Text>
                   <Text style={[styles.sub, item.online_status === "online" && { color: "#22c55e" }]}>
@@ -373,7 +376,9 @@ export default function FriendsScreen() {
               }
               renderItem={({ item }) => (
                 <View style={styles.row}>
-                  <Avatar uri={item.avatar_url} name={item.username} size={44} />
+                  <Pressable onPress={() => openUserProfile(item.id)}>
+                    <Avatar uri={item.avatar_url} name={item.username} size={44} />
+                  </Pressable>
                   <View style={styles.info}>
                     <Text style={styles.name}>{item.username}</Text>
                     {item.friendshipStatus === "friends" && <Text style={[styles.sub, { color: "#06b6d4" }]}>Friends</Text>}

@@ -15,6 +15,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../components/avatar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { openUserProfile, openUserProfileByName } from "../lib/open-profile";
 
 type PlayerRecord = { username: string; avatar_url: string | null; value: number; week_of?: string } | null;
 type TeamRecord = { team_name: string; value: number; week_of?: string } | null;
@@ -96,10 +97,14 @@ export default function HallOfFameScreen() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.recordTitle}>{r.title}</Text>
-                  <View style={s.holderRow}>
+                  <Pressable
+                    style={s.holderRow}
+                    onPress={() => r.player && openUserProfileByName(holder)}
+                    disabled={!r.player}
+                  >
                     {r.player && <Avatar uri={r.player.avatar_url} name={holder} size={24} />}
                     <Text style={s.holderName}>{holder}</Text>
-                  </View>
+                  </Pressable>
                   {week && <Text style={s.recordWeek}>{week}</Text>}
                 </View>
                 <View style={s.valueWrap}>

@@ -13,6 +13,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../components/avatar";
 import { supabase } from "../../lib/supabase";
+import { openUserProfile } from "../lib/open-profile";
 
 type ScoreEntry = {
   id: string;
@@ -137,7 +138,9 @@ function PodiumCard({ entry, rank }: { entry: ScoreEntry; rank: number }) {
         <Ionicons name={medalIcon as any} size={20 * size} color={medal} />
       </View>
       <Text style={[styles.podiumRank, { color: medal }]}>#{rank}</Text>
-      <Avatar uri={entry.avatar_url} name={entry.username} size={rank === 1 ? 52 : 44} />
+      <Pressable onPress={() => openUserProfile(entry.user_id)}>
+        <Avatar uri={entry.avatar_url} name={entry.username} size={rank === 1 ? 52 : 44} />
+      </Pressable>
       <Text style={styles.podiumName} numberOfLines={1}>{entry.username}</Text>
       <Text style={[styles.podiumScore, { color: medal }]}>{entry.score.toLocaleString()}</Text>
       <Text style={styles.podiumDate}>{relDate(entry.created_at)}</Text>
@@ -150,7 +153,9 @@ function ScoreRow({ entry, rank }: { entry: ScoreEntry; rank: number }) {
   return (
     <View style={[styles.row, isTop10 && styles.rowTop10]}>
       <Text style={[styles.rowRank, isTop10 && styles.rowRankTop10]}>#{rank}</Text>
-      <Avatar uri={entry.avatar_url} name={entry.username} size={36} />
+      <Pressable onPress={() => openUserProfile(entry.user_id)}>
+        <Avatar uri={entry.avatar_url} name={entry.username} size={36} />
+      </Pressable>
       <Text style={styles.rowName} numberOfLines={1}>{entry.username}</Text>
       <View style={styles.rowRight}>
         <Text style={[styles.rowScore, isTop10 && styles.rowScoreTop10]}>

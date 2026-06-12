@@ -19,6 +19,7 @@ import {
 import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
+import { openUserProfile } from "../lib/open-profile";
 import { moderateText } from "../../lib/moderate-text";
 import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
 import { useRequireAuth } from "../hooks/use-require-auth";
@@ -889,7 +890,9 @@ export default function TeamDetailScreen() {
               return (
                 <View key={m.user_id}>
                   <Pressable style={styles.leagueMemberRow} onPress={() => toggleMemberExpand(m.user_id)}>
-                    <Avatar uri={m.avatar_url} name={m.username} size={34} radius={11} />
+                    <Pressable onPress={() => openUserProfile(m.user_id)}>
+                      <Avatar uri={m.avatar_url} name={m.username} size={34} radius={11} />
+                    </Pressable>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.leagueMemberName}>{m.username}</Text>
                       <Text style={styles.leagueMemberMeta}>
@@ -1702,9 +1705,9 @@ function PlayerRow({ player, rank, captainMode, onActionPress }: {
       {/* Left: rank + avatar + name */}
       <View style={styles.playerLeft}>
         <Text style={styles.rankNum}>#{rank}</Text>
-        <View style={[{ opacity: hasScores ? 1 : 0.4 }]}>
+        <Pressable style={[{ opacity: hasScores ? 1 : 0.4 }]} onPress={() => openUserProfile(player.user_id)}>
           <Avatar uri={player.avatar_url} name={player.username} size={44} radius={14} />
-        </View>
+        </Pressable>
         <View style={{ flex: 1 }}>
           <View style={styles.playerNameRow}>
             <Text style={styles.playerName} numberOfLines={1}>{player.username}</Text>

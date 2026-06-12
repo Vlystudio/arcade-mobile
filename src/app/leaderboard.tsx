@@ -24,6 +24,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { openUserProfile } from "../lib/open-profile";
 
 type LeaderEntry = {
   rank: number;
@@ -629,13 +630,13 @@ function RankRow({ entry, isLast, isMe, onShare }: { entry: LeaderEntry; isLast:
     <View style={[styles.listRowWrap, !isLast && styles.listRowBorder]}>
       <Text style={styles.listRank}>#{entry.rank}</Text>
       <View style={[styles.listTypeDot, { backgroundColor: typeColor }]} />
-      <View style={styles.listInfo}>
+      <Pressable style={styles.listInfo} onPress={() => openUserProfile(entry.user_id)}>
         <Text style={styles.listUsername}>
           {entry.username}
           {isMe ? <Text style={styles.listYou}> · you</Text> : ""}
         </Text>
         <Text style={styles.listGame}>{entry.game_name}</Text>
-      </View>
+      </Pressable>
       <Text style={styles.listScore}>{entry.score.toLocaleString()}</Text>
       {isMe && (
         <Pressable style={styles.listShareBtn} onPress={onShare}>
@@ -676,13 +677,13 @@ function PodiumCard({ entry, isMe, delay, onShare }: { entry: LeaderEntry; isMe:
     ]}>
       {isFirst && <View style={styles.crownRow}><Text style={styles.crownText}>👑</Text></View>}
       <Text style={styles.podiumMedal}>{medals[entry.rank - 1]}</Text>
-      <View style={[
+      <Pressable onPress={() => openUserProfile(entry.user_id)} style={[
         styles.podiumAvatar,
         { width: avatarSize, height: avatarSize, borderRadius: avatarSize / 2, borderColor: accent },
         isFirst && { shadowColor: accent, shadowOpacity: 0.5, shadowRadius: 12, shadowOffset: { width: 0, height: 0 } },
       ]}>
         <Text style={[styles.podiumAvatarText, { fontSize: avatarSize * 0.38 }]}>{entry.username[0].toUpperCase()}</Text>
-      </View>
+      </Pressable>
       <Text style={styles.podiumUsername} numberOfLines={1}>{entry.username}</Text>
       <Text style={[styles.podiumScore, { color: accent }]}>{entry.score.toLocaleString()}</Text>
       <Text style={styles.podiumGame} numberOfLines={1}>{entry.game_name}</Text>

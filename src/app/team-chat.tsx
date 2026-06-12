@@ -16,6 +16,7 @@ import {
 import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
+import { openUserProfile } from "../lib/open-profile";
 import { moderateText } from "../../lib/moderate-text";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { validateChatMessage } from "../../lib/validation";
@@ -176,7 +177,11 @@ export default function TeamChatScreen() {
               const isMe = msg.user_id === user?.id;
               return (
                 <View style={[styles.msgRow, isMe && styles.msgRowMe]}>
-                  {!isMe && <Avatar uri={msg.avatar_url} name={msg.username} size={34} radius={10} />}
+                  {!isMe && (
+                    <Pressable onPress={() => openUserProfile(msg.user_id)}>
+                      <Avatar uri={msg.avatar_url} name={msg.username} size={34} radius={10} />
+                    </Pressable>
+                  )}
                   <View style={[styles.bubble, isMe && styles.bubbleMe]}>
                     {!isMe && <Text style={styles.bubbleName}>{msg.username}</Text>}
                     <Text style={[styles.bubbleText, isMe && styles.bubbleTextMe]}>{msg.content}</Text>
