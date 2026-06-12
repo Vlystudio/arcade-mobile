@@ -121,6 +121,15 @@ export default function WelcomeScreen() {
           Free to join — browse teams, track scores, and follow the league.{"\n"}
           Season registration: $200 per team of 3, or $50 solo.
         </Text>
+        <View style={s.legalRow}>
+          <Pressable onPress={() => router.push("/privacy" as any)}>
+            <Text style={s.legalLink}>Privacy Policy</Text>
+          </Pressable>
+          <Text style={s.legalDot}>·</Text>
+          <Pressable onPress={() => router.push("/terms" as any)}>
+            <Text style={s.legalLink}>Terms of Service</Text>
+          </Pressable>
+        </View>
         <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
@@ -195,4 +204,7 @@ const s = StyleSheet.create({
   featureBody: { color: "#999", fontSize: 13.5, lineHeight: 19 },
 
   finePrint: { color: "#777", fontSize: 12, textAlign: "center", lineHeight: 18, marginTop: 14 },
+  legalRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 14 },
+  legalLink: { color: "#888", fontSize: 12, fontWeight: "700", textDecorationLine: "underline" },
+  legalDot: { color: "#444", fontSize: 12 },
 });

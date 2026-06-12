@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import Head from "expo-router/head";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
@@ -8,8 +9,12 @@ export const CURRENT_TOS_VERSION = "2026-06";
 export default function TermsScreen() {
   return (
     <SafeAreaView style={s.root} edges={["top", "bottom"]}>
+      <Head>
+        <title>Terms of Service · ArcadeTracker</title>
+        <meta name="description" content="ArcadeTracker terms of service." />
+      </Head>
       <View style={s.header}>
-        <Pressable style={s.backBtn} onPress={() => router.back()}>
+        <Pressable style={s.backBtn} hitSlop={10} onPress={() => router.canGoBack() ? router.back() : router.replace("/welcome" as any)}>
           <Ionicons name="arrow-back" size={20} color="#fff" />
         </Pressable>
         <Text style={s.headerTitle}>Terms of Service</Text>
