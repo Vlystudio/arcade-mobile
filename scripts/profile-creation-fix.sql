@@ -37,6 +37,25 @@ WHERE p.id IS NULL
 ON CONFLICT (id) DO NOTHING;
 
 
+-- ── 1b. Reclaim chosen usernames for backfilled profiles ──────
+-- Backfilled rows (step 1) and moderation-rejected retries get a
+-- UUID-derived placeholder username, but the name the user actually chose
+-- at signup still lives in auth.users metadata. Adopt it whenever it's
+-- moderation-clean and not taken by someone else. Idempotent.
+UPDATE public.profiles p
+   SET username = au.raw_user_meta_data->>'username'
+  FROM auth.users au
+ WHERE au.id = p.id
+   AND p.username ~ '^user_[0-9a-f]{32}$'
+   AND COALESCE(au.raw_user_meta_data->>'username', '') <> ''
+   AND public.check_content_moderation(au.raw_user_meta_data->>'username') IS NULL
+   AND NOT EXISTS (
+     SELECT 1 FROM public.profiles q
+      WHERE lower(q.username) = lower(au.raw_user_meta_data->>'username')
+        AND q.id <> p.id
+   );
+
+
 -- ── 2. Harden handle_new_user() ───────────────────────────────
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
