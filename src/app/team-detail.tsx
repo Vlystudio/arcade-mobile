@@ -26,13 +26,26 @@ import { validateChatMessage } from "../../lib/validation";
 import { RingBreakdown, TrendBadge, WeeklyBarChart } from "../components/skeeball-stats";
 import {
   fetchPlayerStats,
+  fetchPositionStats,
   fetchSkeeSeasons,
   fetchTeamStats,
+  fetchTeamWeekHistory,
+  suggestOrder,
   weekLabel,
+  type OrderSuggestion,
+  type PlayerPositionStats,
   type PlayerStats as LeaguePlayerStats,
   type SkeeSeason,
   type TeamStats as LeagueTeamStats,
+  type TeamWeekHistory,
 } from "../lib/skeeball-stats";
+import { API_BASE } from "../../lib/api-base";
+
+type CoachResult = {
+  order: { username: string; position: number; reason: string }[];
+  tips: string[];
+  confidence: "high" | "medium" | "low";
+};
 
 const SLOTS = ["6:00 PM", "7:15 PM", "8:30 PM"] as const;
 type SlotTime = typeof SLOTS[number];
@@ -122,6 +135,16 @@ export default function TeamDetailScreen() {
   const [leagueLoading, setLeagueLoading] = useState(false);
   const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
   const [expandedMemberStats, setExpandedMemberStats] = useState<LeaguePlayerStats | null>(null);
+
+  // Lineup optimizer + AI coach
+  const [positionStats, setPositionStats] = useState<PlayerPositionStats[]>([]);
+  const [weekHistory, setWeekHistory] = useState<TeamWeekHistory | null>(null);
+  const [coachOpponent, setCoachOpponent] = useState<{ id: string; name: string } | null>(null);
+  const [opponentPickerVisible, setOpponentPickerVisible] = useState(false);
+  const [opponentOptions, setOpponentOptions] = useState<{ id: string; name: string }[]>([]);
+  const [coachResult, setCoachResult] = useState<CoachResult | null>(null);
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachError, setCoachError] = useState<string | null>(null);
 
   // Announcements
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -387,11 +410,57 @@ export default function TeamDetailScreen() {
     setLeagueLoading(true);
     setExpandedMemberId(null);
     setExpandedMemberStats(null);
-    fetchTeamStats(teamId, selectedSkeeSeason).then((stats) => {
+    setCoachResult(null);
+    Promise.all([
+      fetchTeamStats(teamId, selectedSkeeSeason),
+      fetchPositionStats(teamId, selectedSkeeSeason),
+      fetchTeamWeekHistory(teamId, selectedSkeeSeason),
+    ]).then(([stats, posStats, history]) => {
       setLeagueTeam(stats);
+      setPositionStats(posStats);
+      setWeekHistory(history);
       setLeagueLoading(false);
     });
   }, [user, teamId, selectedSkeeSeasonId, skeeSeasons.length]);
+
+  async function openOpponentPicker() {
+    if (opponentOptions.length === 0) {
+      const { data } = await supabase.from("teams").select("id, name").neq("id", teamId).order("name");
+      setOpponentOptions((data ?? []).map((t: any) => ({ id: t.id, name: t.name })));
+    }
+    setOpponentPickerVisible(true);
+  }
+
+  async function askCoach() {
+    if (!teamId || coachLoading) return;
+    setCoachLoading(true);
+    setCoachError(null);
+    setCoachResult(null);
+    try {
+      const resp = await fetch(`${API_BASE}/api/skeeball/coach`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamId,
+          opponentTeamId: coachOpponent?.id ?? undefined,
+          seasonStart: selectedSkeeSeason?.start_week ?? undefined,
+          seasonEnd: selectedSkeeSeason?.end_week ?? undefined,
+        }),
+      });
+      const json = await resp.json();
+      if (!resp.ok || json.error) {
+        setCoachError(json.error ?? "Coach analysis failed. Please try again.");
+      } else if (json.ok === false) {
+        setCoachError(json.message ?? "Not enough data yet.");
+      } else {
+        setCoachResult({ order: json.order ?? [], tips: json.tips ?? [], confidence: json.confidence ?? "low" });
+      }
+    } catch {
+      setCoachError("Network error. Please try again.");
+    } finally {
+      setCoachLoading(false);
+    }
+  }
 
   async function toggleMemberExpand(userId: string) {
     if (expandedMemberId === userId) {
@@ -713,6 +782,181 @@ export default function TeamDetailScreen() {
           </View>
         )}
 
+        {/* ── Lineup Optimizer (team members only — strategy stays private) ── */}
+        {isTeamMember && positionStats.length > 0 && (
+          <>
+            <SectionLabel text="Lineup Optimizer" />
+            <View style={styles.leagueCard}>
+              {/* Per-position averages table */}
+              <View style={styles.posTableHead}>
+                <Text style={[styles.posTableCell, { flex: 1.6, textAlign: "left" }]}>Player</Text>
+                <Text style={styles.posTableCell}>1st</Text>
+                <Text style={styles.posTableCell}>2nd</Text>
+                <Text style={styles.posTableCell}>3rd</Text>
+              </View>
+              {positionStats.map((p) => {
+                const best = Math.max(...[1, 2, 3].map((pos) => p.positions[String(pos) as "1" | "2" | "3"]?.avg ?? -1));
+                return (
+                  <View key={p.user_id} style={styles.posTableRow}>
+                    <Text style={[styles.posTableName, { flex: 1.6 }]} numberOfLines={1}>{p.username}</Text>
+                    {[1, 2, 3].map((pos) => {
+                      const st = p.positions[String(pos) as "1" | "2" | "3"];
+                      const isBest = st && st.avg === best && best >= 0;
+                      return (
+                        <Text key={pos} style={[styles.posTableCell, isBest && { color: "#22c55e", fontWeight: "900" }]}>
+                          {st ? st.avg : "—"}
+                        </Text>
+                      );
+                    })}
+                  </View>
+                );
+              })}
+
+              {/* Statistical suggestion */}
+              {(() => {
+                const suggestion: OrderSuggestion | null = suggestOrder(positionStats);
+                if (!suggestion) return (
+                  <Text style={styles.coachHint}>Play more league games to unlock order suggestions.</Text>
+                );
+                return (
+                  <>
+                    <Text style={[styles.leagueSubLabel, { marginTop: 10 }]}>Suggested Order (season data)</Text>
+                    <View style={styles.suggestRow}>
+                      {suggestion.order.map((o) => (
+                        <View key={o.user_id} style={styles.suggestChip}>
+                          <Text style={styles.suggestChipPos}>{o.position}</Text>
+                          <Text style={styles.suggestChipName} numberOfLines={1}>{o.username}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    {suggestion.tips.map((tip, i) => (
+                      <View key={i} style={styles.tipRow}>
+                        <Ionicons name="bulb-outline" size={13} color="#f59e0b" />
+                        <Text style={styles.tipText}>{tip}</Text>
+                      </View>
+                    ))}
+                  </>
+                );
+              })()}
+
+              {/* AI Coach */}
+              <View style={styles.coachDivider} />
+              <Text style={styles.leagueSubLabel}>AI Coach</Text>
+              <Pressable style={styles.opponentSelect} onPress={openOpponentPicker}>
+                <Ionicons name="people-outline" size={14} color="#a855f7" />
+                <Text style={styles.opponentSelectText}>
+                  {coachOpponent ? `vs ${coachOpponent.name}` : "Optional: pick this week's opponent"}
+                </Text>
+                {coachOpponent && (
+                  <Pressable onPress={() => setCoachOpponent(null)} hitSlop={8}>
+                    <Ionicons name="close-circle" size={16} color="#555" />
+                  </Pressable>
+                )}
+                <Ionicons name="chevron-down" size={13} color="#555" />
+              </Pressable>
+              <Pressable
+                style={[styles.coachBtn, coachLoading && { opacity: 0.6 }]}
+                onPress={askCoach}
+                disabled={coachLoading}
+              >
+                {coachLoading
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <>
+                      <Ionicons name="sparkles" size={15} color="#000" />
+                      <Text style={styles.coachBtnText}>
+                        {coachOpponent ? "Analyze Matchup" : "Analyze My Team"}
+                      </Text>
+                    </>}
+              </Pressable>
+              {coachError && (
+                <View style={styles.tipRow}>
+                  <Ionicons name="alert-circle-outline" size={13} color="#ef4444" />
+                  <Text style={[styles.tipText, { color: "#ef4444" }]}>{coachError}</Text>
+                </View>
+              )}
+              {coachResult && (
+                <View style={styles.coachResult}>
+                  <View style={styles.coachResultHeader}>
+                    <Ionicons name="sparkles" size={13} color="#a855f7" />
+                    <Text style={styles.coachResultTitle}>Coach's Call</Text>
+                    <View style={[styles.confChip, {
+                      backgroundColor: coachResult.confidence === "high" ? "rgba(34,197,94,0.12)" : coachResult.confidence === "medium" ? "rgba(245,158,11,0.12)" : "rgba(100,100,100,0.12)",
+                    }]}>
+                      <Text style={[styles.confChipText, {
+                        color: coachResult.confidence === "high" ? "#22c55e" : coachResult.confidence === "medium" ? "#f59e0b" : "#777",
+                      }]}>{coachResult.confidence} confidence</Text>
+                    </View>
+                  </View>
+                  {coachResult.order.map((o) => (
+                    <View key={o.position} style={styles.coachOrderRow}>
+                      <View style={styles.suggestChipPosWrap}>
+                        <Text style={styles.suggestChipPos}>{o.position}</Text>
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.coachOrderName}>{o.username}</Text>
+                        <Text style={styles.coachOrderReason}>{o.reason}</Text>
+                      </View>
+                    </View>
+                  ))}
+                  {coachResult.tips.map((tip, i) => (
+                    <View key={i} style={styles.tipRow}>
+                      <Ionicons name="bulb-outline" size={13} color="#a855f7" />
+                      <Text style={styles.tipText}>{tip}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* ── Season Schedule ── */}
+        {(weekHistory?.upcoming || (weekHistory?.weeks.length ?? 0) > 0) && (
+          <>
+            <SectionLabel text="Season Schedule" />
+            <View style={styles.leagueCard}>
+              {weekHistory?.upcoming && (
+                <View style={styles.upcomingRow}>
+                  <View style={styles.upcomingIcon}>
+                    <Ionicons name="calendar-outline" size={16} color="#22c55e" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.upcomingTitle}>
+                      This week · {weekHistory.upcoming.slot_time}
+                    </Text>
+                    <Text style={styles.upcomingSub}>
+                      {weekLabel(weekHistory.upcoming.week_of, selectedSkeeSeason)}
+                      {weekHistory.upcoming.week_label ? ` · ${weekHistory.upcoming.week_label}` : ""}
+                    </Text>
+                  </View>
+                </View>
+              )}
+              {(weekHistory?.weeks ?? []).slice().reverse().map((w) => (
+                <View key={w.week_of} style={styles.histRow}>
+                  <View style={styles.histWeekCol}>
+                    <Text style={styles.histWeek}>{weekLabel(w.week_of, selectedSkeeSeason)}</Text>
+                    {w.slot_time && <Text style={styles.histSlot}>{w.slot_time}</Text>}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.histResult}>
+                      {w.placement === 1 ? "🥇" : w.placement === 2 ? "🥈" : w.placement === 3 ? "🥉" : w.placement ? `${w.placement}th` : "—"}
+                      {"  "}{w.game_score} pts · +{w.points} LP
+                    </Text>
+                    {w.opponents.length > 0 && (
+                      <Text style={styles.histOpponents} numberOfLines={2}>
+                        vs {w.opponents.map((o) => `${o.team_name} (${o.game_score})`).join(", ")}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+              {(weekHistory?.weeks.length ?? 0) === 0 && !weekHistory?.upcoming && (
+                <Text style={styles.coachHint}>No scheduled weeks yet.</Text>
+              )}
+            </View>
+          </>
+        )}
+
         {/* Announcements */}
         <View style={styles.announceSectionRow}>
           <Text style={styles.annSectionLabel}>Announcements</Text>
@@ -824,6 +1068,32 @@ export default function TeamDetailScreen() {
                   </Pressable>
                 );
               })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Opponent picker (AI coach) */}
+      <Modal visible={opponentPickerVisible} transparent animationType="slide" onRequestClose={() => setOpponentPickerVisible(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setOpponentPickerVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Pick Opponent</Text>
+            <Text style={styles.modalSub}>The coach will factor in their season data</Text>
+            <ScrollView style={{ maxHeight: 380 }}>
+              {opponentOptions.map((t) => (
+                <Pressable
+                  key={t.id}
+                  style={[styles.seasonRow, coachOpponent?.id === t.id && styles.seasonRowActive]}
+                  onPress={() => { setCoachOpponent(t); setOpponentPickerVisible(false); }}
+                >
+                  <Text style={[styles.seasonRowLabel, coachOpponent?.id === t.id && styles.seasonRowLabelActive]}>{t.name}</Text>
+                  {coachOpponent?.id === t.id && <Ionicons name="checkmark-circle" size={20} color="#a855f7" />}
+                </Pressable>
+              ))}
+              {opponentOptions.length === 0 && (
+                <ActivityIndicator color="#a855f7" style={{ marginVertical: 24 }} />
+              )}
             </ScrollView>
           </Pressable>
         </Pressable>
@@ -1273,6 +1543,76 @@ const styles = StyleSheet.create({
   compareBtnText: { color: "#06b6d4", fontSize: 13, fontWeight: "800" },
   liveSeasonChip: { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
   liveSeasonChipText: { color: "#22c55e", fontSize: 9, fontWeight: "900" },
+
+  // Lineup optimizer
+  posTableHead: { flexDirection: "row", paddingBottom: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
+  posTableRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#181818" },
+  posTableCell: { flex: 1, color: "#666", fontSize: 12.5, fontWeight: "700", textAlign: "center" },
+  posTableName: { color: "#fff", fontSize: 13.5, fontWeight: "800" },
+  suggestRow: { flexDirection: "row", gap: 8, marginTop: 4, marginBottom: 6 },
+  suggestChip: {
+    flex: 1, flexDirection: "row", alignItems: "center", gap: 7,
+    backgroundColor: "rgba(34,197,94,0.07)", borderRadius: 12, padding: 9,
+    borderWidth: 1, borderColor: "rgba(34,197,94,0.2)",
+  },
+  suggestChipPosWrap: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: "rgba(34,197,94,0.15)", alignItems: "center", justifyContent: "center",
+  },
+  suggestChipPos: {
+    width: 20, height: 20, borderRadius: 10, overflow: "hidden",
+    backgroundColor: "rgba(34,197,94,0.15)", color: "#22c55e",
+    fontSize: 11, fontWeight: "900", textAlign: "center", lineHeight: 20,
+  },
+  suggestChipName: { flex: 1, color: "#fff", fontSize: 12, fontWeight: "800" },
+  tipRow: { flexDirection: "row", alignItems: "flex-start", gap: 7, marginTop: 6 },
+  tipText: { flex: 1, color: "#999", fontSize: 12.5, lineHeight: 18 },
+  coachHint: { color: "#444", fontSize: 12.5, marginTop: 8 },
+  coachDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#1e1e1e", marginVertical: 12 },
+  opponentSelect: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#0c0c0c", borderRadius: 12, padding: 11, marginTop: 6,
+    borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  opponentSelectText: { flex: 1, color: "#888", fontSize: 13, fontWeight: "600" },
+  coachBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7,
+    backgroundColor: "#a855f7", borderRadius: 12, paddingVertical: 12, marginTop: 8,
+  },
+  coachBtnText: { color: "#000", fontSize: 13.5, fontWeight: "900" },
+  coachResult: {
+    backgroundColor: "rgba(168,85,247,0.05)", borderRadius: 14, padding: 12, marginTop: 10,
+    borderWidth: 1, borderColor: "rgba(168,85,247,0.2)", gap: 8,
+  },
+  coachResultHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  coachResultTitle: { flex: 1, color: "#a855f7", fontSize: 13, fontWeight: "900" },
+  confChip: { borderRadius: 7, paddingHorizontal: 7, paddingVertical: 3 },
+  confChipText: { fontSize: 10, fontWeight: "800" },
+  coachOrderRow: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
+  coachOrderName: { color: "#fff", fontSize: 13.5, fontWeight: "800" },
+  coachOrderReason: { color: "#777", fontSize: 12, lineHeight: 17, marginTop: 1 },
+
+  // Season schedule
+  upcomingRow: {
+    flexDirection: "row", alignItems: "center", gap: 11,
+    backgroundColor: "rgba(34,197,94,0.05)", borderRadius: 12, padding: 11, marginBottom: 6,
+    borderWidth: 1, borderColor: "rgba(34,197,94,0.18)",
+  },
+  upcomingIcon: {
+    width: 34, height: 34, borderRadius: 11,
+    backgroundColor: "rgba(34,197,94,0.1)", alignItems: "center", justifyContent: "center",
+  },
+  upcomingTitle: { color: "#22c55e", fontSize: 14, fontWeight: "800" },
+  upcomingSub: { color: "#555", fontSize: 11.5, marginTop: 1 },
+  histRow: {
+    flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 9,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  histWeekCol: { width: 64 },
+  histWeek: { color: "#fff", fontSize: 13, fontWeight: "800" },
+  histSlot: { color: "#06b6d4", fontSize: 10.5, fontWeight: "700", marginTop: 2 },
+  histResult: { color: "#ccc", fontSize: 13, fontWeight: "700" },
+  histOpponents: { color: "#555", fontSize: 11.5, marginTop: 2, lineHeight: 16 },
 
   photoPickerBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   photoPickerDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },

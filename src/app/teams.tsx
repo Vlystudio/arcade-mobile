@@ -75,6 +75,9 @@ export default function TeamsScreen() {
   const [activeSeason, setActiveSeason] = useState<ActiveSeason | null | undefined>(undefined); // undefined = not yet loaded
   const [myRegistration, setMyRegistration] = useState<MyRegistration | null>(null);
 
+  // This week's scheduled slot per team (skee-ball league)
+  const [weekSlots, setWeekSlots] = useState<Record<string, string>>({});
+
   // Create team modal
   const [createVisible, setCreateVisible] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
@@ -196,6 +199,22 @@ export default function TeamsScreen() {
         rec[lt.team_id].losses += lt.losses;
       }
       enriched.forEach((t) => { if (rec[t.id]) { t.wins = rec[t.id].wins; t.losses = rec[t.id].losses; } });
+    }
+
+    // This week's scheduled slots for my teams
+    if (myIds.size > 0) {
+      const monday = new Date();
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+      const { data: slotData } = await supabase
+        .from("team_schedule")
+        .select("team_id, slot_time")
+        .eq("week_of", monday.toISOString().slice(0, 10))
+        .in("team_id", [...myIds]);
+      const slots: Record<string, string> = {};
+      for (const r of slotData ?? []) slots[(r as any).team_id] = (r as any).slot_time;
+      setWeekSlots(slots);
+    } else {
+      setWeekSlots({});
     }
 
     // Update season paywall state
@@ -627,6 +646,12 @@ export default function TeamsScreen() {
                         {t.member_count} {t.member_count === 1 ? "member" : "members"}
                         {(t.wins > 0 || t.losses > 0) ? `  ·  ${t.wins}–${t.losses}` : ""}
                       </Text>
+                      {weekSlots[t.id] && (
+                        <View style={styles.slotRowInline}>
+                          <Ionicons name="time-outline" size={11} color="#22c55e" />
+                          <Text style={styles.slotRowInlineText}>This week: {weekSlots[t.id]}</Text>
+                        </View>
+                      )}
                     </View>
                     <View style={styles.memberActions}>
                       {t.isCaptain && (
@@ -1236,6 +1261,9 @@ const styles = StyleSheet.create({
   slotChipText: { color: "#555", fontSize: 13, fontWeight: "700" },
   slotChipTextActive: { color: "#06b6d4", fontWeight: "800" },
   slotChipTextActive2: { color: "#f59e0b", fontWeight: "800" },
+
+  slotRowInline: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 3 },
+  slotRowInlineText: { color: "#22c55e", fontSize: 11, fontWeight: "700" },
 
   compareIconBtn: {
     width: 34, height: 34, borderRadius: 12,

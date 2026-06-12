@@ -43,7 +43,7 @@ const RING_COLORS: Record<number, string> = {
 };
 
 type LaneSession = { id: string; team_id: string; lane_number: number; status: string; team_name?: string; last_activity_at?: string; league_match_id?: string | null; placement?: number | null; league_points?: number | null };
-type SessionPlayer = { session_id: string; player_user_id: string; username: string; avatar_url: string | null };
+type SessionPlayer = { session_id: string; player_user_id: string; username: string; avatar_url: string | null; shoot_position: number | null };
 type BallScore = { id: string; session_id: string; player_user_id: string; ball_number: number; score: number };
 type Member = { user_id: string; username: string; avatar_url: string | null; role: string };
 type SkeeballTrackerProps = {
@@ -104,6 +104,7 @@ export default function SkeeballTrackerScreen({
   const [playerBalls, setPlayerBalls] = useState<Record<string, number[]>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
 
   // Inactivity warning
   const [showWarning, setShowWarning] = useState(false);
@@ -308,14 +309,16 @@ export default function SkeeballTrackerScreen({
   async function loadSessionData(sessionId: string, members?: Member[]) {
     const mems = members ?? teamMembers;
     const [playersRes, scoresRes] = await Promise.all([
-      supabase.from("skeeball_session_players").select("session_id, player_user_id").eq("session_id", sessionId),
+      supabase.from("skeeball_session_players").select("session_id, player_user_id, shoot_position").eq("session_id", sessionId),
       supabase.from("skeeball_ball_scores").select("*").eq("session_id", sessionId),
     ]);
 
-    const players: SessionPlayer[] = (playersRes.data ?? []).map((p: any) => {
-      const m = mems.find((x) => x.user_id === p.player_user_id);
-      return { ...p, username: m?.username ?? "Unknown", avatar_url: m?.avatar_url ?? null };
-    });
+    const players: SessionPlayer[] = (playersRes.data ?? [])
+      .map((p: any) => {
+        const m = mems.find((x) => x.user_id === p.player_user_id);
+        return { ...p, shoot_position: p.shoot_position ?? null, username: m?.username ?? "Unknown", avatar_url: m?.avatar_url ?? null };
+      })
+      .sort((a: SessionPlayer, b: SessionPlayer) => (a.shoot_position ?? 99) - (b.shoot_position ?? 99));
     setSessionPlayers(players);
     const scores: BallScore[] = scoresRes.data ?? [];
     setBallScores(scores);
@@ -376,6 +379,27 @@ export default function SkeeballTrackerScreen({
       setError(msg);
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function moveInOrder(index: number, delta: -1 | 1) {
+    const target = index + delta;
+    if (target < 0 || target >= sessionPlayers.length || !mySession) return;
+    const next = [...sessionPlayers];
+    [next[index], next[target]] = [next[target], next[index]];
+    const ordered = next.map((p, i) => ({ ...p, shoot_position: i + 1 }));
+    setSessionPlayers(ordered);
+    setSavingOrder(true);
+    try {
+      const { data, error } = await supabase.rpc("rpc_skeeball_set_lineup_order", {
+        p_session_id: mySession.id,
+        p_ordered_user_ids: ordered.map((p) => p.player_user_id),
+      });
+      if (error || (data as any)?.error) {
+        reportError("SkeeballTracker.moveInOrder", (data as any)?.message ?? error?.message ?? "order failed");
+      }
+    } finally {
+      setSavingOrder(false);
     }
   }
 
@@ -717,6 +741,45 @@ export default function SkeeballTrackerScreen({
         </View>
         <ScrollView contentContainerStyle={s.scroll}>
 
+          {/* ── Shooting order (editable until the first ball) ── */}
+          {totalEntered === 0 && ballScores.length === 0 && sessionPlayers.length > 1 && (
+            <View style={s.orderCard}>
+              <View style={s.orderHeader}>
+                <Ionicons name="swap-vertical-outline" size={15} color="#06b6d4" />
+                <Text style={s.orderTitle}>Shooting Order</Text>
+                {savingOrder && <ActivityIndicator size="small" color="#06b6d4" />}
+              </View>
+              <Text style={s.orderHint}>
+                Set who shoots first, second, and last — this is tracked for season lineup stats.
+              </Text>
+              {sessionPlayers.map((sp, idx) => (
+                <View key={sp.player_user_id} style={s.orderRow}>
+                  <View style={s.orderPosBadge}>
+                    <Text style={s.orderPosText}>{idx + 1}</Text>
+                  </View>
+                  <Avatar uri={sp.avatar_url} name={sp.username} size={28} radius={9} />
+                  <Text style={s.orderName}>{sp.username}</Text>
+                  <Pressable
+                    style={[s.orderArrow, idx === 0 && { opacity: 0.25 }]}
+                    onPress={() => moveInOrder(idx, -1)}
+                    disabled={idx === 0 || savingOrder}
+                    hitSlop={6}
+                  >
+                    <Ionicons name="chevron-up" size={17} color="#06b6d4" />
+                  </Pressable>
+                  <Pressable
+                    style={[s.orderArrow, idx === sessionPlayers.length - 1 && { opacity: 0.25 }]}
+                    onPress={() => moveInOrder(idx, 1)}
+                    disabled={idx === sessionPlayers.length - 1 || savingOrder}
+                    hitSlop={6}
+                  >
+                    <Ionicons name="chevron-down" size={17} color="#06b6d4" />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+
           {/* ── Active player — ring tap ──────────────────────── */}
           {!allLocalDone && currentSp && (
             <View style={s.playerSection}>
@@ -992,6 +1055,25 @@ const s = StyleSheet.create({
   laneChipText: { color: "#06b6d4", fontWeight: "800", fontSize: 14 },
   scoreTitle: { color: "#fff", fontSize: 22, fontWeight: "900", marginBottom: 6 },
   scoreSub: { color: "#555", fontSize: 13, marginBottom: 24 },
+
+  orderCard: {
+    backgroundColor: "rgba(6,182,212,0.04)", borderRadius: 16, padding: 14, marginBottom: 14,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.18)",
+  },
+  orderHeader: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 4 },
+  orderTitle: { color: "#fff", fontSize: 14, fontWeight: "800", flex: 1 },
+  orderHint: { color: "#555", fontSize: 11.5, lineHeight: 16, marginBottom: 10 },
+  orderRow: {
+    flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 7,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(6,182,212,0.12)",
+  },
+  orderPosBadge: {
+    width: 22, height: 22, borderRadius: 11,
+    backgroundColor: "rgba(6,182,212,0.12)", alignItems: "center", justifyContent: "center",
+  },
+  orderPosText: { color: "#06b6d4", fontSize: 11, fontWeight: "900" },
+  orderName: { flex: 1, color: "#fff", fontSize: 13.5, fontWeight: "700" },
+  orderArrow: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
 
   playerSection: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#1e1e1e" },
   playerSectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },

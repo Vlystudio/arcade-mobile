@@ -158,6 +158,132 @@ export function seasonWeekNumber(season: SkeeSeason): number | null {
   return diff >= 0 && diff < 8 ? diff + 1 : null;
 }
 
+// ── Shooting position stats & lineup optimizer ──────────────────────────────
+
+export type PositionStat = { games: number; avg: number; best: number };
+
+export type PlayerPositionStats = {
+  user_id: string;
+  username: string;
+  games: number;
+  overall_avg: number;
+  positions: Partial<Record<"1" | "2" | "3", PositionStat>>;
+};
+
+export async function fetchPositionStats(
+  teamId: string,
+  season?: SkeeSeason | null,
+): Promise<PlayerPositionStats[]> {
+  const { data, error } = await supabase.rpc("rpc_skeeball_position_stats", {
+    p_team_id: teamId,
+    p_start: season?.start_week ?? null,
+    p_end: season?.end_week ?? null,
+  });
+  if (error || !data || (data as any).error) return [];
+  return ((data as any).players ?? []) as PlayerPositionStats[];
+}
+
+export type OrderSuggestion = {
+  order: { user_id: string; username: string; position: number; avg: number | null }[];
+  tips: string[];
+};
+
+/**
+ * Statistical lineup recommendation: tries every assignment of the top
+ * players to positions 1-3 and keeps the one with the highest expected
+ * total (position avg when known, overall avg otherwise).
+ */
+export function suggestOrder(players: PlayerPositionStats[]): OrderSuggestion | null {
+  const pool = players.filter((p) => p.games > 0).slice(0, 3);
+  if (pool.length < 2) return null;
+
+  const score = (p: PlayerPositionStats, pos: number) =>
+    p.positions[String(pos) as "1" | "2" | "3"]?.avg ?? p.overall_avg;
+
+  // All permutations of the pool across positions 1..pool.length
+  const perms: PlayerPositionStats[][] = [];
+  const permute = (rest: PlayerPositionStats[], acc: PlayerPositionStats[]) => {
+    if (rest.length === 0) { perms.push(acc); return; }
+    rest.forEach((p, i) => permute([...rest.slice(0, i), ...rest.slice(i + 1)], [...acc, p]));
+  };
+  permute(pool, []);
+
+  let best: PlayerPositionStats[] = perms[0];
+  let bestTotal = -1;
+  for (const perm of perms) {
+    const total = perm.reduce((sum, p, i) => sum + score(p, i + 1), 0);
+    if (total > bestTotal) { bestTotal = total; best = perm; }
+  }
+
+  const order = best.map((p, i) => ({
+    user_id: p.user_id,
+    username: p.username,
+    position: i + 1,
+    avg: p.positions[String(i + 1) as "1" | "2" | "3"]?.avg ?? null,
+  }));
+
+  // Quick tips: positions where a player meaningfully out-performs their overall avg
+  const POS_LABEL = ["first", "second", "third"];
+  const tips: string[] = [];
+  for (const p of pool) {
+    let bestPos: number | null = null;
+    let bestPct = 0;
+    for (const pos of [1, 2, 3]) {
+      const st = p.positions[String(pos) as "1" | "2" | "3"];
+      if (!st || st.games < 2 || p.overall_avg <= 0) continue;
+      const pct = Math.round(((st.avg - p.overall_avg) / p.overall_avg) * 100);
+      if (pct >= 5 && pct > bestPct) { bestPct = pct; bestPos = pos; }
+    }
+    if (bestPos != null) {
+      tips.push(`${p.username} averages ${bestPct}% higher when shooting ${POS_LABEL[bestPos - 1]}.`);
+    }
+  }
+  if (tips.length === 0 && pool.length >= 2) {
+    tips.push("Not enough per-position data for strong patterns yet — keep recording your shooting order each week.");
+  }
+
+  return { order, tips };
+}
+
+// ── Weekly schedule & match history ──────────────────────────────────────────
+
+export type WeekHistoryOpponent = {
+  team_id: string;
+  team_name: string;
+  placement: number | null;
+  game_score: number;
+};
+
+export type WeekHistoryEntry = {
+  week_of: string;
+  placement: number | null;
+  points: number;
+  game_score: number;
+  slot_time: string | null;
+  opponents: WeekHistoryOpponent[];
+};
+
+export type TeamWeekHistory = {
+  weeks: WeekHistoryEntry[];
+  upcoming: { week_of: string; slot_time: string; week_label: string | null } | null;
+};
+
+export async function fetchTeamWeekHistory(
+  teamId: string,
+  season?: SkeeSeason | null,
+): Promise<TeamWeekHistory | null> {
+  const { data, error } = await supabase.rpc("rpc_skeeball_team_week_history", {
+    p_team_id: teamId,
+    p_start: season?.start_week ?? null,
+    p_end: season?.end_week ?? null,
+  });
+  if (error || !data || (data as any).error) return null;
+  return {
+    weeks: (data as any).weeks ?? [],
+    upcoming: (data as any).upcoming ?? null,
+  };
+}
+
 /** Up/down trend between the last two weeks with data. Null if fewer than 2. */
 export function weeklyTrend(
   weeks: { avg: number }[],

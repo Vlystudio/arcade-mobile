@@ -1119,9 +1119,13 @@ export default function AdminScreen() {
   async function saveSchedule() {
     setSavingSchedule(true);
     const label = weekLabel.trim() || new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    // Monday of the current league week, so player schedules join to matches
+    const monday = new Date();
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const weekOf = monday.toISOString().slice(0, 10);
     await supabase.from("team_schedule").delete().eq("week_label", label);
     const inserts = Object.entries(schedule).flatMap(([slot, ids]) =>
-      ids.map((tid) => ({ team_id: tid, slot_time: slot, week_label: label }))
+      ids.map((tid) => ({ team_id: tid, slot_time: slot, week_label: label, week_of: weekOf }))
     );
     if (inserts.length) await supabase.from("team_schedule").insert(inserts);
     setSavingSchedule(false);
