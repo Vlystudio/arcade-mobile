@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
 import Head from "expo-router/head";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function PrivacyScreen() {
@@ -184,6 +184,27 @@ export default function PrivacyScreen() {
            "• Automated rate limiting protects all API endpoints against abuse."}
         </Section>
 
+        <Section title="YouTube API Services">
+          {"The karaoke song-request feature uses YouTube API Services to show public video " +
+           "search results so you can pick a song to queue. By using this feature you also " +
+           "agree to be bound by the YouTube Terms of Service, and Google's Privacy Policy " +
+           "applies to data handled by YouTube:\n\n"}
+          <Text style={s.link} onPress={() => Linking.openURL("https://www.youtube.com/t/terms")}>
+            YouTube Terms of Service (youtube.com/t/terms)
+          </Text>
+          {"\n"}
+          <Text style={s.link} onPress={() => Linking.openURL("https://policies.google.com/privacy")}>
+            Google Privacy Policy (policies.google.com/privacy)
+          </Text>
+          {"\n\nWhat we display: only public video metadata returned by the API — video title, " +
+           "thumbnail image, channel name, video ID, and (where shown) description. Search " +
+           "queries are sent to YouTube to fetch results; we cache the returned metadata for " +
+           "up to 7 days to reduce repeat lookups.\n\n" +
+           "What we do NOT do: ArcadeTracker does not download, re-host, alter, separate " +
+           "audio from, or store YouTube video or audio content. Playback happens exclusively " +
+           "through the official embedded YouTube player, unmodified."}
+        </Section>
+
         <Section title="Changes to This Policy">
           We may update this Privacy Policy periodically to reflect changes in our practices or
           applicable law. We will notify you of material changes via an in-app notice. Continued
@@ -225,6 +246,7 @@ const s = StyleSheet.create({
   headerTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
   content: { paddingHorizontal: 22, paddingTop: 20 },
   updated: { color: "#777", fontSize: 12, marginBottom: 24 },
+  link: { color: "#06b6d4", textDecorationLine: "underline" },
   section: { marginBottom: 28 },
   sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 10 },
   sectionBody: { color: "#888", fontSize: 14, lineHeight: 22 },

@@ -13,6 +13,7 @@ import {
   Text,
   TextInput,
   View,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/auth-context";
@@ -284,6 +285,29 @@ export default function KaraokeScreen() {
           <Ionicons name="open-outline" size={13} color="#a855f7" />
         </Pressable>
 
+        {/* YouTube API Services attribution (required branding — links to YouTube) */}
+        <Pressable style={s.ytAttribution} onPress={() => Linking.openURL("https://www.youtube.com")}>
+          <Ionicons name="logo-youtube" size={20} color="#FF0000" />
+          <Text style={s.ytAttributionText}>Video results powered by YouTube</Text>
+        </Pressable>
+        <View style={s.legalFooter}>
+          <Pressable onPress={() => router.push("/privacy" as any)}>
+            <Text style={s.legalFooterLink}>Privacy Policy</Text>
+          </Pressable>
+          <Text style={s.legalFooterDot}>·</Text>
+          <Pressable onPress={() => router.push("/terms" as any)}>
+            <Text style={s.legalFooterLink}>Terms of Service</Text>
+          </Pressable>
+          <Text style={s.legalFooterDot}>·</Text>
+          <Pressable onPress={() => Linking.openURL("https://www.youtube.com/t/terms")}>
+            <Text style={s.legalFooterLink}>YouTube Terms</Text>
+          </Pressable>
+          <Text style={s.legalFooterDot}>·</Text>
+          <Pressable onPress={() => Linking.openURL("https://policies.google.com/privacy")}>
+            <Text style={s.legalFooterLink}>Google Privacy</Text>
+          </Pressable>
+        </View>
+
       </ScrollView>
 
       {/* Add Song Modal */}
@@ -359,6 +383,11 @@ export default function KaraokeScreen() {
                   {!!searchError && <Text style={s.errorText}>{searchError}</Text>}
 
                   {searchResults.length > 0 && (
+                    <>
+                    <Pressable style={s.ytResultsBadge} onPress={() => Linking.openURL("https://www.youtube.com")}>
+                      <Ionicons name="logo-youtube" size={15} color="#FF0000" />
+                      <Text style={s.ytResultsBadgeText}>Video results powered by YouTube</Text>
+                    </Pressable>
                     <ScrollView style={s.resultsList} showsVerticalScrollIndicator={false}>
                       {searchResults.map(r => (
                         <View key={r.videoId} style={s.resultRow}>
@@ -386,6 +415,7 @@ export default function KaraokeScreen() {
                         </View>
                       ))}
                     </ScrollView>
+                    </>
                   )}
                 </>
               ) : (
@@ -491,6 +521,17 @@ const s = StyleSheet.create({
   searchBtn: { width: 46, height: 46, borderRadius: 12, backgroundColor: "#a855f7", alignItems: "center", justifyContent: "center" },
 
   resultsList: { maxHeight: 300 },
+  ytAttribution: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    paddingVertical: 12, marginTop: 14,
+  },
+  ytAttributionText: { color: "#888", fontSize: 12.5, fontWeight: "700" },
+  legalFooter: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingBottom: 20, flexWrap: "wrap" },
+  legalFooterLink: { color: "#666", fontSize: 11.5, fontWeight: "600", textDecorationLine: "underline" },
+  legalFooterDot: { color: "#333", fontSize: 11.5 },
+  ytResultsBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8 },
+  ytResultsBadgeText: { color: "#888", fontSize: 11.5, fontWeight: "700" },
+
   resultRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   resultThumb: { width: 56, height: 40, borderRadius: 6 },
   resultInfo: { flex: 1 },

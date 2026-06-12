@@ -4,7 +4,7 @@ import Head from "expo-router/head";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export const CURRENT_TOS_VERSION = "2026-06";
+export const CURRENT_TOS_VERSION = "2026-06.2";
 
 export default function TermsScreen() {
   return (
@@ -168,7 +168,11 @@ export default function TermsScreen() {
            "updated Terms constitutes your agreement to be bound by them."}
         </Section>
 
-        <Section title="15. Contact Us">
+        <Section title="15. YouTube Content & API Services">
+          {"The karaoke feature uses YouTube API Services to let you search for and queue publicly available YouTube videos. By using this feature, you agree to be bound by the YouTube Terms of Service (youtube.com/t/terms), and you acknowledge that Google's Privacy Policy (policies.google.com/privacy) applies to data processed by YouTube.\n\nVideo search results, titles, thumbnails, and channel names are provided by YouTube. Playback occurs only through the official embedded YouTube player, which we do not hide, alter, or overlay. ArcadeTracker does not download, re-host, separate audio or video from, or store YouTube content, and does not play YouTube content in the background.\n\nArcadeTracker is not affiliated with or endorsed by YouTube or Google."}
+        </Section>
+
+        <Section title="16. Contact Us">
           {"Questions about these Terms of Service? Contact us at:\n\nvaleyardvisuals@vlystudios.com\n\n" +
            "Or use the Support Chat feature available from your Profile."}
         </Section>

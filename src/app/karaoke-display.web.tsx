@@ -312,7 +312,7 @@ export default function KaraokeDisplayWeb() {
 
         <View style={s.sidebarFooter}>
           <Ionicons name="mic-outline" size={14} color="#2a2a2a" />
-          <Text style={s.sidebarFooterText}>arcadetracker.app/karaoke</Text>
+          <Text style={s.sidebarFooterText}>Powered by YouTube · vlystudios.com/karaoke</Text>
         </View>
       </View>
     </View>
