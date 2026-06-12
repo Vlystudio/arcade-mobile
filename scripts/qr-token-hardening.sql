@@ -108,6 +108,25 @@ REVOKE ALL ON FUNCTION public.hash_lane_token(text) FROM PUBLIC;
 -- Do NOT grant to authenticated — internal use only.
 
 
+-- ── 2b. Helper: non-reversible token fingerprint for logging ──
+-- security_events must NEVER contain raw token fragments. This returns the
+-- first 12 hex chars of SHA-256(raw token): enough to correlate repeated
+-- abuse attempts and cross-reference a generated token, but useless for
+-- reconstructing or guessing the token itself.
+CREATE OR REPLACE FUNCTION public.qr_token_fingerprint(p_raw text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SECURITY DEFINER
+SET search_path = public, extensions
+AS $$
+  SELECT left(encode(digest(coalesce(p_raw, '')::bytea, 'sha256'), 'hex'), 12);
+$$;
+
+REVOKE ALL ON FUNCTION public.qr_token_fingerprint(text) FROM PUBLIC;
+-- Internal use only - not granted to authenticated.
+
+
 -- ── 3. Admin RPC: generate / rotate a QR token for a lane ────
 -- Returns the raw token ONCE. It is never stored in the DB.
 -- Callers must encode it into a QR code immediately.
@@ -187,7 +206,7 @@ BEGIN
   RETURN json_build_object(
     'ok',           true,
     'raw_token',    v_raw_token,        -- encode this into the QR
-    'token_suffix', right(v_raw_token, 8), -- for display/label only
+    'token_fingerprint', public.qr_token_fingerprint(v_raw_token), -- label only; matches security_events
     'expires_at',   v_expires_at,
     'ttl_hours',    p_ttl_hours,
     'lane_id',      p_lane_id,
@@ -249,7 +268,7 @@ BEGIN
       IF v_lqt.revoked_at IS NOT NULL THEN
         INSERT INTO security_events (event_type, severity, user_id, details)
         VALUES ('qr_token_revoked', 'warn', v_user_id,
-          jsonb_build_object('token_suffix', right(p_token, 8), 'lane_id', v_lqt.lane_id))
+          jsonb_build_object('token_fingerprint', public.qr_token_fingerprint(p_token), 'lane_id', v_lqt.lane_id))
         ON CONFLICT DO NOTHING;
         RETURN json_build_object('error', 'token_revoked',
           'message', 'This QR code has been revoked. Ask staff for a new one.');
@@ -258,7 +277,7 @@ BEGIN
       IF v_lqt.expires_at < now() THEN
         INSERT INTO security_events (event_type, severity, user_id, details)
         VALUES ('qr_token_expired', 'warn', v_user_id,
-          jsonb_build_object('token_suffix', right(p_token, 8), 'lane_id', v_lqt.lane_id))
+          jsonb_build_object('token_fingerprint', public.qr_token_fingerprint(p_token), 'lane_id', v_lqt.lane_id))
         ON CONFLICT DO NOTHING;
         RETURN json_build_object('error', 'token_expired',
           'message', 'This QR code has expired. Ask staff to regenerate it.');
@@ -269,7 +288,7 @@ BEGIN
     -- Any token not in lane_qr_tokens is unconditionally rejected.
     INSERT INTO security_events (event_type, severity, user_id, details)
     VALUES ('qr_token_invalid', 'warn', v_user_id,
-      jsonb_build_object('token_suffix', right(p_token, 8)))
+      jsonb_build_object('token_fingerprint', public.qr_token_fingerprint(p_token)))
     ON CONFLICT DO NOTHING;
     RETURN json_build_object('error', 'lane_not_found',
       'message', 'This QR code does not match any lane. Ask staff to scan the current code.');

@@ -710,20 +710,19 @@ export default function AdminScreen() {
 
   async function handlePhotoPress(score: ReviewScore) {
     if (score.proof_storage_path) {
+      // Signed URL is generated server-side (score-proof-url Edge Function):
+      // it re-checks MFA + venue-admin authorization in Postgres and signs
+      // with the service role. The client never sees the storage path.
       setProofUrlLoading(true);
-      const { data: pathData, error: pathErr } = await supabase.rpc(
-        "rpc_admin_create_score_proof_signed_url", { p_score_id: score.id }
-      );
-      if (pathErr || pathData?.error || !pathData?.path) {
-        setProofUrlLoading(false);
-        Alert.alert("Error", pathData?.message ?? "Could not access proof.");
+      const { data, error } = await supabase.functions.invoke("score-proof-url", {
+        body: { score_id: score.id },
+      });
+      setProofUrlLoading(false);
+      if (error || data?.error || !data?.signed_url) {
+        Alert.alert("Error", data?.message ?? "Could not access proof.");
         return;
       }
-      const { data } = await supabase.storage
-        .from("score-proofs")
-        .createSignedUrl(pathData.path as string, 3600);
-      setProofUrlLoading(false);
-      if (data?.signedUrl) setPhotoModal(data.signedUrl);
+      setPhotoModal(data.signed_url);
     } else if (score.photo_url) {
       setPhotoModal(score.photo_url);
     }

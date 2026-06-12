@@ -775,10 +775,10 @@ ROLLBACK;
 -- BLOCK 20: Fixture-based cross-venue isolation & QR token tests
 -- Creates real (rolled-back) fixture rows — two venues, a venue admin and
 -- venue staff member for venue A, a venue admin for venue B, a platform
--- admin, a lane with active/expired/revoked lane_qr_tokens, pending scores
--- in each venue, and a recent check-in — then exercises rpc_check_in and
--- the venue-scoped admin RPCs against them under simulated JWT claims for
--- each role. Everything runs inside this transaction's BEGIN/ROLLBACK, so
+-- admin, a normal user, a lane with active/expired/revoked lane_qr_tokens,
+-- pending scores in each venue, a tournament in each venue, and a recent
+-- check-in — then exercises rpc_check_in and the venue-scoped admin RPCs
+-- against them under simulated JWT claims for each role. Everything runs inside this transaction's BEGIN/ROLLBACK, so
 -- nothing persists.
 --
 -- Bootstrapping the fixture platform admin requires impersonating an
@@ -809,6 +809,8 @@ DECLARE
   v_lane_id         uuid := gen_random_uuid();
   v_score_a         uuid := gen_random_uuid();
   v_score_b         uuid := gen_random_uuid();
+  v_tourn_a         uuid := gen_random_uuid();
+  v_tourn_b         uuid := gen_random_uuid();
   v_token_active    text := 'fixture-active-'  || gen_random_uuid()::text;
   v_token_expired   text := 'fixture-expired-' || gen_random_uuid()::text;
   v_token_revoked   text := 'fixture-revoked-' || gen_random_uuid()::text;
@@ -856,6 +858,10 @@ BEGIN
 
   INSERT INTO check_ins (user_id, lane_id, venue_id, status, created_at)
   VALUES (v_cooldown_user, v_lane_id, v_venue_a, 'completed', now() - interval '5 minutes');
+
+  INSERT INTO tournaments (id, title, venue_id, status) VALUES
+    (v_tourn_a, 'Fixture Tournament A', v_venue_a, 'upcoming'),
+    (v_tourn_b, 'Fixture Tournament B', v_venue_b, 'upcoming');
 
   -- ── 20A-F: rpc_check_in decision table (real lane_qr_tokens rows) ──
   PERFORM set_config('request.jwt.claims',
@@ -978,13 +984,65 @@ BEGIN
     RAISE NOTICE 'FAIL [20O]: venue A admin could not access its own score proof: %', v_result;
   END IF;
 
+  -- ── 20R-T: cross-venue tournament management ────────────────
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_venue_a_admin, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+  SELECT rpc_admin_delete_tournament(v_tourn_b) INTO v_result;
+  IF (v_result->>'error') = 'unauthorized' THEN
+    RAISE NOTICE 'PASS [20R]: venue A admin blocked from deleting venue B''s tournament';
+  ELSE
+    RAISE NOTICE 'FAIL [20R]: venue A admin unexpectedly managed venue B''s tournament: %', v_result;
+  END IF;
+
+  SELECT rpc_admin_delete_tournament(v_tourn_a) INTO v_result;
+  IF (v_result->>'error') IS NULL
+     AND NOT EXISTS (SELECT 1 FROM tournaments WHERE id = v_tourn_a) THEN
+    RAISE NOTICE 'PASS [20S]: venue A admin manages venue A''s own tournament';
+  ELSE
+    RAISE NOTICE 'FAIL [20S]: venue A admin could not manage own venue tournament: %', v_result;
+  END IF;
+
+  PERFORM set_config('request.jwt.claims',
+    json_build_object('sub', v_platform_admin, 'role', 'authenticated', 'aal', 'aal2')::text, true);
+  SELECT rpc_admin_delete_tournament(v_tourn_b) INTO v_result;
+  IF (v_result->>'error') IS NULL
+     AND NOT EXISTS (SELECT 1 FROM tournaments WHERE id = v_tourn_b) THEN
+    RAISE NOTICE 'PASS [20T]: platform admin manages any venue''s tournament';
+  ELSE
+    RAISE NOTICE 'FAIL [20T]: platform admin could not manage venue B''s tournament: %', v_result;
+  END IF;
+
+  -- ── 20U: QR security_events never contain raw token fragments ──
+  -- Logged details must use the SHA-256 fingerprint (12 hex chars), and must
+  -- not contain a token_suffix key or any substring of the raw tokens.
+  IF NOT EXISTS (
+       SELECT 1 FROM security_events
+        WHERE user_id = v_normal_user
+          AND event_type IN ('qr_token_invalid','qr_token_revoked','qr_token_expired')
+          AND (details ? 'token_suffix'
+               OR details::text LIKE '%' || right(v_token_revoked, 8) || '%'
+               OR details::text LIKE '%' || right(v_token_expired, 8) || '%'))
+     AND (SELECT count(*) FROM security_events
+           WHERE user_id = v_normal_user
+             AND event_type IN ('qr_token_invalid','qr_token_revoked','qr_token_expired')
+             AND details->>'token_fingerprint' ~ '^[0-9a-f]{12}$') = 3
+     AND EXISTS (
+       SELECT 1 FROM security_events
+        WHERE user_id = v_normal_user
+          AND event_type = 'qr_token_revoked'
+          AND details->>'token_fingerprint' = public.qr_token_fingerprint(v_token_revoked)) THEN
+    RAISE NOTICE 'PASS [20U]: QR security_events store only hash fingerprints — no raw token fragments';
+  ELSE
+    RAISE NOTICE 'FAIL [20U]: QR security_events contain raw token fragments or missing fingerprints';
+  END IF;
+
   -- ── 20P-Q: security_events / admin_audit_log side effects ───
   IF (SELECT count(*) FROM security_events
        WHERE event_type = 'admin_access_denied'
-         AND user_id IN (v_venue_a_admin, v_venue_a_staff, v_venue_b_admin)) >= 4 THEN
+         AND user_id IN (v_venue_a_admin, v_venue_a_staff, v_venue_b_admin)) >= 5 THEN
     RAISE NOTICE 'PASS [20P]: admin_access_denied logged for each cross-venue/role denial above';
   ELSE
-    RAISE NOTICE 'FAIL [20P]: expected >= 4 admin_access_denied security_events rows for fixture admins';
+    RAISE NOTICE 'FAIL [20P]: expected >= 5 admin_access_denied security_events rows for fixture admins';
   END IF;
 
   IF (SELECT count(*) FROM security_events

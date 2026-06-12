@@ -50,7 +50,7 @@ export default function LaneScoresScreen() {
 
     const userIds = [...new Set(scoresData.map((s) => s.user_id))];
     const { data: profiles } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, username, avatar_url")
       .in("id", userIds);
 

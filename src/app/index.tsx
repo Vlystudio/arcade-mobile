@@ -178,7 +178,7 @@ export default function FeedScreen() {
     // Step 2: parallel fetch of profiles, likes, scores, comment counts,
     // reactions, saves, and the caller's block list
     const [profilesRes, likesRes, scoresRes, commentsRes, reactionsRes, savedRes, blocksRes] = await Promise.all([
-      supabase.from("profiles").select("id, username, avatar_url").in("id", userIds),
+      supabase.from("public_profiles").select("id, username, avatar_url").in("id", userIds),
       supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
       scoreIds.length
         ? supabase.from("scores").select("id, score, game_id, games(name)").in("id", scoreIds)
@@ -563,7 +563,7 @@ export default function FeedScreen() {
     const userIds = [...new Set((data ?? []).map((c: any) => c.user_id as string))];
     let profileMap: Record<string, { username: string; avatar_url: string | null }> = {};
     if (userIds.length) {
-      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds);
+      const { data: profiles } = await supabase.from("public_profiles").select("id, username, avatar_url").in("id", userIds);
       for (const p of profiles ?? []) profileMap[(p as any).id] = { username: (p as any).username, avatar_url: (p as any).avatar_url };
     }
 
@@ -618,7 +618,7 @@ export default function FeedScreen() {
     );
     let profileMap: Record<string, { username: string; avatar_url: string | null }> = {};
     if (otherIds.length) {
-      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", otherIds);
+      const { data: profiles } = await supabase.from("public_profiles").select("id, username, avatar_url").in("id", otherIds);
       for (const p of profiles ?? []) profileMap[(p as any).id] = { username: (p as any).username, avatar_url: (p as any).avatar_url };
     }
 

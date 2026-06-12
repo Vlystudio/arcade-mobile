@@ -8,7 +8,7 @@ const MENTION_RE = /(@[a-zA-Z0-9_]{3,20})/g;
 async function openMention(handle: string) {
   const username = handle.slice(1);
   const { data } = await supabase
-    .from("profiles")
+    .from("public_profiles")
     .select("id")
     .ilike("username", username)
     .maybeSingle();

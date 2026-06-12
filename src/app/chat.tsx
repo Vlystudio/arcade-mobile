@@ -85,7 +85,7 @@ export default function ChatScreen() {
     );
 
     const { data: profileData } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, username, avatar_url")
       .in("id", otherIds);
 
@@ -171,7 +171,7 @@ export default function ChatScreen() {
     );
 
     const { data: profiles } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, username, avatar_url, online_status")
       .in("id", ids);
 

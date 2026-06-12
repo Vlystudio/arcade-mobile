@@ -12,7 +12,7 @@ export function openUserProfile(userId: string) {
 export async function openUserProfileByName(username: string) {
   if (!username || username === "Unknown") return;
   const { data } = await supabase
-    .from("profiles")
+    .from("public_profiles")
     .select("id")
     .ilike("username", username)
     .maybeSingle();

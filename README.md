@@ -7,7 +7,7 @@ React Native (Expo SDK 55) arcade venue companion app backed by Supabase (Postgr
 ### Social & Community
 | Screen | What it does |
 |--------|-------------|
-| **Feed** | Social posts with photos, score highlights, likes, comments, follow/unfollow |
+| **Feed** | Social posts with photos, score highlights, reactions, comments, saved posts, @mentions. The “Following” tab is built from your friends/connections — there is **no follow/unfollow UI** (the legacy `follows` table is read-only plumbing) |
 | **Chat** | Direct messaging between users (Realtime) |
 | **Forums** | Community forum threads with admin moderation |
 
@@ -18,7 +18,7 @@ React Native (Expo SDK 55) arcade venue companion app backed by Supabase (Postgr
 | **Leaderboard** | Global score rankings across all game types |
 | **Skee-Ball Tracker** | Live session tracker for 1–3 players — scorekeeper mode lets any team member enter all balls for the whole team; balls numbered sequentially across players (Ball 1–9 for 3 players); per-player totals and team grand total shown live |
 | **Lane Scores** | Per-lane score history and player stats |
-| **Pool** | Table occupancy tracking, game type selection (8-ball, 9-ball, cutthroat, straight), player roster per table |
+| **Pool** | ⚠ **Inactive in current beta** — the screen exists but pool table tracking is not enabled for the venue and is not part of the beta feature set |
 | **Trivia Night** | Event sign-up, team formation for Trivia Night events |
 | **Demo Mode** | Guided walkthrough of app features for new visitors |
 
@@ -43,8 +43,8 @@ React Native (Expo SDK 55) arcade venue companion app backed by Supabase (Postgr
 ### Profile & Account
 | Screen | What it does |
 |--------|-------------|
-| **Profile** | Stats, avatar, bio, tournament history, follow graph, privacy toggle |
-| **MFA Setup / Verify** | TOTP-based two-factor authentication (required for admin actions) |
+| **Profile** | Stats, avatar, bio, tournament history, friends list, privacy toggle |
+| **MFA Setup / Verify** | Two-factor authentication via authenticator app (TOTP) or text message (SMS, requires server-side SMS provider); required for admin actions |
 | **Delete Account** | Full account deletion — clears storage, posts, follows, and auth record |
 | **Privacy & Terms** | In-app privacy policy and terms of service |
 | **Support Chat** | In-app support messaging |
@@ -154,7 +154,16 @@ Run these SQL scripts **in order** in the Supabase SQL Editor:
 > earlier script — running an earlier script after 18/19 must never silently
 > downgrade these functions back to plaintext `lane_qr_token` matching.
 
-> **Verification:** After all scripts are applied, run `scripts/security-verification-tests.sql` in the SQL Editor. Every row should return `result = 'PASS'`.
+> **Verification:** After all scripts are applied, run `scripts/security-verification-tests.sql` in the SQL Editor. Every row should return `result = 'PASS'` and every `RAISE NOTICE` line in the Messages pane should start with `PASS` (fixture-based venue-isolation and QR tests print there).
+
+> **Note:** the numbered table covers the security-critical core and its order
+> is unchanged by the 2026-06 security pass (scripts 9, 10, 13, 15, 18, 19
+> were edited in place — re-run them on existing databases). Feature scripts
+> added during beta (`forum-comments`, `team-*`, `skeeball-*`, `karaoke-*`,
+> `trivia`, `community-league-extras`, `push-notifications`,
+> `content-moderation`, `bug-reports`, `support-feedback`, `ff-*`,
+> `onboarding-dismissed`, …) are idempotent and were applied in git commit
+> order after the core table.
 
 Then grant yourself admin access:
 ```sql
@@ -179,6 +188,12 @@ Storage RLS policies are applied by `scripts/storage-security.sql` (step 14 abov
 
 Public user media uploads first go to `media-quarantine`; the `moderate-image` Edge Function publishes approved files into the public bucket.
 
+`score-proofs` is never readable by admins through storage RLS. Admin score
+review fetches proofs via the **`score-proof-url` Edge Function**, which
+authorizes through `rpc_admin_create_score_proof_signed_url` (MFA + platform
+or venue admin of the score's venue) and returns a 5-minute signed URL
+generated with the service role. Owners can read only their own folder.
+
 ### 5. Start the dev server
 ```bash
 npx expo start
@@ -194,7 +209,7 @@ Open in Expo Go (scan QR), iOS Simulator (`i`), or Android Emulator (`a`).
 | `profiles` | `id`, `username`, `avatar_url`, `is_admin`, `is_arcade_official` | Created automatically on signup via trigger |
 | `posts` | `id`, `user_id`, `content`, `post_type`, `photo_url`, `score_id` | `post_type`: `post` \| `announcement` |
 | `post_likes` | `post_id`, `user_id` | |
-| `follows` | `follower_id`, `following_id` | |
+| `follows` | `follower_id`, `following_id` | Legacy — no follow/unfollow UI; feed uses friendships |
 | `scores` | `id`, `user_id`, `game_id`, `score`, `status`, `photo_url` | `status`: `pending` \| `approved` \| `denied` |
 | `games` | `id`, `name`, `type` | Seeded via `seed-games.sql` |
 | `lanes` | `id`, `lane_number`, `status`, `game_id` | `lane_qr_token` column is **deprecated** — no longer written to; use `lane_qr_tokens` table |
@@ -223,7 +238,7 @@ Open in Expo Go (scan QR), iOS Simulator (`i`), or Android Emulator (`a`).
 ### Row Level Security
 Every table has RLS enabled. The anon key cannot bypass it. Key rules:
 
-- **Profiles**: The raw `profiles` table is readable only by the owner and admins. All cross-user lookups (leaderboard, team member search, friend search) query the `public_profiles` view, which hides private accounts from other users and never exposes `is_admin`, `email`, `phone`, or `square_customer_id`. Users can toggle their own privacy flag; admins always see all profiles. Users cannot set `is_admin` or `is_arcade_official` on themselves — those fields are locked by the WITH CHECK clause.
+- **Profiles**: All cross-user lookups in the app (feed, comments, chat previews, teams, tournament join requests, searches) query the `public_profiles` view, which hides private accounts from other users and exposes only display fields — never `is_admin`, `role`, `email`, `phone`, `is_private`, or `square_customer_id`. ⚠ The raw `profiles` table still carries permissive beta-era SELECT policies (`USING (true)`); the app no longer depends on them for cross-user reads except the public leaderboard name lookup (deliberate — approved scores are public) and admin/moderation flows. **Production TODO:** drop the permissive `profiles` SELECT policies once beta confirms nothing else reads other users' raw rows. Users cannot set `is_admin` or `is_arcade_official` on themselves — locked by trigger + WITH CHECK.
 - **Scores**: New inserts must have `status = 'pending'`. Only admins can flip status to `approved`/`denied`.
 - **Announcements**: Only users with `is_arcade_official = true` can insert `post_type = 'announcement'`.
 - **Check-ins**: All inserts go through `rpc_check_in` (SECURITY DEFINER). Direct `INSERT INTO check_ins` is blocked by RLS for every role. The RPC enforces one active check-in per user, a 30-minute same-lane cooldown, and token hash validation.
@@ -240,10 +255,11 @@ Lane QR check-in uses **hashed, expiring, revocable tokens** stored in `lane_qr_
 3. Default token lifetime: **30 days** (720 hours). Admins can force-rotate any time via `rpc_admin_rotate_lane_token`.
 4. Revoked and expired tokens are rejected with distinct error codes (`token_revoked`, `token_expired`).
 5. `lanes.lane_qr_token` is **deprecated** — no longer written to; all validation goes through `lane_qr_tokens` only. `scripts/security-cleanup.sql` is the canonical source of truth for `rpc_check_in`.
-6. Check-ins are **RPC-only** — direct `INSERT INTO check_ins` is blocked by RLS for all roles.
-7. One active check-in per user at a time (enforced server-side in `rpc_check_in`).
-8. Rate-limit: 30-minute cooldown before re-checking into the same lane.
-9. Test-lane buttons (`__DEV__` only) are hidden in production builds.
+6. Invalid/revoked/expired scan attempts are logged to `security_events` with a **SHA-256 fingerprint** (`qr_token_fingerprint()`, first 12 hex chars) — raw token fragments are never stored.
+7. Check-ins are **RPC-only** — direct `INSERT INTO check_ins` is blocked by RLS for all roles.
+8. One active check-in per user at a time (enforced server-side in `rpc_check_in`).
+9. Rate-limit: 30-minute cooldown before re-checking into the same lane.
+10. Test-lane buttons (`__DEV__` only) are hidden in production builds.
 
 ### Score submission
 Score inserts are routed through `rpc_submit_score` (SECURITY DEFINER). The RPC:
@@ -262,7 +278,7 @@ All admin-only mutations use SECURITY DEFINER RPCs. Every RPC:
 |-----|-------------|
 | `rpc_admin_review_score` | Platform admin **or** venue admin of that score's venue |
 | `rpc_admin_get_score_review_queue` | Platform admin (all venues) **or** venue admin (own venue only via `p_venue_id`) |
-| `rpc_admin_create_score_proof_signed_url` | Platform admin **or** venue admin of that score's venue |
+| `rpc_admin_create_score_proof_signed_url` | Platform admin **or** venue admin of that score's venue (called by the `score-proof-url` Edge Function — clients receive only a short-lived signed URL, never the storage path) |
 | `rpc_admin_generate_lane_qr_token` / `rpc_admin_rotate_lane_token` | Platform admin **or** venue admin of that lane's venue |
 | `rpc_admin_get_storage_cleanup_queue` / `rpc_admin_mark_storage_cleaned` | Platform admin only (+ MFA) |
 | `rpc_admin_update_forum_status` | Platform admin only |
@@ -291,7 +307,7 @@ BEFORE INSERT triggers on `posts` (10/h), `messages` (60/min), `team_messages` (
 ### Square / payments
 Square prices are **never derived from the client**. The server-side `/api/square/orders` route fetches prices directly from the Square Catalog API using `SQUARE_ACCESS_TOKEN`. The client only sends variation IDs and quantities; the server resolves prices and creates the order. Taxes, tips, fees, and the final payable total are shown by Square at hosted checkout, so the cart only displays an item subtotal.
 
-Payment/order status must come from `/api/square/webhook`, which verifies Square's HMAC signature, deduplicates event IDs, and stores status server-side. Do not trust client redirects as proof of payment.
+Payment/order status must come from `/api/square/webhook`, which verifies Square's HMAC signature over the **exact raw request body** (Vercel body parsing is disabled for that route), deduplicates event IDs, and stores status server-side. Do not trust client redirects as proof of payment. Sandbox signature-testing instructions: `docs/square-webhook-testing.md`.
 
 ### Skee-Ball league QR lanes
 Monday league lane QR codes should point to the scan route with the active lane token:
@@ -314,7 +330,9 @@ The test suite verifies:
 - `hash_lane_token()` produces consistent 64-char hex output
 - `storage.foldername()` helper returns expected path segments
 - `public_profiles` view does not expose `is_admin`, `email`, `phone`, or `square_customer_id`
-- Venue cross-isolation: venue A admin cannot access venue B's score queue
+- Venue cross-isolation (real rolled-back fixtures: venue_a/venue_b, venue admins, staff, platform admin, scores + tournaments in each venue): venue A admin cannot read venue B's score queue, review venue B's scores, fetch venue B's score-proof paths, or manage venue B's tournaments — and vice versa; platform admin can manage both; venue staff can manage neither
+- QR decision table with real `lane_qr_tokens` fixtures: invalid, revoked, and expired tokens fail with distinct errors; active token checks in; duplicate and cooldown attempts are rejected
+- QR `security_events` rows contain only `token_fingerprint` (12-char SHA-256 prefix) — never raw token fragments or a `token_suffix` key
 - Non-admin cannot call `rpc_admin_review_score`, `rpc_admin_approve_tournament`, or `rpc_admin_rotate_lane_token`
 - Storage cleanup RPCs blocked for AAL1 sessions and non-admins
 - Extended MFA enforcement for lane and team admin RPCs
@@ -332,6 +350,44 @@ Photos are compressed client-side before upload (`lib/compress-image.ts`):
 - Resized to max 1920 px on the longest side
 - JPEG quality 0.75
 - Hard 5 MB cap — rejected before upload if exceeded
+
+---
+
+## Deployment Readiness Checklist
+
+Work through this before going live with real customers. Items marked ☁ are
+dashboard/manual steps that cannot be automated from this repo.
+
+- [ ] ☁ **Supabase Pro plan active** with PITR/daily backups enabled and a
+      restore tested once (Dashboard → Database → Backups).
+- [ ] ☁ **Vercel production env vars** set and spot-checked: all `SQUARE_*`
+      (production credentials, not sandbox), `SUPABASE_SERVICE_ROLE_KEY`,
+      `SUPABASE_URL`, `APP_ALLOWED_ORIGINS`, `UPSTASH_REDIS_*`,
+      `IS_PRODUCTION=true`, `CRON_SECRET`, `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`.
+- [ ] ☁ **Supabase Edge Function secrets** set: `APP_ALLOWED_ORIGINS`,
+      `EXPO_PUBLIC_SITE_URL`, `IS_PRODUCTION=true`, AWS + OpenAI moderation keys.
+- [ ] ☁ **Every admin/venue-admin account has MFA enrolled** (admin RPCs hard-fail
+      without AAL2 — an admin without MFA cannot review scores or manage anything).
+- [ ] **Sentry/error monitoring** receiving events from production web + native
+      (trigger one test error per platform and confirm it arrives + alerts).
+- [ ] **Square webhook tested in sandbox** per `docs/square-webhook-testing.md`:
+      valid event 200, tampered body 401 + `payment_webhook_invalid_sig` event,
+      replay deduplicated; then switched to production signature key + URL.
+- [ ] ☁ **Storage buckets configured** with the MIME allowlists and 5 MB size
+      caps from the table above (bucket settings are dashboard-only; RLS comes
+      from `storage-security.sql`).
+- [ ] **`scripts/security-verification-tests.sql` runs all-PASS** against the
+      production database (SELECT rows and RAISE NOTICE lines).
+- [ ] **Staging environment tested first**: full pass on the staging Supabase
+      project + a Vercel preview deploy before promoting to production.
+- [ ] **CI green and blocking**: Gitleaks, npm audit (high/critical),
+      TypeScript, lint, dependency review, and the web build are blocking.
+      **Production TODO:** triage Semgrep findings in the GitHub Security tab
+      and remove `continue-on-error` from the SAST job so high-severity
+      findings block merges (see comment in `.github/workflows/security.yml`).
+- [ ] **Deploy the `score-proof-url` Edge Function** (`npx supabase@latest
+      functions deploy score-proof-url --project-ref <ref>`) — admin proof
+      review fails closed without it.
 
 ---
 

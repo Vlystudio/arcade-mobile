@@ -109,7 +109,7 @@ export default function FriendsScreen() {
     if (!text.trim() || !user) { setSearchResults([]); return; }
     setSearching(true);
     const { data } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, username, avatar_url")
       .ilike("username", `%${text.trim()}%`)
       .neq("id", user.id)

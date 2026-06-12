@@ -67,6 +67,16 @@ CREATE POLICY "post-photos: owner delete" ON storage.objects
 -- ─────────────────────────────────────────────────────────────
 -- BUCKET: score-proofs  (PRIVATE — signed URLs only)
 -- Path convention: {user_id}/{score_id}/{filename}
+--
+-- Admin access model (platform admins AND venue admins alike):
+--   There is intentionally NO direct-read storage policy for admins.
+--   Admin score review fetches proofs through the score-proof-url Edge
+--   Function, which authorizes via rpc_admin_create_score_proof_signed_url
+--   (MFA + platform/venue admin for the score's venue, security_events on
+--   denial) and signs the URL server-side with the service role. This keeps
+--   the bucket unbrowsable from any client session: nobody can list or read
+--   score-proof objects directly, and an admin can only obtain a 5-minute
+--   signed URL for one specific score at a time.
 -- ─────────────────────────────────────────────────────────────
 
 DROP POLICY IF EXISTS "score-proofs: no public read"   ON storage.objects;
@@ -86,22 +96,18 @@ CREATE POLICY "score-proofs: owner upload" ON storage.objects
     AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
--- Owner can read their own proofs (for signed URL generation)
+-- Owner can read their own proofs (signed URL for their own submission via
+-- rpc_get_score_proof_url). Owners only ever see their own folder.
 CREATE POLICY "score-proofs: owner read" ON storage.objects
   FOR SELECT USING (
     bucket_id = 'score-proofs'
     AND (storage.foldername(name))[1] = auth.uid()::text
   );
 
--- Platform admins and venue admins can read any proof
--- (needed to generate signed URL for score review)
-CREATE POLICY "score-proofs: admin read" ON storage.objects
-  FOR SELECT USING (
-    bucket_id = 'score-proofs'
-    AND public.is_admin()
-  );
+-- NOTE: no "admin read" policy on purpose — see bucket header comment.
+-- Admins (platform and venue) must use the score-proof-url Edge Function.
 
--- Owner or admin can delete
+-- Owner or platform admin can delete (cleanup of denied/withdrawn proofs)
 CREATE POLICY "score-proofs: delete" ON storage.objects
   FOR DELETE USING (
     bucket_id = 'score-proofs'

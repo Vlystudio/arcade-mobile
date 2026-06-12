@@ -55,7 +55,7 @@ BEGIN
   IF NOT FOUND THEN
     INSERT INTO security_events (event_type, severity, user_id, details)
     VALUES ('qr_token_invalid', 'warn', v_user_id,
-      jsonb_build_object('token_suffix', right(p_token, 8)))
+      jsonb_build_object('token_fingerprint', public.qr_token_fingerprint(p_token)))
     ON CONFLICT DO NOTHING;
     RETURN json_build_object('error', 'lane_not_found',
       'message', 'This QR code does not match any lane. Ask staff to scan the current code.');
@@ -65,7 +65,7 @@ BEGIN
   IF v_lqt.revoked_at IS NOT NULL THEN
     INSERT INTO security_events (event_type, severity, user_id, details)
     VALUES ('qr_token_revoked', 'warn', v_user_id,
-      jsonb_build_object('token_suffix', right(p_token, 8), 'lane_id', v_lqt.lane_id))
+      jsonb_build_object('token_fingerprint', public.qr_token_fingerprint(p_token), 'lane_id', v_lqt.lane_id))
     ON CONFLICT DO NOTHING;
     RETURN json_build_object('error', 'token_revoked',
       'message', 'This QR code has been revoked. Ask staff for a new one.');
@@ -74,7 +74,7 @@ BEGIN
   IF v_lqt.expires_at < now() THEN
     INSERT INTO security_events (event_type, severity, user_id, details)
     VALUES ('qr_token_expired', 'warn', v_user_id,
-      jsonb_build_object('token_suffix', right(p_token, 8), 'lane_id', v_lqt.lane_id))
+      jsonb_build_object('token_fingerprint', public.qr_token_fingerprint(p_token), 'lane_id', v_lqt.lane_id))
     ON CONFLICT DO NOTHING;
     RETURN json_build_object('error', 'token_expired',
       'message', 'This QR code has expired. Ask staff to regenerate it.');
@@ -205,7 +205,7 @@ BEGIN
   RETURN json_build_object(
     'ok',           true,
     'raw_token',    v_raw_token,
-    'token_suffix', right(v_raw_token, 8),
+    'token_fingerprint', public.qr_token_fingerprint(v_raw_token),
     'expires_at',   v_expires_at,
     'ttl_hours',    p_ttl_hours,
     'lane_id',      p_lane_id,

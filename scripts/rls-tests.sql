@@ -110,7 +110,10 @@ BEGIN;
       CASE WHEN v_cnt = 0 THEN 'PASS' ELSE 'FAIL' END, v_cnt;
 
     -- T10: public_profiles view respects is_private
-    SELECT count(*) INTO v_cnt FROM public.public_profiles WHERE is_private = true AND id <> v_uid_a;
+    SELECT count(*) INTO v_cnt
+      FROM public.public_profiles pp
+      JOIN public.profiles pr ON pr.id = pp.id
+     WHERE COALESCE(pr.is_private, false) = true AND pp.id <> v_uid_a;
     RAISE NOTICE '%  T10: public_profiles hides other users with is_private=true (rows=%)',
       CASE WHEN v_cnt = 0 THEN 'PASS' ELSE 'FAIL' END, v_cnt;
 

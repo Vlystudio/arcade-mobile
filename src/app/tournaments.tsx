@@ -179,11 +179,18 @@ export default function TournamentsScreen() {
     if (ownedIds.length > 0) {
       const { data: jrData } = await supabase
         .from("tournament_registrations")
-        .select("id, tournament_id, user_id, profiles(username)")
+        .select("id, tournament_id, user_id")
         .in("tournament_id", ownedIds).eq("status", "pending");
+      const jrUserIds = [...new Set((jrData ?? []).map((r: any) => r.user_id as string))];
+      let jrNames: Record<string, string> = {};
+      if (jrUserIds.length) {
+        const { data: jrProfiles } = await supabase
+          .from("public_profiles").select("id, username").in("id", jrUserIds);
+        for (const p of jrProfiles ?? []) jrNames[(p as any).id] = (p as any).username ?? "Unknown";
+      }
       setJoinRequests((jrData ?? []).map((r: any) => ({
         id: r.id, tournament_id: r.tournament_id, user_id: r.user_id,
-        username: Array.isArray(r.profiles) ? r.profiles[0]?.username : r.profiles?.username ?? "Unknown",
+        username: jrNames[r.user_id] ?? "Unknown",
       })));
     } else {
       setJoinRequests([]);

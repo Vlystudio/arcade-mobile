@@ -266,7 +266,7 @@ export default function TeamDetailScreen() {
     const annUserIds = [...new Set((annData ?? []).map((a: any) => a.user_id as string))];
     let annProfileMap: Record<string, { username: string; avatar_url: string | null }> = {};
     if (annUserIds.length) {
-      const { data: ap } = await supabase.from("profiles").select("id, username, avatar_url").in("id", annUserIds);
+      const { data: ap } = await supabase.from("public_profiles").select("id, username, avatar_url").in("id", annUserIds);
       for (const p of ap ?? []) annProfileMap[(p as any).id] = { username: (p as any).username, avatar_url: (p as any).avatar_url };
     }
     setAnnouncements((annData ?? []).map((a: any) => ({

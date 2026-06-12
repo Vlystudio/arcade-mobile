@@ -21,7 +21,9 @@
  * RPC calls used:
  *   rpc_admin_get_score_review_queue
  *   rpc_admin_review_score
- *   rpc_admin_create_score_proof_signed_url
+ *   score-proof-url Edge Function (server-side signed URLs; it calls
+ *   rpc_admin_create_score_proof_signed_url with the admin's JWT — the
+ *   client never calls storage.createSignedUrl for score-proofs)
  */
 
 export { type ReviewTab, type ReviewScore, type ConfirmAction, type StatsData, type HealthData } from "./types";

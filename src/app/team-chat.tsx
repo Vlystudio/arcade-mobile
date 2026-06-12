@@ -54,7 +54,7 @@ export default function TeamChatScreen() {
     const userIds = [...new Set(rows.map((r: any) => r.user_id as string))];
     let map: Record<string, { username: string; avatar_url: string | null }> = {};
     if (userIds.length) {
-      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds);
+      const { data: profiles } = await supabase.from("public_profiles").select("id, username, avatar_url").in("id", userIds);
       for (const p of profiles ?? []) map[(p as any).id] = { username: (p as any).username, avatar_url: (p as any).avatar_url };
     }
     setProfileMap(map);
@@ -80,7 +80,7 @@ export default function TeamChatScreen() {
         const r = payload.new as any;
         let profile = profileMap[r.user_id];
         if (!profile) {
-          const { data } = await supabase.from("profiles").select("username, avatar_url").eq("id", r.user_id).single();
+          const { data } = await supabase.from("public_profiles").select("username, avatar_url").eq("id", r.user_id).maybeSingle();
           profile = { username: (data as any)?.username ?? "Unknown", avatar_url: (data as any)?.avatar_url ?? null };
           setProfileMap((prev) => ({ ...prev, [r.user_id]: profile }));
         }

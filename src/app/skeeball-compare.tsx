@@ -90,7 +90,7 @@ export default function SkeeballCompareScreen() {
     if (!q.trim()) { setResults([]); return; }
     setSearching(true);
     const { data } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, username, avatar_url")
       .ilike("username", `%${q.trim()}%`)
       .limit(12);

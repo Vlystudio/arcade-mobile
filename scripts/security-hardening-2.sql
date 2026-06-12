@@ -199,19 +199,24 @@ GRANT  EXECUTE ON FUNCTION public.rpc_submit_score(uuid, uuid, uuid, uuid, integ
 
 
 -- ── A8: public_profiles view — privacy filter ─────────────────
+-- ⚠ SOURCE OF TRUTH for public.public_profiles.
 -- Users with is_private = true are only visible to themselves.
-CREATE OR REPLACE VIEW public.public_profiles AS
+-- Exposes ONLY public display fields: no email, phone, role, admin flags,
+-- billing IDs, or private settings (is_private itself is filter-only).
+-- DROP + CREATE because CREATE OR REPLACE VIEW cannot remove columns.
+DROP VIEW IF EXISTS public.public_profiles;
+CREATE VIEW public.public_profiles AS
   SELECT
     id,
     username,
     avatar_url,
     bio,
-    role,
     online_status,
     created_at,
-    featured_game_id,
-    is_private
+    featured_game_id
   FROM profiles
   WHERE (NOT COALESCE(is_private, false)) OR id = auth.uid();
 
-GRANT SELECT ON public.public_profiles TO authenticated;
+-- anon needs read for the public landing page / standings surfaces;
+-- rows remain privacy-filtered either way.
+GRANT SELECT ON public.public_profiles TO anon, authenticated;

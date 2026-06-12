@@ -139,7 +139,7 @@ export default function ForumDetailScreen() {
     ])];
     let profileMap: Record<string, { username: string; avatar_url: string | null }> = {};
     if (userIds.length) {
-      const { data: profiles } = await supabase.from("profiles").select("id, username, avatar_url").in("id", userIds);
+      const { data: profiles } = await supabase.from("public_profiles").select("id, username, avatar_url").in("id", userIds);
       for (const p of profiles ?? []) profileMap[(p as any).id] = { username: (p as any).username, avatar_url: (p as any).avatar_url };
     }
 

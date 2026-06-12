@@ -131,7 +131,7 @@ BEGIN
 
   IF NOT FOUND THEN
     INSERT INTO public.security_events (event_type, severity, user_id, details)
-    VALUES ('skeeball_qr_invalid', 'warn', auth.uid(), jsonb_build_object('token_suffix', right(p_token, 8)))
+    VALUES ('skeeball_qr_invalid', 'warn', auth.uid(), jsonb_build_object('token_fingerprint', public.qr_token_fingerprint(p_token)))
     ON CONFLICT DO NOTHING;
     RETURN QUERY SELECT NULL::uuid, NULL::int, NULL::uuid, NULL::text, NULL::text, NULL::uuid, NULL::text, 'lane_not_found'::text;
     RETURN;

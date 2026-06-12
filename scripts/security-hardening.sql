@@ -388,8 +388,12 @@ GRANT  EXECUTE ON FUNCTION public.rpc_submit_score(uuid, uuid, uuid, uuid, integ
 -- P9: public_profiles view + role-escalation guard trigger
 -- ────────────────────────────────────────────────────────────
 
--- Safe public view — no role flags, no email, no sensitive admin data
-CREATE OR REPLACE VIEW public.public_profiles AS
+-- Safe public view — no role flags, no email, no sensitive admin data.
+-- Bootstrap definition only; the SOURCE OF TRUTH is security-hardening-2.sql
+-- (A8), which adds the privacy filter and display columns. DROP + CREATE is
+-- required because CREATE OR REPLACE VIEW cannot remove or reorder columns.
+DROP VIEW IF EXISTS public.public_profiles;
+CREATE VIEW public.public_profiles AS
   SELECT
     id,
     username,
@@ -398,6 +402,8 @@ CREATE OR REPLACE VIEW public.public_profiles AS
     created_at
   FROM profiles
   WHERE id IS NOT NULL;
+
+GRANT SELECT ON public.public_profiles TO anon, authenticated;
 
 -- Role-escalation guard: non-admins cannot change is_admin,
 -- is_arcade_official, or role on any profile row.

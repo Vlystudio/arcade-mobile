@@ -74,11 +74,15 @@ GRANT EXECUTE ON FUNCTION public.rpc_admin_get_score_review_queue(uuid, text) TO
 
 
 -- ── rpc_admin_create_score_proof_signed_url ──────────────────
--- Returns proof_storage_path after MFA + admin auth check.
--- Client then calls:
---   supabase.storage.from('score-proofs').createSignedUrl(path, 3600)
--- Keeping signed-URL generation on the client avoids storing
--- short-lived tokens in the DB and leverages Supabase Storage auth.
+-- Authorization gate for admin score-proof access. Returns
+-- proof_storage_path after MFA + (platform admin OR venue admin of the
+-- score's venue) checks, logging admin_access_denied on refusal.
+--
+-- ⚠ This RPC is called by the score-proof-url Edge Function on behalf of
+-- the admin (with the admin's own JWT); the Edge Function then signs the
+-- URL with the service role and returns ONLY the short-lived signed URL.
+-- Clients must not call storage.createSignedUrl directly — score-proofs
+-- has no direct-read storage policy for admins (see storage-security.sql).
 CREATE OR REPLACE FUNCTION public.rpc_admin_create_score_proof_signed_url(
   p_score_id uuid
 ) RETURNS json LANGUAGE plpgsql SECURITY DEFINER

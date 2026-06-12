@@ -89,7 +89,7 @@ export default function ForumsScreen() {
 
     const [profilesRes, postsRes] = await Promise.all([
       creatorIds.length
-        ? supabase.from("profiles").select("id, username").in("id", creatorIds)
+        ? supabase.from("public_profiles").select("id, username").in("id", creatorIds)
         : Promise.resolve({ data: [] }),
       supabase.from("forum_posts").select("forum_id, created_at").in("forum_id", forumIds),
     ]);

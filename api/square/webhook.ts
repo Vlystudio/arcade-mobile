@@ -15,6 +15,13 @@ const ALLOWED_EVENT_TYPES = new Set([
   "order.updated",
 ]);
 
+// Square signs the EXACT raw request bytes (notification URL + body).
+// Vercel's default body parser consumes the stream and re-serializing the
+// parsed object does not reproduce those bytes (whitespace, unicode escapes,
+// number formatting), which breaks — or worse, weakens — HMAC verification.
+// Disable parsing so we always verify against the untouched raw body.
+export const config = { api: { bodyParser: false } };
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCorsPreflight(req, res, "POST, OPTIONS")) return;
   applyCors(req, res, "POST, OPTIONS");
@@ -30,7 +37,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(503).json({ error: "webhook_unavailable" });
   }
 
-  const rawBody = await readRawBody(req);
+  let rawBody: string;
+  try {
+    rawBody = await readRawBody(req);
+  } catch (e: any) {
+    console.error("[square-webhook] raw body read failed:", e?.message);
+    return res.status(500).json({ error: "webhook_failed" });
+  }
   const signature = req.headers["x-square-hmacsha256-signature"];
   if (typeof signature !== "string" || !verifySquareSignature(rawBody, signature, signatureKey, notificationUrl)) {
     console.warn("[square-webhook] invalid signature");
@@ -144,9 +157,16 @@ function logPaymentSecurityEvent(eventType: string, details: Record<string, unkn
 }
 
 async function readRawBody(req: VercelRequest): Promise<string> {
+  // bodyParser is disabled for this route (see config above), so the normal
+  // path is the stream read. The string/Buffer branches only cover runtimes
+  // that hand us the raw payload directly.
   if (typeof req.body === "string") return req.body;
   if (Buffer.isBuffer(req.body)) return req.body.toString("utf8");
-  if (req.body && typeof req.body === "object") return JSON.stringify(req.body);
+  if (req.body && typeof req.body === "object") {
+    // A parsed object means the raw bytes are gone — re-serialization is NOT
+    // byte-faithful, so verification against it would be unsound. Fail closed.
+    throw new Error("raw body unavailable: body was parsed before the handler");
+  }
 
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
