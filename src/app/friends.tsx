@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../components/avatar";
+import { BetaBadge, RoleBadge } from "../components/role-badge";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { openUserProfile } from "../lib/open-profile";
@@ -24,6 +25,8 @@ type Friend = {
   username: string;
   avatar_url: string | null;
   online_status: string;
+  badge_role?: string | null;
+  is_beta_tester?: boolean;
 };
 
 type FriendRequest = {
@@ -31,6 +34,8 @@ type FriendRequest = {
   id: string;
   username: string;
   avatar_url: string | null;
+  badge_role?: string | null;
+  is_beta_tester?: boolean;
 };
 
 type SearchUser = {
@@ -39,6 +44,8 @@ type SearchUser = {
   avatar_url: string | null;
   friendshipStatus: "none" | "pending_sent" | "pending_received" | "friends";
   friendshipId: string | null;
+  badge_role?: string | null;
+  is_beta_tester?: boolean;
 };
 
 export default function FriendsScreen() {
@@ -64,8 +71,8 @@ export default function FriendsScreen() {
       .from("friendships")
       .select(`
         id, status, requester_id, addressee_id,
-        requester:profiles!requester_id(id, username, avatar_url, online_status),
-        addressee:profiles!addressee_id(id, username, avatar_url, online_status)
+        requester:profiles!requester_id(id, username, avatar_url, online_status, role, is_beta_tester),
+        addressee:profiles!addressee_id(id, username, avatar_url, online_status, role, is_beta_tester)
       `)
       .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
 
@@ -88,6 +95,8 @@ export default function FriendsScreen() {
           username: otherProfile?.username ?? "Unknown",
           avatar_url: otherProfile?.avatar_url ?? null,
           online_status: otherProfile?.online_status ?? "offline",
+          badge_role: (otherProfile as any)?.role ?? null,
+          is_beta_tester: !!(otherProfile as any)?.is_beta_tester,
         });
       } else if (f.status === "pending" && !isReq) {
         const req = Array.isArray(f.requester) ? f.requester[0] : f.requester;
@@ -95,6 +104,8 @@ export default function FriendsScreen() {
           friendshipId: f.id, id: f.requester_id,
           username: req?.username ?? "Unknown",
           avatar_url: req?.avatar_url ?? null,
+          badge_role: (req as any)?.role ?? null,
+          is_beta_tester: !!(req as any)?.is_beta_tester,
         });
       }
     }
@@ -110,7 +121,7 @@ export default function FriendsScreen() {
     setSearching(true);
     const { data } = await supabase
       .from("public_profiles")
-      .select("id, username, avatar_url")
+      .select("id, username, avatar_url, badge_role, is_beta_tester")
       .ilike("username", `%${text.replace(/\s+/g, "")}%`)
       .neq("id", user.id)
       .limit(10);
@@ -123,7 +134,7 @@ export default function FriendsScreen() {
         else if (fs.status === "pending" && fs.role === "requester") status = "pending_sent";
         else if (fs.status === "pending" && fs.role === "addressee") status = "pending_received";
       }
-      return { id: p.id, username: p.username, avatar_url: p.avatar_url, friendshipStatus: status, friendshipId: fs?.id ?? null };
+      return { id: p.id, username: p.username, avatar_url: p.avatar_url, friendshipStatus: status, friendshipId: fs?.id ?? null, badge_role: p.badge_role ?? null, is_beta_tester: !!p.is_beta_tester };
     });
 
     setSearchResults(results);
@@ -278,7 +289,7 @@ export default function FriendsScreen() {
                   <View style={[styles.dot, item.online_status === "online" ? styles.dotOn : styles.dotOff]} />
                 </Pressable>
                 <View style={styles.info}>
-                  <Text style={styles.name}>{item.username}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><Text style={styles.name}>{item.username}</Text><RoleBadge role={item.badge_role} size={13} /><BetaBadge visible={item.is_beta_tester} size={13} /></View>
                   <Text style={[styles.sub, item.online_status === "online" && { color: "#22c55e" }]}>
                     {item.online_status === "online" ? "Online" : "Offline"}
                   </Text>
@@ -318,7 +329,7 @@ export default function FriendsScreen() {
               <View style={styles.row}>
                 <Avatar uri={item.avatar_url} name={item.username} size={46} />
                 <View style={styles.info}>
-                  <Text style={styles.name}>{item.username}</Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><Text style={styles.name}>{item.username}</Text><RoleBadge role={item.badge_role} size={13} /><BetaBadge visible={item.is_beta_tester} size={13} /></View>
                   <Text style={styles.sub}>Wants to be friends</Text>
                 </View>
                 <View style={styles.reqActions}>
@@ -380,7 +391,7 @@ export default function FriendsScreen() {
                     <Avatar uri={item.avatar_url} name={item.username} size={44} />
                   </Pressable>
                   <View style={styles.info}>
-                    <Text style={styles.name}>{item.username}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}><Text style={styles.name}>{item.username}</Text><RoleBadge role={item.badge_role} size={13} /><BetaBadge visible={item.is_beta_tester} size={13} /></View>
                     {item.friendshipStatus === "friends" && <Text style={[styles.sub, { color: "#06b6d4" }]}>Friends</Text>}
                     {item.friendshipStatus === "pending_sent" && <Text style={styles.sub}>Request sent</Text>}
                     {item.friendshipStatus === "pending_received" && <Text style={[styles.sub, { color: "#f59e0b" }]}>Sent you a request</Text>}

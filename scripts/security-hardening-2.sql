@@ -207,6 +207,11 @@ GRANT  EXECUTE ON FUNCTION public.rpc_submit_score(uuid, uuid, uuid, uuid, integ
 -- unless viewing yourself. Exposes no email, phone, role, admin flags,
 -- billing IDs, or the is_private flag itself.
 -- DROP + CREATE because CREATE OR REPLACE VIEW cannot remove columns.
+-- Fresh-database guard: is_beta_tester is owned by beta-testers.sql (later
+-- in run order); ensure it exists before the view references it.
+ALTER TABLE public.profiles
+  ADD COLUMN IF NOT EXISTS is_beta_tester boolean NOT NULL DEFAULT false;
+
 DROP VIEW IF EXISTS public.public_profiles;
 CREATE VIEW public.public_profiles AS
   SELECT
@@ -219,7 +224,11 @@ CREATE VIEW public.public_profiles AS
          THEN online_status END AS online_status,
     created_at,
     CASE WHEN (NOT COALESCE(is_private, false)) OR id = auth.uid()
-         THEN featured_game_id END AS featured_game_id
+         THEN featured_game_id END AS featured_game_id,
+    -- Public verification marks. badge_role is deliberately sanitized to the
+    -- displayable badge set only — never the raw role/security field.
+    CASE WHEN role IN ('admin', 'owner', 'architect') THEN role END AS badge_role,
+    COALESCE(is_beta_tester, false) AS is_beta_tester
   FROM profiles;
 
 -- anon needs read for the public landing page / standings surfaces;

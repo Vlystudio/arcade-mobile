@@ -460,7 +460,7 @@ export default function ProfileScreen() {
     const term = `%${q.trim()}%`;
     const userTerm = `%${q.replace(/\s+/g, "")}%`;
     const [usersRes, teamsRes, forumsRes] = await Promise.all([
-      supabase.from("profiles").select("id, username, avatar_url, role").ilike("username", userTerm).neq("id", user!.id).limit(10),
+      supabase.from("profiles").select("id, username, avatar_url, role, is_beta_tester").ilike("username", userTerm).neq("id", user!.id).limit(10),
       supabase.from("teams").select("id, name").ilike("name", term).limit(6),
       supabase.from("forums").select("id, title").eq("status", "approved").ilike("title", term).limit(6),
     ]);
@@ -469,6 +469,7 @@ export default function ProfileScreen() {
       username: p.username ?? "Unknown",
       avatar_url: p.avatar_url ?? null,
       role: (p.role ?? "user") as AppRole,
+      is_beta_tester: !!p.is_beta_tester,
     })));
     setTeamResults((teamsRes.data ?? []) as any);
     setForumResults((forumsRes.data ?? []) as any);
@@ -1089,6 +1090,7 @@ export default function ProfileScreen() {
                       <Avatar uri={r.avatar_url} name={r.username} size={40} />
                       <Text style={[styles.searchResultName, { flex: 1 }]}>{r.username}</Text>
                       <RoleBadge role={r.role} size={14} />
+                      <BetaBadge visible={(r as any).is_beta_tester} size={14} />
                       <Ionicons name="chevron-forward" size={16} color="#333" />
                     </Pressable>
                   ))}
