@@ -91,6 +91,18 @@ type AdminTeam = {
 type AdminTeamMember = { user_id: string; username: string; avatar_url: string | null; role: string };
 type AdminTeamRequest = { request_id: string; user_id: string; username: string; avatar_url: string | null; message: string | null };
 
+type AdminRegistration = {
+  id: string;
+  user_id: string;
+  username: string;
+  registration_type: "team" | "individual";
+  status: "pending_payment" | "paid" | "refunded" | "cancelled";
+  team_id: string | null;
+  team_name: string | null;
+  paid_at: string | null;
+  created_at: string;
+};
+
 type TournamentRequest = {
   id: string;
   user_id: string;
@@ -275,6 +287,16 @@ export default function AdminScreen() {
   const [manageTeamBusy, setManageTeamBusy] = useState<string | null>(null);
   const [addMemberQuery, setAddMemberQuery] = useState("");
 
+  // Registrations state (sub-tab within teams)
+  const [teamsSubTab, setTeamsSubTab] = useState<"teams" | "registrations">("teams");
+  const [adminRegistrations, setAdminRegistrations] = useState<AdminRegistration[]>([]);
+  const [regsLoading, setRegsLoading] = useState(false);
+  const [regsError, setRegsError] = useState<string | null>(null);
+  const [markingPaid, setMarkingPaid] = useState<string | null>(null);
+  const [assignTarget, setAssignTarget] = useState<AdminRegistration | null>(null);
+  const [assignTeamId, setAssignTeamId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
+
   // Tournaments — requests
   const [tournRequests, setTournRequests] = useState<TournamentRequest[]>([]);
   const [tournTab, setTournTab] = useState<"pending" | "approved" | "denied" | "manage">("pending");
@@ -435,6 +457,11 @@ export default function AdminScreen() {
     if (tournTab === "manage") loadManageTournaments();
     else loadTournRequests(tournTab as "pending" | "approved" | "denied");
   }, [tournTab]);
+  useEffect(() => {
+    if (!isAdmin || mainTab !== "teams") return;
+    if (teamsSubTab === "registrations") loadAdminRegistrations();
+    else loadAdminTeams();
+  }, [teamsSubTab]);
 
   // Realtime: badge for new user support messages
   useEffect(() => {
@@ -786,6 +813,92 @@ export default function AdminScreen() {
       await loadAdminTeams();
     }
     setCreatingTeam(false);
+  }
+
+  async function loadAdminRegistrations() {
+    setRegsLoading(true);
+    setRegsError(null);
+    // Find the active paid season
+    const { data: season } = await supabase
+      .from("seasons")
+      .select("id")
+      .eq("status", "active")
+      .eq("registration_required", true)
+      .maybeSingle();
+
+    if (!season) {
+      setAdminRegistrations([]);
+      setRegsLoading(false);
+      return;
+    }
+
+    const { data: regs, error } = await supabase
+      .from("team_registrations")
+      .select("id, user_id, registration_type, status, team_id, paid_at, created_at, teams(name)")
+      .eq("season_id", season.id)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      setRegsError(error.message);
+      setRegsLoading(false);
+      return;
+    }
+
+    const userIds = [...new Set((regs ?? []).map((r: any) => r.user_id).filter(Boolean))];
+    let userMap: Record<string, string> = {};
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase.from("profiles").select("id, username").in("id", userIds);
+      for (const p of profiles ?? []) userMap[(p as any).id] = (p as any).username;
+    }
+
+    setAdminRegistrations((regs ?? []).map((r: any) => ({
+      id: r.id,
+      user_id: r.user_id,
+      username: userMap[r.user_id] ?? "Unknown",
+      registration_type: r.registration_type,
+      status: r.status,
+      team_id: r.team_id ?? null,
+      team_name: r.teams?.name ?? null,
+      paid_at: r.paid_at ?? null,
+      created_at: r.created_at,
+    })));
+    setRegsLoading(false);
+  }
+
+  async function markRegistrationPaid(regId: string) {
+    setMarkingPaid(regId);
+    const { error } = await supabase
+      .from("team_registrations")
+      .update({ status: "paid", paid_at: new Date().toISOString() })
+      .eq("id", regId);
+    setMarkingPaid(null);
+    if (error) {
+      setRegsError(error.message);
+    } else {
+      setAdminRegistrations((prev) =>
+        prev.map((r) => r.id === regId ? { ...r, status: "paid", paid_at: new Date().toISOString() } : r)
+      );
+    }
+  }
+
+  async function assignTeamToReg() {
+    if (!assignTarget || !assignTeamId) return;
+    setAssigning(true);
+    const { error } = await supabase
+      .from("team_registrations")
+      .update({ team_id: assignTeamId })
+      .eq("id", assignTarget.id);
+    if (!error) {
+      const teamName = adminTeams.find((t) => t.id === assignTeamId)?.name ?? null;
+      setAdminRegistrations((prev) =>
+        prev.map((r) => r.id === assignTarget.id ? { ...r, team_id: assignTeamId, team_name: teamName } : r)
+      );
+    } else {
+      setRegsError(error.message);
+    }
+    setAssigning(false);
+    setAssignTarget(null);
+    setAssignTeamId(null);
   }
 
   async function loadManageTeam(team: AdminTeam) {
@@ -1759,46 +1872,187 @@ export default function AdminScreen() {
         <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
-          refreshControl={<RefreshControl refreshing={false} onRefresh={loadAdminTeams} tintColor="#06b6d4" />}
+          refreshControl={<RefreshControl refreshing={false} onRefresh={() => teamsSubTab === "registrations" ? loadAdminRegistrations() : loadAdminTeams()} tintColor="#06b6d4" />}
         >
-          <View style={styles.teamsHeaderRow}>
-            <Text style={styles.teamsCountText}>{adminTeams.length} {adminTeams.length === 1 ? "team" : "teams"}</Text>
-            <Pressable style={styles.createTeamBtn} onPress={() => { setCreateTeamError(null); setCreateTeamNames(""); setCreateTeamVisible(true); }}>
-              <Ionicons name="add-circle-outline" size={16} color="#06b6d4" />
-              <Text style={styles.createTeamBtnText}>Create Team</Text>
+          {/* Sub-tab toggle: Teams / Registrations */}
+          <View style={styles.subTabRow}>
+            <Pressable
+              style={[styles.subTab, teamsSubTab === "teams" && styles.subTabActive]}
+              onPress={() => setTeamsSubTab("teams")}
+            >
+              <Text style={[styles.subTabText, teamsSubTab === "teams" && styles.subTabTextActive]}>Teams</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.subTab, teamsSubTab === "registrations" && styles.subTabActive]}
+              onPress={() => setTeamsSubTab("registrations")}
+            >
+              <Text style={[styles.subTabText, teamsSubTab === "registrations" && styles.subTabTextActive]}>Registrations</Text>
             </Pressable>
           </View>
-          {teamsLoading ? (
-            <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
-          ) : teamsError ? (
-            <ErrorBanner message={teamsError} />
-          ) : adminTeams.length === 0 ? (
-            <EmptyState title="No teams yet" sub="Use Create Team to import or add teams." icon="people-outline" color="#06b6d4" />
-          ) : (
-            adminTeams.map((team) => (
-              <View key={team.id} style={styles.adminTeamCard}>
-                <View style={styles.adminTeamAvatar}>
-                  <Text style={styles.adminTeamAvatarText}>{team.name.slice(0, 2).toUpperCase()}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.adminTeamName}>{team.name}</Text>
-                  <Text style={styles.adminTeamMeta}>
-                    Captain: {team.captain_username} · {team.member_count} {team.member_count === 1 ? "member" : "members"}
-                  </Text>
-                  <Text style={styles.adminTeamDate}>Created {relTime(team.created_at)}</Text>
-                </View>
-                <Pressable style={styles.manageTeamBtn} onPress={() => loadManageTeam(team)}>
-                  <Ionicons name="settings-outline" size={16} color="#06b6d4" />
-                </Pressable>
-                <Pressable style={styles.deleteTeamBtn} onPress={() => setDeleteTeamTarget(team)}>
-                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
+
+          {/* ── Teams list ── */}
+          {teamsSubTab === "teams" && (
+            <>
+              <View style={styles.teamsHeaderRow}>
+                <Text style={styles.teamsCountText}>{adminTeams.length} {adminTeams.length === 1 ? "team" : "teams"}</Text>
+                <Pressable style={styles.createTeamBtn} onPress={() => { setCreateTeamError(null); setCreateTeamNames(""); setCreateTeamVisible(true); }}>
+                  <Ionicons name="add-circle-outline" size={16} color="#06b6d4" />
+                  <Text style={styles.createTeamBtnText}>Create Team</Text>
                 </Pressable>
               </View>
-            ))
+              {teamsLoading ? (
+                <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
+              ) : teamsError ? (
+                <ErrorBanner message={teamsError} />
+              ) : adminTeams.length === 0 ? (
+                <EmptyState title="No teams yet" sub="Use Create Team to import or add teams." icon="people-outline" color="#06b6d4" />
+              ) : (
+                adminTeams.map((team) => (
+                  <View key={team.id} style={styles.adminTeamCard}>
+                    <View style={styles.adminTeamAvatar}>
+                      <Text style={styles.adminTeamAvatarText}>{team.name.slice(0, 2).toUpperCase()}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.adminTeamName}>{team.name}</Text>
+                      <Text style={styles.adminTeamMeta}>
+                        Captain: {team.captain_username} · {team.member_count} {team.member_count === 1 ? "member" : "members"}
+                      </Text>
+                      <Text style={styles.adminTeamDate}>Created {relTime(team.created_at)}</Text>
+                    </View>
+                    <Pressable style={styles.manageTeamBtn} onPress={() => loadManageTeam(team)}>
+                      <Ionicons name="settings-outline" size={16} color="#06b6d4" />
+                    </Pressable>
+                    <Pressable style={styles.deleteTeamBtn} onPress={() => setDeleteTeamTarget(team)}>
+                      <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </>
+          )}
+
+          {/* ── Registrations list ── */}
+          {teamsSubTab === "registrations" && (
+            <>
+              {regsError && <ErrorBanner message={regsError} />}
+              {regsLoading ? (
+                <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
+              ) : adminRegistrations.length === 0 ? (
+                <EmptyState
+                  title="No registrations yet"
+                  sub="Registrations appear here when users sign up for the active paid season."
+                  icon="card-outline"
+                  color="#06b6d4"
+                />
+              ) : (
+                adminRegistrations.map((reg) => {
+                  const isPending = reg.status === "pending_payment";
+                  const isPaid = reg.status === "paid";
+                  const isIndividualUnassigned = isPaid && reg.registration_type === "individual" && !reg.team_id;
+                  return (
+                    <View key={reg.id} style={styles.adminTeamCard}>
+                      <View style={[styles.adminTeamAvatar, { backgroundColor: isPaid ? "rgba(34,197,94,0.1)" : "rgba(245,158,11,0.1)" }]}>
+                        <Ionicons
+                          name={reg.registration_type === "team" ? "people" : "person"}
+                          size={18}
+                          color={isPaid ? "#22c55e" : "#f59e0b"}
+                        />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.adminTeamName}>{reg.username}</Text>
+                        <Text style={styles.adminTeamMeta}>
+                          {reg.registration_type === "team" ? "Team reg · $200" : "Individual · $50"}
+                          {reg.team_name ? ` · Team: ${reg.team_name}` : ""}
+                        </Text>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginTop: 2 }}>
+                          <View style={{
+                            paddingHorizontal: 7, paddingVertical: 2, borderRadius: 6,
+                            backgroundColor: isPaid ? "rgba(34,197,94,0.12)" : isPending ? "rgba(245,158,11,0.12)" : "rgba(100,100,100,0.1)",
+                          }}>
+                            <Text style={{ fontSize: 10, fontWeight: "800", color: isPaid ? "#22c55e" : isPending ? "#f59e0b" : "#555" }}>
+                              {isPaid ? "PAID" : isPending ? "PENDING PAYMENT" : reg.status.toUpperCase()}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                      <View style={{ gap: 6 }}>
+                        {isPending && (
+                          <Pressable
+                            style={[styles.createTeamBtn, markingPaid === reg.id && { opacity: 0.5 }]}
+                            onPress={() => markRegistrationPaid(reg.id)}
+                            disabled={markingPaid === reg.id}
+                          >
+                            {markingPaid === reg.id
+                              ? <ActivityIndicator size="small" color="#06b6d4" />
+                              : <><Ionicons name="checkmark-circle-outline" size={14} color="#22c55e" /><Text style={[styles.createTeamBtnText, { color: "#22c55e" }]}>Mark Paid</Text></>
+                            }
+                          </Pressable>
+                        )}
+                        {isIndividualUnassigned && (
+                          <Pressable
+                            style={styles.createTeamBtn}
+                            onPress={() => { setAssignTarget(reg); setAssignTeamId(null); }}
+                          >
+                            <Ionicons name="people-outline" size={14} color="#06b6d4" />
+                            <Text style={styles.createTeamBtnText}>Assign Team</Text>
+                          </Pressable>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </>
           )}
         </ScrollView>
         </VenueAdminPanel>
       )}
+
+      {/* ── Assign individual to team modal ── */}
+      <Modal visible={!!assignTarget} transparent animationType="slide" onRequestClose={() => setAssignTarget(null)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setAssignTarget(null)} />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Assign to Team</Text>
+            <Text style={styles.modalSub}>{assignTarget?.username} — individual registrant</Text>
+            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+              {adminTeams.map((team) => (
+                <Pressable
+                  key={team.id}
+                  style={[styles.regTeamRow, assignTeamId === team.id && styles.regTeamRowSelected]}
+                  onPress={() => setAssignTeamId(team.id)}
+                >
+                  <View style={styles.adminTeamAvatar}>
+                    <Text style={styles.adminTeamAvatarText}>{team.name.slice(0, 2).toUpperCase()}</Text>
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.adminTeamName, assignTeamId === team.id && { color: "#06b6d4" }]}>{team.name}</Text>
+                    <Text style={styles.adminTeamMeta}>{team.member_count} members</Text>
+                  </View>
+                  {assignTeamId === team.id
+                    ? <Ionicons name="checkmark-circle" size={20} color="#06b6d4" />
+                    : <Ionicons name="ellipse-outline" size={20} color="#333" />}
+                </Pressable>
+              ))}
+            </ScrollView>
+            <View style={styles.modalBtns}>
+              <Pressable style={styles.modalCancelBtn} onPress={() => { setAssignTarget(null); setAssignTeamId(null); }}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalConfirmBtn, (!assignTeamId || assigning) && { opacity: 0.4 }]}
+                onPress={assignTeamToReg}
+                disabled={!assignTeamId || assigning}
+              >
+                {assigning
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <Text style={styles.modalConfirmText}>Assign</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Scheduler ── */}
       {mainTab === "scheduler" && (
@@ -4496,6 +4750,26 @@ const styles = StyleSheet.create({
   adminTeamDate:       { color: "#333", fontSize: 11, marginTop: 2 },
   manageTeamBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
   deleteTeamBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(239,68,68,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(239,68,68,0.2)" },
+
+  // Teams sub-tab toggle
+  subTabRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  subTab: { flex: 1, paddingVertical: 9, borderRadius: 12, backgroundColor: "#111", borderWidth: 1, borderColor: "#1e1e1e", alignItems: "center" },
+  subTabActive: { backgroundColor: "rgba(6,182,212,0.12)", borderColor: "#06b6d4" },
+  subTabText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  subTabTextActive: { color: "#06b6d4" },
+
+  // Assign team modal
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
+  regTeamRow: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  regTeamRowSelected: { backgroundColor: "rgba(6,182,212,0.06)", borderRadius: 12, paddingHorizontal: 8, marginHorizontal: -8 },
+  modalBtns: { flexDirection: "row", gap: 10, marginTop: 16 },
+  modalCancelBtn: { flex: 1, backgroundColor: "#1a1a1a", borderRadius: 14, padding: 15, alignItems: "center" },
+  modalCancelText: { color: "#888", fontWeight: "700" },
+  modalConfirmBtn: { flex: 1, backgroundColor: "#06b6d4", borderRadius: 14, padding: 15, alignItems: "center" },
+  modalConfirmText: { color: "#000", fontWeight: "900" },
 
   // Tournament request cards
   tournCard: {

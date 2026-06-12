@@ -108,6 +108,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // Auto-confirm team registration payments when the order completes
+  const orderReferenceId: string | null = order?.reference_id ?? null;
+  const isOrderComplete = order?.state === "COMPLETED" || payment?.status === "COMPLETED";
+  if (orderReferenceId?.startsWith("reg:") && isOrderComplete) {
+    const registrationId = orderReferenceId.slice(4);
+    const { error: regError } = await supabase
+      .from("team_registrations")
+      .update({
+        status: "paid",
+        paid_at: new Date().toISOString(),
+        ...(orderId ? { square_order_id: orderId } : {}),
+      })
+      .eq("id", registrationId)
+      .eq("status", "pending_payment");
+    if (regError) {
+      console.error("[square-webhook] registration confirm failed", regError.message);
+    }
+  }
+
   return res.status(200).json({ ok: true });
 }
 
