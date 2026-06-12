@@ -297,6 +297,7 @@ export type WeekHistoryOpponent = {
 };
 
 export type WeekHistoryEntry = {
+  session_id?: string;
   week_of: string;
   placement: number | null;
   points: number;

@@ -156,6 +156,16 @@ export default function TeamDetailScreen() {
   const [recapLoading, setRecapLoading] = useState<"week" | "season" | null>(null);
   const [recapError, setRecapError] = useState<string | null>(null);
 
+  // League night RSVP + subs + disputes
+  const [rsvps, setRsvps] = useState<Record<string, "in" | "out">>({});
+  const [savingRsvp, setSavingRsvp] = useState(false);
+  const [openSubRequest, setOpenSubRequest] = useState<{ id: string; status: string } | null>(null);
+  const [requestingSub, setRequestingSub] = useState(false);
+  const [disputeVisible, setDisputeVisible] = useState(false);
+  const [disputeReason, setDisputeReason] = useState("");
+  const [disputeSessionId, setDisputeSessionId] = useState<string | null>(null);
+  const [raisingDispute, setRaisingDispute] = useState(false);
+
   // Team settings (captain gear menu)
   const [teamSettingsVisible, setTeamSettingsVisible] = useState(false);
   const [renameVisible, setRenameVisible] = useState(false);
@@ -437,6 +447,7 @@ export default function TeamDetailScreen() {
       setPositionStats(posStats);
       setWeekHistory(history);
       setLeagueLoading(false);
+      if (history?.upcoming) loadNightOps(history.upcoming.week_of);
     });
   }, [user, teamId, selectedSkeeSeasonId, skeeSeasons.length]);
 
@@ -478,6 +489,75 @@ export default function TeamDetailScreen() {
     } finally {
       setCoachLoading(false);
     }
+  }
+
+  async function loadNightOps(weekOf: string) {
+    if (!teamId) return;
+    const [rsvpRes, subRes] = await Promise.all([
+      supabase.from("league_rsvps").select("user_id, status").eq("team_id", teamId).eq("week_of", weekOf),
+      supabase.from("sub_requests").select("id, status").eq("team_id", teamId).eq("week_of", weekOf).in("status", ["open", "filled"]).maybeSingle(),
+    ]);
+    const map: Record<string, "in" | "out"> = {};
+    for (const r of rsvpRes.data ?? []) map[(r as any).user_id] = (r as any).status;
+    setRsvps(map);
+    setOpenSubRequest(subRes.data ? { id: (subRes.data as any).id, status: (subRes.data as any).status } : null);
+  }
+
+  async function setMyRsvp(weekOf: string, status: "in" | "out") {
+    if (!user || !teamId || savingRsvp) return;
+    setSavingRsvp(true);
+    await supabase.from("league_rsvps").upsert(
+      { user_id: user.id, team_id: teamId, week_of: weekOf, status, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,week_of" },
+    );
+    setRsvps((prev) => ({ ...prev, [user.id]: status }));
+    setSavingRsvp(false);
+    showToast(status === "in" ? "You're in for league night" : "Marked out — consider requesting a sub", "info");
+  }
+
+  async function requestSub(weekOf: string) {
+    if (!teamId || requestingSub) return;
+    setRequestingSub(true);
+    const { data, error } = await supabase.rpc("rpc_request_sub", {
+      p_team_id: teamId, p_week_of: weekOf, p_note: null,
+    });
+    setRequestingSub(false);
+    if (error || (data as any)?.error) {
+      Alert.alert("Couldn't request sub", (data as any)?.message ?? error?.message ?? "Try again.");
+      return;
+    }
+    setOpenSubRequest({ id: (data as any).id, status: "open" });
+    showToast("Sub request posted — available subs have been notified");
+    notifyLeague("sub_request", { teamId, weekOf });
+  }
+
+  async function notifyLeague(action: string, extra: Record<string, unknown>) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      await fetch(`${API_BASE}/api/push/league`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ action, ...extra }),
+      });
+    } catch {}
+  }
+
+  async function raiseDispute() {
+    if (!disputeSessionId || raisingDispute) return;
+    setRaisingDispute(true);
+    const { data, error } = await supabase.rpc("rpc_raise_score_dispute", {
+      p_session_id: disputeSessionId, p_reason: disputeReason.trim(),
+    });
+    setRaisingDispute(false);
+    if (error || (data as any)?.error) {
+      Alert.alert("Couldn't submit dispute", (data as any)?.message ?? error?.message ?? "Try again.");
+      return;
+    }
+    setDisputeVisible(false);
+    setDisputeReason("");
+    setDisputeSessionId(null);
+    showToast("Dispute sent to the admins with your game's ball record");
   }
 
   async function toggleMemberExpand(userId: string) {
@@ -1062,19 +1142,68 @@ export default function TeamDetailScreen() {
             <SectionLabel text="Season Schedule" />
             <View style={styles.leagueCard}>
               {weekHistory?.upcoming && (
-                <View style={styles.upcomingRow}>
-                  <View style={styles.upcomingIcon}>
-                    <Ionicons name="calendar-outline" size={16} color="#22c55e" />
+                <View style={{ gap: 8, marginBottom: 6 }}>
+                  <View style={styles.upcomingRow}>
+                    <View style={styles.upcomingIcon}>
+                      <Ionicons name="calendar-outline" size={16} color="#22c55e" />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.upcomingTitle}>
+                        This week · {weekHistory.upcoming.slot_time}
+                      </Text>
+                      <Text style={styles.upcomingSub}>
+                        {weekLabel(weekHistory.upcoming.week_of, selectedSkeeSeason)}
+                        {weekHistory.upcoming.week_label ? ` · ${weekHistory.upcoming.week_label}` : ""}
+                      </Text>
+                    </View>
                   </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.upcomingTitle}>
-                      This week · {weekHistory.upcoming.slot_time}
-                    </Text>
-                    <Text style={styles.upcomingSub}>
-                      {weekLabel(weekHistory.upcoming.week_of, selectedSkeeSeason)}
-                      {weekHistory.upcoming.week_label ? ` · ${weekHistory.upcoming.week_label}` : ""}
-                    </Text>
-                  </View>
+
+                  {/* RSVP (members only) */}
+                  {isTeamMember && (
+                    <View style={styles.rsvpRow}>
+                      <Text style={styles.rsvpLabel}>Are you in Monday?</Text>
+                      <Pressable
+                        style={[styles.rsvpBtn, rsvps[user?.id ?? ""] === "in" && styles.rsvpBtnIn]}
+                        onPress={() => setMyRsvp(weekHistory.upcoming!.week_of, "in")}
+                        disabled={savingRsvp}
+                      >
+                        <Text style={[styles.rsvpBtnText, rsvps[user?.id ?? ""] === "in" && { color: "#000" }]}>In</Text>
+                      </Pressable>
+                      <Pressable
+                        style={[styles.rsvpBtn, rsvps[user?.id ?? ""] === "out" && styles.rsvpBtnOut]}
+                        onPress={() => setMyRsvp(weekHistory.upcoming!.week_of, "out")}
+                        disabled={savingRsvp}
+                      >
+                        <Text style={[styles.rsvpBtnText, rsvps[user?.id ?? ""] === "out" && { color: "#fff" }]}>Out</Text>
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {/* Teammate RSVP status + sub request */}
+                  {isTeamMember && members.length > 0 && (
+                    <View style={styles.rsvpStatusRow}>
+                      <Text style={styles.rsvpStatusText}>
+                        {members.map((m) => `${m.username}: ${rsvps[m.user_id] === "in" ? "✅" : rsvps[m.user_id] === "out" ? "❌" : "—"}`).join("   ")}
+                      </Text>
+                      {openSubRequest ? (
+                        <View style={[styles.subChip, openSubRequest.status === "filled" && { borderColor: "rgba(34,197,94,0.4)" }]}>
+                          <Text style={[styles.subChipText, openSubRequest.status === "filled" && { color: "#22c55e" }]}>
+                            {openSubRequest.status === "filled" ? "Sub found ✓" : "Sub requested…"}
+                          </Text>
+                        </View>
+                      ) : Object.values(rsvps).includes("out") ? (
+                        <Pressable
+                          style={styles.subChip}
+                          onPress={() => requestSub(weekHistory.upcoming!.week_of)}
+                          disabled={requestingSub}
+                        >
+                          {requestingSub
+                            ? <ActivityIndicator size="small" color="#f59e0b" />
+                            : <Text style={styles.subChipText}>Request a Sub</Text>}
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  )}
                 </View>
               )}
               {(weekHistory?.weeks ?? []).slice().reverse().map((w) => (
@@ -1092,6 +1221,14 @@ export default function TeamDetailScreen() {
                       <Text style={styles.histOpponents} numberOfLines={2}>
                         vs {w.opponents.map((o) => `${o.team_name} (${o.game_score})`).join(", ")}
                       </Text>
+                    )}
+                    {isTeamMember && Date.now() - new Date(w.week_of).getTime() < 8 * 86400000 && (
+                      <Pressable
+                        onPress={() => { setDisputeSessionId((w as any).session_id ?? null); setDisputeVisible(true); }}
+                        hitSlop={6}
+                      >
+                        <Text style={styles.disputeLink}>Something wrong? Dispute this score</Text>
+                      </Pressable>
                     )}
                   </View>
                 </View>
@@ -1215,6 +1352,38 @@ export default function TeamDetailScreen() {
                 );
               })}
             </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Score dispute */}
+      <Modal visible={disputeVisible} transparent animationType="slide" onRequestClose={() => setDisputeVisible(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setDisputeVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Dispute Score</Text>
+            <Text style={styles.modalSub}>
+              Tell the admins what was entered incorrectly. They'll review the ball-by-ball record and adjust if needed.
+            </Text>
+            <TextInput
+              style={styles.renameInput}
+              placeholder="e.g. Our 7th ball was a 50, not a 20…"
+              placeholderTextColor="#555"
+              value={disputeReason}
+              onChangeText={setDisputeReason}
+              multiline
+              maxLength={500}
+              autoFocus
+            />
+            <Pressable
+              style={[styles.renameSaveBtn, { backgroundColor: "#ef4444" }, (disputeReason.trim().length < 5 || raisingDispute) && { opacity: 0.4 }]}
+              onPress={raiseDispute}
+              disabled={disputeReason.trim().length < 5 || raisingDispute}
+            >
+              {raisingDispute
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={[styles.renameSaveText, { color: "#fff" }]}>Submit Dispute</Text>}
+            </Pressable>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1818,6 +1987,26 @@ const styles = StyleSheet.create({
   coachOrderRow: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
   coachOrderName: { color: "#fff", fontSize: 13.5, fontWeight: "800" },
   coachOrderReason: { color: "#777", fontSize: 12, lineHeight: 17, marginTop: 1 },
+
+  // RSVP + subs + disputes
+  rsvpRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  rsvpLabel: { flex: 1, color: "#ccc", fontSize: 13, fontWeight: "700" },
+  rsvpBtn: {
+    borderRadius: 10, paddingHorizontal: 18, paddingVertical: 8,
+    borderWidth: 1, borderColor: "#2a2a2a", backgroundColor: "#161616",
+  },
+  rsvpBtnIn: { backgroundColor: "#22c55e", borderColor: "#22c55e" },
+  rsvpBtnOut: { backgroundColor: "#ef4444", borderColor: "#ef4444" },
+  rsvpBtnText: { color: "#8a8a8a", fontSize: 13, fontWeight: "800" },
+  rsvpStatusRow: { flexDirection: "row", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  rsvpStatusText: { flex: 1, color: "#8a8a8a", fontSize: 11.5, lineHeight: 17 },
+  subChip: {
+    borderRadius: 10, paddingHorizontal: 11, paddingVertical: 7,
+    backgroundColor: "rgba(245,158,11,0.08)",
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.35)",
+  },
+  subChipText: { color: "#f59e0b", fontSize: 12, fontWeight: "800" },
+  disputeLink: { color: "#ef4444", fontSize: 11, fontWeight: "600", marginTop: 4, opacity: 0.8 },
 
   // Head-to-head + recaps
   h2hCard: {

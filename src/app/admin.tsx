@@ -35,7 +35,7 @@ import { showToast } from "../components/toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke" | "trivia" | "skeeball";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke" | "trivia" | "skeeball" | "reports";
 type SupportTicket = { id: string; user_id: string; status: string; created_at: string; username: string; avatar_url: string | null };
 type SupportMsg    = { id: string; sender_id: string; content: string; is_admin_msg: boolean; created_at: string };
 type ReviewTab = "pending" | "approved" | "denied";
@@ -189,6 +189,7 @@ const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
   { key: "karaoke",     label: "Karaoke",     icon: "mic-outline" },
   { key: "trivia",      label: "Trivia",      icon: "help-circle-outline" },
   { key: "skeeball",   label: "Skeeball",   icon: "bowling-ball-outline" },
+  { key: "reports",     label: "Reports",     icon: "flag-outline" },
   { key: "users",       label: "Users",       icon: "person-outline" },
 ];
 
@@ -232,6 +233,27 @@ const TYPE_COLORS: Record<string, string> = {
   basketball: "#ef4444",
   airhockey:  "#22c55e",
   pool:       "#3b82f6",
+};
+
+const REPORT_REASON_LABELS: Record<string, string> = {
+  spam: "Spam",
+  harassment: "Harassment",
+  racism: "Hate / racism",
+  violence: "Violence",
+  nudity: "Nudity",
+  inappropriate_picture: "Inappropriate picture",
+  inappropriate_text: "Inappropriate text",
+  impersonation: "Impersonation",
+  false_information: "False information",
+  other: "Other",
+};
+
+const REPORT_TYPE_LABELS: Record<string, string> = {
+  post: "Feed post",
+  comment: "Feed comment",
+  forum_post: "Forum post",
+  forum_comment: "Forum comment",
+  profile: "User profile",
 };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -406,6 +428,33 @@ export default function AdminScreen() {
   const [newSeasonName, setNewSeasonName] = useState("");
   const [startingSeason, setStartingSeason] = useState(false);
 
+  // Content reports queue
+  type ContentReport = {
+    id: string; content_type: string; content_id: string; reason: string;
+    details: string | null; status: string; created_at: string;
+    reporter_username: string | null; owner_username: string | null;
+    content_preview: string | null; photo_url: string | null;
+  };
+  const [contentReports, setContentReports] = useState<ContentReport[]>([]);
+  const [reportsTab, setReportsTab] = useState<"pending" | "dismissed" | "actioned">("pending");
+  const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState<string | null>(null);
+  const [resolvingReport, setResolvingReport] = useState<string | null>(null);
+
+  // Score disputes
+  type Dispute = { id: string; session_id: string; team_name: string; reason: string; created_at: string; raised_username: string };
+  const [disputes, setDisputes] = useState<Dispute[]>([]);
+  const [resolvingDispute, setResolvingDispute] = useState<string | null>(null);
+
+  // Broadcast
+  const [broadcastVisible, setBroadcastVisible] = useState(false);
+  const [broadcastTitle, setBroadcastTitle] = useState("");
+  const [broadcastBody, setBroadcastBody] = useState("");
+  const [broadcasting, setBroadcasting] = useState(false);
+
+  // Season schedule generation
+  const [generatingSeason, setGeneratingSeason] = useState(false);
+
   // Player list management (all tournaments)
   type RegPlayer = { id: string; user_id: string | null; guest_name: string | null; username: string; status: string };
   const [playerListTarget, setPlayerListTarget] = useState<ManageTournament | null>(null);
@@ -455,7 +504,8 @@ export default function AdminScreen() {
     if (mainTab === "support") { loadSupportTickets(); setUnreadSupport(0); }
     if (mainTab === "karaoke") loadKaraokeQueue();
     if (mainTab === "trivia") loadTriviaData();
-    if (mainTab === "skeeball") { loadSkeeAdminSessions(); loadSkeeSeason(); }
+    if (mainTab === "skeeball") { loadSkeeAdminSessions(); loadSkeeSeason(); loadDisputes(); }
+    if (mainTab === "reports") loadContentReports(reportsTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
@@ -1720,6 +1770,117 @@ export default function AdminScreen() {
       .eq("status", "active")
       .maybeSingle();
     setSkeeActiveSeason(data ?? null);
+  }
+
+  async function loadContentReports(status: "pending" | "dismissed" | "actioned") {
+    setReportsLoading(true);
+    setReportsError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_get_content_reports", { p_status: status });
+    setReportsLoading(false);
+    if (error || (data as any)?.error) {
+      setReportsError((data as any)?.error === "unauthorized" ? "Admin access (with MFA) required." : error?.message ?? "Failed to load reports.");
+      setContentReports([]);
+      return;
+    }
+    setContentReports((data as any) ?? []);
+  }
+
+  async function resolveReport(reportId: string, action: "dismiss" | "remove_content" | "mark_actioned") {
+    setResolvingReport(reportId);
+    const { data, error } = await supabase.rpc("rpc_admin_resolve_content_report", {
+      p_report_id: reportId, p_action: action,
+    });
+    setResolvingReport(null);
+    if (error || (data as any)?.error) {
+      setReportsError((data as any)?.error ?? error?.message ?? "Failed.");
+      return;
+    }
+    setContentReports((prev) => prev.filter((r) => r.id !== reportId));
+  }
+
+  async function loadDisputes() {
+    const { data } = await supabase
+      .from("score_disputes")
+      .select("id, session_id, reason, created_at, raised_by, teams(name)")
+      .eq("status", "open")
+      .order("created_at", { ascending: true });
+    const raiserIds = [...new Set((data ?? []).map((d: any) => d.raised_by))];
+    let nameMap: Record<string, string> = {};
+    if (raiserIds.length) {
+      const { data: profs } = await supabase.from("profiles").select("id, username").in("id", raiserIds);
+      for (const pr of profs ?? []) nameMap[(pr as any).id] = (pr as any).username;
+    }
+    setDisputes((data ?? []).map((d: any) => ({
+      id: d.id,
+      session_id: d.session_id,
+      team_name: (Array.isArray(d.teams) ? d.teams[0]?.name : d.teams?.name) ?? "Unknown",
+      reason: d.reason,
+      created_at: d.created_at,
+      raised_username: nameMap[d.raised_by] ?? "Unknown",
+    })));
+  }
+
+  async function resolveDispute(id: string, action: "resolved" | "dismissed") {
+    setResolvingDispute(id);
+    const { data, error } = await supabase.rpc("rpc_admin_resolve_dispute", {
+      p_dispute_id: id, p_action: action, p_note: null,
+    });
+    setResolvingDispute(null);
+    if (!error && !(data as any)?.error) {
+      setDisputes((prev) => prev.filter((d) => d.id !== id));
+      showToast(action === "resolved" ? "Dispute resolved" : "Dispute dismissed", "info");
+    }
+  }
+
+  async function sendBroadcast() {
+    const t = broadcastTitle.trim();
+    const b = broadcastBody.trim();
+    if (t.length < 2 || b.length < 2 || broadcasting) return;
+    setBroadcasting(true);
+    const { data, error } = await supabase.rpc("rpc_admin_broadcast", {
+      p_title: t, p_body: b, p_days: 3,
+    });
+    setBroadcasting(false);
+    if (error || (data as any)?.error) {
+      Alert.alert("Error", (data as any)?.error ?? error?.message ?? "Failed to send.");
+      return;
+    }
+    setBroadcastVisible(false);
+    setBroadcastTitle("");
+    setBroadcastBody("");
+    showToast("Announcement broadcast to everyone");
+  }
+
+  // Generate all 8 weeks of slot assignments for the active skee season,
+  // rotating teams across the three time slots for fairness.
+  async function generateSeasonSchedule() {
+    if (!skeeActiveSeason || generatingSeason) return;
+    setGeneratingSeason(true);
+    try {
+      const { data: teams } = await supabase.from("teams").select("id, name").order("name");
+      const teamIds = (teams ?? []).map((t: any) => t.id);
+      if (!teamIds.length) { Alert.alert("No teams", "Create teams before generating a schedule."); return; }
+
+      const start = new Date(skeeActiveSeason.start_week);
+      const rows: any[] = [];
+      for (let w = 0; w < 8; w++) {
+        const weekDate = new Date(start);
+        weekDate.setDate(weekDate.getDate() + w * 7);
+        const weekOf = weekDate.toISOString().slice(0, 10);
+        const label = `Week ${w + 1}`;
+        teamIds.forEach((tid, i) => {
+          // Rotate slot assignment each week so teams cycle through times
+          const slot = SCHED_SLOTS[(i + w) % SCHED_SLOTS.length];
+          rows.push({ team_id: tid, slot_time: slot, week_label: label, week_of: weekOf });
+        });
+        await supabase.from("team_schedule").delete().eq("week_of", weekOf);
+      }
+      const { error } = await supabase.from("team_schedule").insert(rows);
+      if (error) { Alert.alert("Error", error.message); return; }
+      showToast("Season schedule generated — 8 weeks, rotating slots");
+    } finally {
+      setGeneratingSeason(false);
+    }
   }
 
   async function handleStartSeason() {
@@ -3523,6 +3684,143 @@ export default function AdminScreen() {
       )}
 
       {/* ── Skeeball League Admin ── */}
+      {/* ── Content Reports ── */}
+      {mainTab === "reports" && (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={reportsLoading} onRefresh={() => loadContentReports(reportsTab)} tintColor="#ef4444" />}
+        >
+          {/* Broadcast announcement */}
+          <View style={[styles.skeeWeekCard, { borderColor: "rgba(245,158,11,0.2)", backgroundColor: "rgba(245,158,11,0.04)" }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.skeeWeekLabel}>Broadcast Announcement</Text>
+              <Text style={styles.skeeWeekHint}>Banner in every user's feed + push notification.</Text>
+            </View>
+            <Pressable style={styles.skeeForceBtn} onPress={() => setBroadcastVisible(true)}>
+              <Ionicons name="megaphone-outline" size={14} color="#f59e0b" />
+              <Text style={styles.skeeForceBtnText}>Compose</Text>
+            </Pressable>
+          </View>
+
+          {/* Status tabs */}
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
+            {(["pending", "dismissed", "actioned"] as const).map((t) => (
+              <Pressable
+                key={t}
+                style={[styles.subTab, reportsTab === t && styles.subTabActive]}
+                onPress={() => { setReportsTab(t); loadContentReports(t); }}
+              >
+                <Text style={[styles.subTabText, reportsTab === t && styles.subTabTextActive]}>
+                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {reportsError && <ErrorBanner message={reportsError} />}
+          {reportsLoading && contentReports.length === 0 ? (
+            <ActivityIndicator color="#ef4444" style={{ marginTop: 40 }} />
+          ) : contentReports.length === 0 ? (
+            <EmptyState
+              title={reportsTab === "pending" ? "No pending reports" : `No ${reportsTab} reports`}
+              sub={reportsTab === "pending" ? "All clear — reported content shows up here." : "Nothing here yet."}
+              icon="flag-outline"
+              color="#ef4444"
+            />
+          ) : (
+            contentReports.map((r) => (
+              <View key={r.id} style={styles.reportCard}>
+                <View style={styles.reportTopRow}>
+                  <View style={styles.reportTypeChip}>
+                    <Text style={styles.reportTypeChipText}>{REPORT_TYPE_LABELS[r.content_type] ?? r.content_type}</Text>
+                  </View>
+                  <View style={[styles.reportTypeChip, { backgroundColor: "rgba(239,68,68,0.1)", borderColor: "rgba(239,68,68,0.3)" }]}>
+                    <Text style={[styles.reportTypeChipText, { color: "#ef4444" }]}>{REPORT_REASON_LABELS[r.reason] ?? r.reason}</Text>
+                  </View>
+                  <Text style={styles.reportTime}>{relTime(r.created_at)}</Text>
+                </View>
+                <Text style={styles.reportMeta}>
+                  Reported by {r.reporter_username ?? "Unknown"} · Content by {r.owner_username ?? "Unknown"}
+                </Text>
+                {r.content_preview ? (
+                  <View style={styles.reportPreview}>
+                    <Text style={styles.reportPreviewText} numberOfLines={4}>{r.content_preview}</Text>
+                  </View>
+                ) : null}
+                {r.details ? <Text style={styles.reportDetails}>"{r.details}"</Text> : null}
+                {reportsTab === "pending" && (
+                  <View style={styles.reportActions}>
+                    <Pressable
+                      style={[styles.reportActionBtn, { borderColor: "rgba(239,68,68,0.35)" }]}
+                      onPress={() => resolveReport(r.id, "remove_content")}
+                      disabled={resolvingReport === r.id || r.content_type === "profile"}
+                    >
+                      {resolvingReport === r.id
+                        ? <ActivityIndicator size="small" color="#ef4444" />
+                        : <Text style={[styles.reportActionText, { color: r.content_type === "profile" ? "#444" : "#ef4444" }]}>Remove Content</Text>}
+                    </Pressable>
+                    <Pressable
+                      style={[styles.reportActionBtn, { borderColor: "rgba(245,158,11,0.35)" }]}
+                      onPress={() => resolveReport(r.id, "mark_actioned")}
+                      disabled={resolvingReport === r.id}
+                    >
+                      <Text style={[styles.reportActionText, { color: "#f59e0b" }]}>Mark Actioned</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.reportActionBtn}
+                      onPress={() => resolveReport(r.id, "dismiss")}
+                      disabled={resolvingReport === r.id}
+                    >
+                      <Text style={styles.reportActionText}>Dismiss</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            ))
+          )}
+        </ScrollView>
+      )}
+
+      {/* ── Broadcast modal ── */}
+      <Modal visible={broadcastVisible} transparent animationType="slide" onRequestClose={() => setBroadcastVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setBroadcastVisible(false)} />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>Broadcast Announcement</Text>
+            <Text style={styles.modalSub}>Shows as a banner in every user's feed for 3 days and pushes to devices.</Text>
+            <TextInput
+              style={styles.editTournInput}
+              placeholder="Title (e.g. League canceled tonight)"
+              placeholderTextColor="#555"
+              value={broadcastTitle}
+              onChangeText={setBroadcastTitle}
+              maxLength={80}
+            />
+            <TextInput
+              style={[styles.editTournInput, { minHeight: 80, textAlignVertical: "top", marginTop: 10 }]}
+              placeholder="Message"
+              placeholderTextColor="#555"
+              value={broadcastBody}
+              onChangeText={setBroadcastBody}
+              multiline
+              maxLength={300}
+            />
+            <Pressable
+              style={[styles.modalConfirmBtn, { marginTop: 14, backgroundColor: "#f59e0b" }, (broadcastTitle.trim().length < 2 || broadcastBody.trim().length < 2 || broadcasting) && { opacity: 0.4 }]}
+              onPress={sendBroadcast}
+              disabled={broadcastTitle.trim().length < 2 || broadcastBody.trim().length < 2 || broadcasting}
+            >
+              {broadcasting
+                ? <ActivityIndicator size="small" color="#000" />
+                : <Text style={styles.modalConfirmText}>Send to Everyone</Text>}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {mainTab === "skeeball" && (
         <ScrollView
           style={{ flex: 1 }}
@@ -3570,6 +3868,59 @@ export default function AdminScreen() {
               <Text style={styles.skeeForceBtnText}>New Season</Text>
             </Pressable>
           </View>
+
+          {/* Open score disputes */}
+          {disputes.length > 0 && (
+            <View style={[styles.skeeWeekCard, { borderColor: "rgba(239,68,68,0.25)", backgroundColor: "rgba(239,68,68,0.04)", flexDirection: "column", alignItems: "stretch" }]}>
+              <Text style={[styles.skeeWeekLabel, { marginBottom: 8 }]}>⚠️ Open Score Disputes ({disputes.length})</Text>
+              {disputes.map((d) => (
+                <View key={d.id} style={{ marginBottom: 10, gap: 6 }}>
+                  <Text style={styles.skeeWeekHint}>
+                    {d.team_name} · raised by {d.raised_username} · {relTime(d.created_at)}
+                  </Text>
+                  <Text style={{ color: "#ccc", fontSize: 13, lineHeight: 18 }}>"{d.reason}"</Text>
+                  <View style={{ flexDirection: "row", gap: 8 }}>
+                    <Pressable
+                      style={[styles.skeeForceBtn, { borderColor: "rgba(34,197,94,0.3)", backgroundColor: "rgba(34,197,94,0.08)" }]}
+                      onPress={() => resolveDispute(d.id, "resolved")}
+                      disabled={resolvingDispute === d.id}
+                    >
+                      <Text style={[styles.skeeForceBtnText, { color: "#22c55e" }]}>Resolved (adjusted)</Text>
+                    </Pressable>
+                    <Pressable
+                      style={styles.skeeForceBtn}
+                      onPress={() => resolveDispute(d.id, "dismissed")}
+                      disabled={resolvingDispute === d.id}
+                    >
+                      <Text style={styles.skeeForceBtnText}>Dismiss</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+              <Text style={[styles.skeeWeekHint, { marginTop: 2 }]}>
+                Use the Edit button on the session below to apply score corrections before resolving.
+              </Text>
+            </View>
+          )}
+
+          {/* Generate the full 8-week schedule with rotating slots */}
+          {skeeActiveSeason && (
+            <View style={styles.skeeWeekCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.skeeWeekLabel}>Generate Season Schedule</Text>
+                <Text style={styles.skeeWeekHint}>All 8 weeks at once — teams rotate fairly through the 3 time slots.</Text>
+              </View>
+              <Pressable
+                style={[styles.skeeWeekSaveBtn, generatingSeason && { opacity: 0.5 }]}
+                onPress={generateSeasonSchedule}
+                disabled={generatingSeason}
+              >
+                {generatingSeason
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <Text style={styles.skeeWeekSaveText}>Generate</Text>}
+              </Pressable>
+            </View>
+          )}
 
           {/* Teams-per-round setting for this week */}
           <View style={styles.skeeWeekCard}>
@@ -5610,6 +5961,28 @@ const styles = StyleSheet.create({
 
   // ── Skeeball Admin ───────────────────────────────────────────────────────────
   skeeAdminSubtitle: { color: "#8a8a8a", fontSize: 13, lineHeight: 19, marginBottom: 16 },
+  reportCard: {
+    backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 10,
+    borderWidth: 1, borderColor: "#1e1e1e", gap: 8,
+  },
+  reportTopRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  reportTypeChip: {
+    borderRadius: 7, paddingHorizontal: 8, paddingVertical: 3,
+    backgroundColor: "rgba(6,182,212,0.08)", borderWidth: 1, borderColor: "rgba(6,182,212,0.25)",
+  },
+  reportTypeChipText: { color: "#06b6d4", fontSize: 10.5, fontWeight: "800" },
+  reportTime: { color: "#555", fontSize: 11, marginLeft: "auto" },
+  reportMeta: { color: "#8a8a8a", fontSize: 12 },
+  reportPreview: { backgroundColor: "#0a0a0a", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#1c1c1c" },
+  reportPreviewText: { color: "#ccc", fontSize: 13, lineHeight: 18 },
+  reportDetails: { color: "#999", fontSize: 12, fontStyle: "italic" },
+  reportActions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  reportActionBtn: {
+    borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    borderWidth: 1, borderColor: "#2a2a2a",
+  },
+  reportActionText: { color: "#8a8a8a", fontSize: 12, fontWeight: "800" },
+
   skeeWeekCard: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: "rgba(6,182,212,0.05)", borderRadius: 16, padding: 14, marginBottom: 10,

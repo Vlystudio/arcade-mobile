@@ -101,6 +101,47 @@ export default async function handler(req: any, res: any) {
     return sendJson(res, 200, { ok: true, sent });
   }
 
+  if (action === "sub_request") {
+    const teamId = String(body?.teamId ?? "");
+    if (!UUID_RE.test(teamId)) return sendJson(res, 400, { error: "invalid_team" });
+    const { data: team } = await supabase.from("teams").select("name").eq("id", teamId).maybeSingle();
+    // Notify everyone who opted in as an available sub (excluding that team)
+    const { data: subs } = await supabase.from("profiles").select("id").eq("sub_available", true);
+    const { data: members } = await supabase.from("team_members").select("user_id").eq("team_id", teamId);
+    const memberIds = new Set((members ?? []).map((m: any) => m.user_id));
+    const targetIds = (subs ?? []).map((p: any) => p.id).filter((id: string) => !memberIds.has(id));
+    let sent = 0;
+    if (targetIds.length) {
+      const { data: tokens } = await supabase.from("push_tokens").select("token").in("user_id", targetIds);
+      sent = await sendToTokens(
+        (tokens ?? []).map((t: any) => t.token),
+        "Sub needed 🎳",
+        `${team?.name ?? "A team"} needs a sub for Monday night. First come, first serve!`,
+        { type: "sub_request", teamId },
+      );
+    }
+    return sendJson(res, 200, { ok: true, sent });
+  }
+
+  if (action === "sub_filled") {
+    const requestId = String(body?.requestId ?? "");
+    if (!UUID_RE.test(requestId)) return sendJson(res, 400, { error: "invalid_request" });
+    const { data: reqRow } = await supabase
+      .from("sub_requests")
+      .select("team_id, filled_by, status")
+      .eq("id", requestId)
+      .maybeSingle();
+    if (!reqRow || reqRow.status !== "filled") return sendJson(res, 200, { ok: true, skipped: true });
+    const { data: volunteer } = await supabase.from("profiles").select("username").eq("id", reqRow.filled_by).maybeSingle();
+    const sent = await sendToTeams(
+      [reqRow.team_id],
+      "Sub found ✓",
+      `${volunteer?.username ?? "A player"} volunteered to sub for your team Monday night.`,
+      { type: "sub_filled", requestId },
+    );
+    return sendJson(res, 200, { ok: true, sent });
+  }
+
   return sendJson(res, 400, { error: "unknown_action" });
 }
 
@@ -126,6 +167,38 @@ async function notifyWeekSchedule(): Promise<number> {
     );
   }
   return sent;
+}
+
+/** Send to an explicit token list (batched). Returns count sent. */
+async function sendToTokens(
+  list: string[],
+  title: string,
+  bodyText: string,
+  data: Record<string, unknown>,
+): Promise<number> {
+  const tokens = list.filter(Boolean);
+  for (let i = 0; i < tokens.length; i += 100) {
+    const batch = tokens.slice(i, i + 100).map((to: string) => ({
+      to, title, body: bodyText, data, sound: "default", channelId: "default",
+    }));
+    try {
+      const r = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(batch),
+      });
+      const result = await r.json().catch(() => null);
+      const tickets = result?.data ?? [];
+      const dead: string[] = [];
+      tickets.forEach((t: any, idx: number) => {
+        if (t?.details?.error === "DeviceNotRegistered") dead.push(batch[idx].to);
+      });
+      if (dead.length) await supabase.from("push_tokens").delete().in("token", dead);
+    } catch (err: any) {
+      console.error("[push] expo send failed", err?.message ?? err);
+    }
+  }
+  return tokens.length;
 }
 
 /** Resolve team members → device tokens → Expo push send. Returns count sent. */

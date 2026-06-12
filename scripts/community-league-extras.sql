@@ -776,3 +776,86 @@ GRANT EXECUTE ON FUNCTION public.rpc_pickem_leaderboard(date, date) TO authentic
 GRANT EXECUTE ON FUNCTION public.rpc_admin_broadcast(text, text, int) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_skeeball_hall_of_fame() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_public_standings() TO anon, authenticated;
+
+
+-- ── Week history now includes the session id (score disputes) ─
+CREATE OR REPLACE FUNCTION public.rpc_skeeball_team_week_history(
+  p_team_id uuid,
+  p_start date DEFAULT NULL,
+  p_end date DEFAULT NULL
+)
+RETURNS json
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_weeks json;
+  v_upcoming json;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RETURN json_build_object('error', 'not_authenticated');
+  END IF;
+
+  WITH own AS (
+    SELECT ss.id, ss.week_of, ss.league_match_id, ss.placement,
+           COALESCE(ss.league_points, 0) + ss.league_points_adjustment AS points,
+           (SELECT COALESCE(SUM(score), 0)::int FROM skeeball_ball_scores b WHERE b.session_id = ss.id)
+             + ss.score_adjustment AS game_score
+      FROM skeeball_sessions ss
+     WHERE ss.team_id = p_team_id
+       AND ss.status = 'completed'
+       AND ss.league_match_id IS NOT NULL
+       AND (p_start IS NULL OR ss.week_of >= p_start)
+       AND (p_end IS NULL OR ss.week_of <= p_end)
+  )
+  SELECT json_agg(json_build_object(
+      'session_id', o.id,
+      'week_of', o.week_of,
+      'placement', o.placement,
+      'points', o.points,
+      'game_score', o.game_score,
+      'slot_time', (
+        SELECT ts.slot_time FROM team_schedule ts
+         WHERE ts.team_id = p_team_id AND ts.week_of = o.week_of
+         LIMIT 1
+      ),
+      'opponents', COALESCE((
+        SELECT json_agg(json_build_object(
+                 'team_id', os.team_id,
+                 'team_name', COALESCE(t.name, 'Unknown'),
+                 'placement', os.placement,
+                 'game_score', (SELECT COALESCE(SUM(score), 0)::int FROM skeeball_ball_scores b WHERE b.session_id = os.id)
+                   + os.score_adjustment
+               ) ORDER BY os.placement NULLS LAST)
+          FROM skeeball_sessions os
+          JOIN teams t ON t.id = os.team_id
+         WHERE os.league_match_id = o.league_match_id
+           AND os.team_id != p_team_id
+           AND os.status = 'completed'
+      ), '[]'::json)
+    ) ORDER BY o.week_of)
+    INTO v_weeks
+    FROM own o;
+
+  SELECT json_build_object('week_of', ts.week_of, 'slot_time', ts.slot_time, 'week_label', ts.week_label)
+    INTO v_upcoming
+    FROM team_schedule ts
+   WHERE ts.team_id = p_team_id
+     AND ts.week_of IS NOT NULL
+     AND ts.week_of >= public.skeeball_current_week()
+     AND NOT EXISTS (
+       SELECT 1 FROM skeeball_sessions ss
+        WHERE ss.team_id = p_team_id AND ss.week_of = ts.week_of AND ss.status = 'completed'
+     )
+   ORDER BY ts.week_of
+   LIMIT 1;
+
+  RETURN json_build_object(
+    'ok', true,
+    'weeks', COALESCE(v_weeks, '[]'::json),
+    'upcoming', v_upcoming
+  );
+END;
+$$;

@@ -81,6 +81,8 @@ export default function ProfileScreen() {
   const [showSkeeStats, setShowSkeeStats] = useState(true);
   const [savingSkeeToggle, setSavingSkeeToggle] = useState(false);
   const [sharingStats, setSharingStats] = useState(false);
+  const [subAvailable, setSubAvailable] = useState(false);
+  const [savingSubAvail, setSavingSubAvail] = useState(false);
   const statCardRef = useRef<View>(null);
 
   /** Web: render the league card to a PNG and download it (html2canvas). */
@@ -144,7 +146,7 @@ export default function ProfileScreen() {
   async function loadProfile() {
     if (!user) return;
     const [profileRes, scoresRes, pendingRes, teamRes, placementsRes, friendsRes, trophiesRes, convRes] = await Promise.all([
-      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio, show_skeeball_stats").eq("id", user.id).single(),
+      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio, show_skeeball_stats, sub_available").eq("id", user.id).single(),
       supabase.from("scores").select("score, game_id, games(id, name, type)").eq("user_id", user.id).eq("status", "approved"),
       supabase.from("scores").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       supabase.from("team_members").select("role, teams(name)").eq("user_id", user.id).maybeSingle(),
@@ -185,6 +187,7 @@ export default function ProfileScreen() {
       setOnlineStatus((profileRes.data.online_status ?? "offline") as "online" | "offline");
       setBio(profileRes.data.bio ?? null);
       setShowSkeeStats((profileRes.data as any).show_skeeball_stats ?? true);
+      setSubAvailable((profileRes.data as any).sub_available ?? false);
     }
 
     // Skee-ball league stats, scoped to the active season when one exists
@@ -377,6 +380,15 @@ export default function ProfileScreen() {
     const { error } = await supabase.from("profiles").update({ is_private: next }).eq("id", user.id);
     if (error) setIsPrivate(!next);
     setSavingPrivacy(false);
+  }
+
+  async function toggleSubAvailable(next: boolean) {
+    if (!user || savingSubAvail) return;
+    setSavingSubAvail(true);
+    setSubAvailable(next);
+    const { error } = await supabase.from("profiles").update({ sub_available: next }).eq("id", user.id);
+    if (error) setSubAvailable(!next);
+    setSavingSubAvail(false);
   }
 
   async function toggleSkeeStats(next: boolean) {
@@ -707,6 +719,25 @@ export default function ProfileScreen() {
                   />
                 </View>
                 <View style={styles.settingsDivider} />
+                <View style={styles.settingsRow}>
+                  <View style={[styles.settingsIcon, { backgroundColor: "rgba(245,158,11,0.1)" }]}>
+                    <Ionicons name="hand-left-outline" size={17} color="#f59e0b" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingsRowLabel}>Available to Sub</Text>
+                    <Text style={styles.settingsRowSub}>
+                      {subAvailable ? "Teams can ask you to fill in on league night" : "You won't be asked to fill in"}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={subAvailable}
+                    onValueChange={toggleSubAvailable}
+                    disabled={savingSubAvail}
+                    trackColor={{ false: "#2a2a2a", true: "rgba(245,158,11,0.5)" }}
+                    thumbColor={subAvailable ? "#f59e0b" : "#666"}
+                  />
+                </View>
+                <View style={styles.settingsDivider} />
                 <SettingsRow
                   icon={mfaEnabled ? "shield-checkmark" : "shield-outline"}
                   iconColor={mfaEnabled ? "#22c55e" : "#ef4444"}
@@ -727,6 +758,14 @@ export default function ProfileScreen() {
                 <SettingsRow icon="people-circle-outline" label="Friends" onPress={() => navFromSettings("/friends")} />
                 <View style={styles.settingsDivider} />
                 <SettingsRow icon="paper-plane-outline" label="Messages" badge={unreadMessages} onPress={() => navFromSettings("/chat")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="bookmark-outline" label="Saved Posts" onPress={() => navFromSettings("/saved-posts")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="bowling-ball-outline" label="My Games" onPress={() => navFromSettings("/my-games")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="calendar-outline" label="What's On (Events)" onPress={() => navFromSettings("/events")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="trophy-outline" label="Hall of Fame" onPress={() => navFromSettings("/hall-of-fame")} />
                 <View style={styles.settingsDivider} />
                 <SettingsRow icon="mic-outline" label="Karaoke Queue" onPress={() => navFromSettings("/karaoke")} />
                 <View style={styles.settingsDivider} />
@@ -776,6 +815,8 @@ export default function ProfileScreen() {
                 <SettingsRow icon="star-half-outline" label="Send Feedback" onPress={() => navFromSettings("/feedback")} />
                 <View style={styles.settingsDivider} />
                 <SettingsRow icon="map-outline" label="How to Use This App" onPress={() => { setSettingsVisible(false); setTimeout(replayTour, 250); }} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="shield-outline" label="Community Guidelines" onPress={() => navFromSettings("/guidelines")} />
                 <View style={styles.settingsDivider} />
                 <SettingsRow icon="document-text-outline" label="Privacy Policy" onPress={() => navFromSettings("/privacy")} />
                 <View style={styles.settingsDivider} />

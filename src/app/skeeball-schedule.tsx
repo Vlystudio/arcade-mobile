@@ -14,6 +14,8 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { showToast } from "../components/toast";
+import { API_BASE } from "../../lib/api-base";
 
 type ScheduleRow = {
   team_id: string;
@@ -52,6 +54,8 @@ export default function SkeeballScheduleScreen() {
   const [myTeamIds, setMyTeamIds] = useState<Set<string>>(new Set());
   const [placements, setPlacements] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [subRequests, setSubRequests] = useState<{ id: string; team_id: string; team_name: string; note: string | null }[]>([]);
+  const [claimingSub, setClaimingSub] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   async function load(weekOverride?: string) {
@@ -89,6 +93,8 @@ export default function SkeeballScheduleScreen() {
       ?? (seen.has(monday) ? monday : weekList[0]?.week_of ?? null);
     setSelectedWeek(target);
 
+    if (target) loadSubs(target);
+
     // Results for the selected week (medals once the round finalizes)
     if (target) {
       const { data: sess } = await supabase
@@ -111,8 +117,47 @@ export default function SkeeballScheduleScreen() {
 
   useEffect(() => { if (user) load(); }, [user]);
 
+  async function loadSubs(weekOf: string) {
+    const { data } = await supabase
+      .from("sub_requests")
+      .select("id, team_id, note, teams(name)")
+      .eq("week_of", weekOf)
+      .eq("status", "open");
+    setSubRequests((data ?? []).map((r: any) => ({
+      id: r.id,
+      team_id: r.team_id,
+      team_name: (Array.isArray(r.teams) ? r.teams[0]?.name : r.teams?.name) ?? "Unknown",
+      note: r.note,
+    })));
+  }
+
+  async function volunteerSub(req: { id: string; team_name: string }) {
+    if (claimingSub) return;
+    setClaimingSub(req.id);
+    const { data, error } = await supabase.rpc("rpc_claim_sub", { p_request_id: req.id });
+    setClaimingSub(null);
+    if (error || (data as any)?.error) {
+      showToast((data as any)?.message ?? "That spot was already filled.", "error");
+      if (selectedWeek) loadSubs(selectedWeek);
+      return;
+    }
+    setSubRequests((prev) => prev.filter((r) => r.id !== req.id));
+    showToast(`You're subbing for ${req.team_name} — they've been notified!`);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        fetch(`${API_BASE}/api/push/league`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ action: "sub_filled", requestId: req.id }),
+        }).catch(() => {});
+      }
+    } catch {}
+  }
+
   async function pickWeek(weekOf: string) {
     setSelectedWeek(weekOf);
+    loadSubs(weekOf);
     const { data: sess } = await supabase
       .from("skeeball_sessions")
       .select("team_id, placement")
@@ -197,6 +242,33 @@ export default function SkeeballScheduleScreen() {
               )}
             </View>
 
+            {/* Subs needed */}
+            {subRequests.length > 0 && (
+              <View style={s.subsCard}>
+                <View style={s.subsHeader}>
+                  <Ionicons name="hand-left-outline" size={15} color="#f59e0b" />
+                  <Text style={s.subsTitle}>Subs Needed</Text>
+                </View>
+                {subRequests.map((r) => (
+                  <View key={r.id} style={s.subsRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.subsTeam}>{r.team_name}</Text>
+                      {r.note ? <Text style={s.subsNote}>{r.note}</Text> : null}
+                    </View>
+                    <Pressable
+                      style={s.volunteerBtn}
+                      onPress={() => volunteerSub(r)}
+                      disabled={claimingSub === r.id}
+                    >
+                      {claimingSub === r.id
+                        ? <ActivityIndicator size="small" color="#000" />
+                        : <Text style={s.volunteerText}>I'll sub!</Text>}
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {weekRows.length === 0 ? (
               <View style={s.empty}>
                 <Text style={s.emptySub}>No teams scheduled for this week.</Text>
@@ -279,6 +351,21 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(239,68,68,0.25)", marginLeft: "auto",
   },
   liveLinkText: { color: "#ef4444", fontSize: 11.5, fontWeight: "800" },
+
+  subsCard: {
+    backgroundColor: "rgba(245,158,11,0.04)", borderRadius: 16, padding: 14, marginBottom: 14,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.25)", gap: 10,
+  },
+  subsHeader: { flexDirection: "row", alignItems: "center", gap: 7 },
+  subsTitle: { color: "#f59e0b", fontSize: 13, fontWeight: "900", textTransform: "uppercase", letterSpacing: 0.8 },
+  subsRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  subsTeam: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  subsNote: { color: "#999", fontSize: 12, marginTop: 2 },
+  volunteerBtn: {
+    backgroundColor: "#f59e0b", borderRadius: 10,
+    paddingHorizontal: 14, paddingVertical: 9, minWidth: 76, alignItems: "center",
+  },
+  volunteerText: { color: "#000", fontSize: 12.5, fontWeight: "900" },
 
   slotSection: {
     backgroundColor: "#0d0d0d", borderRadius: 18, marginBottom: 14,
