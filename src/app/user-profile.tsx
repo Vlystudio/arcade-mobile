@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,6 +19,8 @@ import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { PlayerLeagueCard } from "../components/skeeball-stats";
 import { fetchPlayerInsights, fetchPlayerStats, fetchSkeeSeasons, type PlayerInsights, type PlayerStats, type SkeeSeason } from "../lib/skeeball-stats";
+import { ReportSheet, type ReportTarget } from "../components/report-sheet";
+import { showToast } from "../components/toast";
 
 type UserProfile = {
   id: string;
@@ -50,12 +53,16 @@ export default function UserProfileScreen() {
   const [leagueStats, setLeagueStats] = useState<PlayerStats | null>(null);
   const [leagueInsights, setLeagueInsights] = useState<PlayerInsights | null>(null);
   const [skeeSeason, setSkeeSeason] = useState<SkeeSeason | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [isBlocked, setIsBlocked] = useState(false);
+  const [blockBusy, setBlockBusy] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   async function load() {
     if (!user || !userId) return;
     if (userId === user.id) { router.replace("/profile"); return; }
 
-    const [profileRes, friendRes] = await Promise.all([
+    const [profileRes, friendRes, blockRes] = await Promise.all([
       supabase
         .from("profiles")
         .select("id, username, avatar_url, bio, is_private, role, featured_game_id, show_skeeball_stats")
@@ -66,7 +73,15 @@ export default function UserProfileScreen() {
         .select("id, status, requester_id")
         .or(`and(requester_id.eq.${user.id},addressee_id.eq.${userId}),and(requester_id.eq.${userId},addressee_id.eq.${user.id})`)
         .maybeSingle(),
+      supabase
+        .from("user_blocks")
+        .select("blocked_id")
+        .eq("blocker_id", user.id)
+        .eq("blocked_id", userId)
+        .maybeSingle(),
     ]);
+
+    setIsBlocked(!!blockRes.data);
 
     if (!profileRes.data) { router.back(); return; }
 
@@ -147,6 +162,22 @@ export default function UserProfileScreen() {
     setLoading(false);
   }
 
+  async function toggleBlock() {
+    if (!user || !userId || blockBusy) return;
+    setBlockBusy(true);
+    if (isBlocked) {
+      await supabase.from("user_blocks").delete().eq("blocker_id", user.id).eq("blocked_id", userId);
+      setIsBlocked(false);
+      showToast("User unblocked", "info");
+    } else {
+      await supabase.from("user_blocks").insert({ blocker_id: user.id, blocked_id: userId });
+      setIsBlocked(true);
+      showToast("User blocked — their posts and comments are hidden from you");
+    }
+    setBlockBusy(false);
+    setMenuOpen(false);
+  }
+
   async function sendRequest() {
     if (!user || !userId || actionLoading) return;
     setActionLoading(true);
@@ -215,12 +246,26 @@ export default function UserProfileScreen() {
           <Ionicons name="chevron-back" size={22} color="#fff" />
         </Pressable>
         <Text style={s.headerTitle} numberOfLines={1}>{profile.username}</Text>
-        {friendStatus === "friends" && (
+        {friendStatus === "friends" && !isBlocked && (
           <Pressable style={s.headerAction} onPress={openMessage}>
             <Ionicons name="chatbubble-outline" size={20} color="#06b6d4" />
           </Pressable>
         )}
+        <Pressable style={s.headerAction} onPress={() => setMenuOpen(true)}>
+          <Ionicons name="ellipsis-horizontal" size={20} color="#8a8a8a" />
+        </Pressable>
       </View>
+
+      {/* Blocked banner */}
+      {isBlocked && (
+        <View style={s.blockedBanner}>
+          <Ionicons name="ban" size={14} color="#ef4444" />
+          <Text style={s.blockedBannerText}>You've blocked this user. Their posts and comments are hidden from you.</Text>
+          <Pressable onPress={toggleBlock} disabled={blockBusy}>
+            <Text style={s.unblockText}>Unblock</Text>
+          </Pressable>
+        </View>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.content}>
         {/* Hero */}
@@ -328,6 +373,34 @@ export default function UserProfileScreen() {
 
         <View style={{ height: 48 }} />
       </ScrollView>
+
+      {/* User actions menu */}
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <Pressable style={s.menuOverlay} onPress={() => setMenuOpen(false)}>
+          <View style={s.menuSheet}>
+            <Pressable
+              style={s.menuItem}
+              onPress={() => {
+                setMenuOpen(false);
+                setReportTarget({ type: "profile", id: profile.id, label: `@${profile.username}` });
+              }}
+            >
+              <Ionicons name="flag-outline" size={17} color="#ef4444" />
+              <Text style={[s.menuItemText, { color: "#ef4444" }]}>Report User</Text>
+            </Pressable>
+            <Pressable style={s.menuItem} onPress={toggleBlock} disabled={blockBusy}>
+              <Ionicons name={isBlocked ? "checkmark-circle-outline" : "ban-outline"} size={17} color="#fff" />
+              <Text style={s.menuItemText}>{isBlocked ? "Unblock User" : "Block User"}</Text>
+            </Pressable>
+            <Pressable style={[s.menuItem, { borderBottomWidth: 0 }]} onPress={() => setMenuOpen(false)}>
+              <Ionicons name="close-outline" size={17} color="#8a8a8a" />
+              <Text style={[s.menuItemText, { color: "#8a8a8a" }]}>Cancel</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      <ReportSheet target={reportTarget} onClose={() => setReportTarget(null)} />
     </SafeAreaView>
   );
 }
@@ -386,6 +459,27 @@ const s = StyleSheet.create({
   },
   privateTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
   privateSub: { color: "#8a8a8a", fontSize: 13, textAlign: "center", paddingHorizontal: 24 },
+
+  blockedBanner: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "rgba(239,68,68,0.07)",
+    paddingHorizontal: 16, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: "rgba(239,68,68,0.2)",
+  },
+  blockedBannerText: { flex: 1, color: "#ef4444", fontSize: 12, lineHeight: 16 },
+  unblockText: { color: "#fff", fontSize: 12.5, fontWeight: "800" },
+  menuOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" },
+  menuSheet: {
+    backgroundColor: "#161616", borderTopLeftRadius: 22, borderTopRightRadius: 22,
+    paddingVertical: 8, paddingBottom: 28,
+    width: "100%", maxWidth: 560, alignSelf: "center",
+  },
+  menuItem: {
+    flexDirection: "row", alignItems: "center", gap: 13,
+    paddingHorizontal: 22, paddingVertical: 15,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#242424",
+  },
+  menuItemText: { color: "#fff", fontSize: 15, fontWeight: "600" },
 
   sectionLabel: {
     color: "#6b6b6b", fontSize: 10, fontWeight: "800",

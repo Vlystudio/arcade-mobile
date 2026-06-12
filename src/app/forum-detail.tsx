@@ -21,6 +21,9 @@ import { supabase } from "../../lib/supabase";
 
 import { API_BASE as MOD_BASE } from "../../lib/api-base";
 import { showToast } from "../components/toast";
+import { ReportSheet, type ReportTarget } from "../components/report-sheet";
+import { MentionText } from "../components/mention-text";
+import { router as navRouter } from "expo-router";
 import { validateChatMessage, VALIDATION_LIMITS } from "../../lib/validation";
 const POST_LIMIT = VALIDATION_LIMITS.chatMessage;
 const COMMENT_LIMIT = 1000;
@@ -32,6 +35,15 @@ type ForumPost = {
   avatar_url: string | null;
   content: string;
   created_at: string;
+};
+
+type Poll = {
+  id: string;
+  post_id: string;
+  options: string[];
+  votes: number[];
+  my_vote: number | null;
+  total: number;
 };
 
 type PostComment = {
@@ -59,6 +71,12 @@ export default function ForumDetailScreen() {
   const [commentDraft, setCommentDraft] = useState("");
   const [commenting, setCommenting] = useState(false);
   const [deletingComment, setDeletingComment] = useState<string | null>(null);
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+
+  // Polls
+  const [pollsByPost, setPollsByPost] = useState<Record<string, Poll>>({});
+  const [pollOptions, setPollOptions] = useState<string[]>([]);
+  const [voting, setVoting] = useState<string | null>(null);
 
   const scrollRef = useRef<ScrollView>(null);
 
@@ -83,6 +101,38 @@ export default function ForumDetailScreen() {
       commentsData = cData ?? [];
     }
 
+    // Polls for these posts
+    let pollRows: any[] = [];
+    let voteRows: any[] = [];
+    if (postIds.length) {
+      const { data: pData } = await supabase
+        .from("forum_polls").select("id, post_id, options").in("post_id", postIds);
+      pollRows = pData ?? [];
+      if (pollRows.length) {
+        const { data: vData } = await supabase
+          .from("forum_poll_votes").select("poll_id, user_id, option_idx")
+          .in("poll_id", pollRows.map((x: any) => x.id));
+        voteRows = vData ?? [];
+      }
+    }
+    const polls: Record<string, Poll> = {};
+    for (const pr of pollRows) {
+      const opts: string[] = Array.isArray(pr.options) ? pr.options : [];
+      const votes = opts.map((_, i) => voteRows.filter((v) => v.poll_id === pr.id && v.option_idx === i).length);
+      const mine = voteRows.find((v) => v.poll_id === pr.id && v.user_id === user?.id);
+      polls[pr.post_id] = {
+        id: pr.id, post_id: pr.post_id, options: opts, votes,
+        my_vote: mine ? mine.option_idx : null,
+        total: votes.reduce((a, b) => a + b, 0),
+      };
+    }
+    setPollsByPost(polls);
+
+    // Blocked users are filtered out of the thread
+    const { data: blocks } = await supabase
+      .from("user_blocks").select("blocked_id").eq("blocker_id", user!.id);
+    const blockedIds = new Set((blocks ?? []).map((b: any) => b.blocked_id));
+
     const userIds = [...new Set([
       ...(data ?? []).map((p: any) => p.user_id as string),
       ...commentsData.map((c: any) => c.user_id as string),
@@ -93,7 +143,7 @@ export default function ForumDetailScreen() {
       for (const p of profiles ?? []) profileMap[(p as any).id] = { username: (p as any).username, avatar_url: (p as any).avatar_url };
     }
 
-    setPosts((data ?? []).map((p: any) => ({
+    setPosts((data ?? []).filter((p: any) => !blockedIds.has(p.user_id)).map((p: any) => ({
       id: p.id, user_id: p.user_id,
       username: profileMap[p.user_id]?.username ?? "Unknown",
       avatar_url: profileMap[p.user_id]?.avatar_url ?? null,
@@ -101,7 +151,7 @@ export default function ForumDetailScreen() {
     })));
 
     const grouped: Record<string, PostComment[]> = {};
-    for (const c of commentsData) {
+    for (const c of commentsData.filter((x: any) => !blockedIds.has(x.user_id))) {
       (grouped[c.post_id] ??= []).push({
         id: c.id, post_id: c.post_id, user_id: c.user_id,
         username: profileMap[c.user_id]?.username ?? "Unknown",
@@ -150,6 +200,23 @@ export default function ForumDetailScreen() {
     setPosting(false);
     if (error) { Alert.alert("Error", error.message); return; }
 
+    // Attach a poll when options were provided
+    const validOpts = pollOptions.map((o) => o.trim()).filter(Boolean);
+    if (validOpts.length >= 2) {
+      const { data: pollData } = await supabase
+        .from("forum_polls")
+        .insert({ post_id: data.id, options: validOpts })
+        .select("id")
+        .single();
+      if (pollData) {
+        setPollsByPost((prev) => ({
+          ...prev,
+          [data.id]: { id: pollData.id, post_id: data.id, options: validOpts, votes: validOpts.map(() => 0), my_vote: null, total: 0 },
+        }));
+      }
+      setPollOptions([]);
+    }
+
     const newEntry: ForumPost = {
       id: data.id, user_id: user.id,
       username: "You", avatar_url: null,
@@ -158,6 +225,24 @@ export default function ForumDetailScreen() {
     setPosts((prev) => [...prev, newEntry]);
     setNewPost("");
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+  }
+
+  async function votePoll(poll: Poll, idx: number) {
+    if (!user || voting) return;
+    setVoting(poll.id);
+    await supabase.from("forum_poll_votes").upsert(
+      { poll_id: poll.id, user_id: user.id, option_idx: idx },
+      { onConflict: "poll_id,user_id" },
+    );
+    setPollsByPost((prev) => {
+      const cur = prev[poll.post_id];
+      if (!cur) return prev;
+      const votes = [...cur.votes];
+      if (cur.my_vote != null) votes[cur.my_vote] = Math.max(votes[cur.my_vote] - 1, 0);
+      votes[idx] += 1;
+      return { ...prev, [poll.post_id]: { ...cur, votes, my_vote: idx, total: votes.reduce((a, b) => a + b, 0) } };
+    });
+    setVoting(null);
   }
 
   function toggleComments(postId: string) {
@@ -255,13 +340,49 @@ export default function ForumDetailScreen() {
                   return (
                     <View key={post.id} style={[styles.postCard, i === posts.length - 1 && { marginBottom: 8 }]}>
                       <View style={styles.postHeader}>
-                        <Avatar uri={post.avatar_url} name={post.username} size={36} />
-                        <View style={styles.postMeta}>
+                        <Pressable onPress={() => navRouter.push({ pathname: "/user-profile" as any, params: { userId: post.user_id } })}>
+                          <Avatar uri={post.avatar_url} name={post.username} size={36} />
+                        </Pressable>
+                        <Pressable style={styles.postMeta} onPress={() => navRouter.push({ pathname: "/user-profile" as any, params: { userId: post.user_id } })}>
                           <Text style={styles.postAuthor}>{post.username}</Text>
                           <Text style={styles.postTime}>{relTime(post.created_at)}</Text>
-                        </View>
+                        </Pressable>
+                        {post.user_id !== user?.id && (
+                          <Pressable
+                            onPress={() => setReportTarget({ type: "forum_post", id: post.id, label: `Post by ${post.username}` })}
+                            hitSlop={8}
+                          >
+                            <Ionicons name="flag-outline" size={14} color="#444" />
+                          </Pressable>
+                        )}
                       </View>
-                      <Text style={styles.postContent}>{post.content}</Text>
+                      <MentionText style={styles.postContent}>{post.content}</MentionText>
+
+                      {/* Poll */}
+                      {pollsByPost[post.id] && (
+                        <View style={styles.pollWrap}>
+                          {pollsByPost[post.id].options.map((opt, idx) => {
+                            const poll = pollsByPost[post.id];
+                            const count = poll.votes[idx] ?? 0;
+                            const pct = poll.total > 0 ? Math.round((count / poll.total) * 100) : 0;
+                            const mine = poll.my_vote === idx;
+                            return (
+                              <Pressable key={idx} style={styles.pollOption} onPress={() => votePoll(poll, idx)} disabled={voting === poll.id}>
+                                <View style={[styles.pollFill, { width: `${Math.max(pct, poll.my_vote != null ? 2 : 0)}%` as any }, mine && styles.pollFillMine]} />
+                                <View style={styles.pollOptionRow}>
+                                  <Text style={[styles.pollOptionText, mine && { color: "#06b6d4", fontWeight: "800" }]} numberOfLines={1}>
+                                    {mine ? "✓ " : ""}{opt}
+                                  </Text>
+                                  {poll.my_vote != null && <Text style={styles.pollPct}>{pct}%</Text>}
+                                </View>
+                              </Pressable>
+                            );
+                          })}
+                          <Text style={styles.pollTotal}>
+                            {pollsByPost[post.id].total} {pollsByPost[post.id].total === 1 ? "vote" : "votes"}
+                          </Text>
+                        </View>
+                      )}
 
                       {/* Comment toggle bar */}
                       <View style={styles.postFooter}>
@@ -290,9 +411,19 @@ export default function ForumDetailScreen() {
                               <View style={styles.threadLine} />
                               <Avatar uri={c.avatar_url} name={c.username} size={26} />
                               <View style={styles.commentBody}>
-                                <View style={styles.commentTopRow}>
-                                  <Text style={styles.commentAuthor}>{c.username}</Text>
+                                  <View style={styles.commentTopRow}>
+                                  <Pressable onPress={() => navRouter.push({ pathname: "/user-profile" as any, params: { userId: c.user_id } })}>
+                                    <Text style={styles.commentAuthor}>{c.username}</Text>
+                                  </Pressable>
                                   <Text style={styles.commentTime}>{relTime(c.created_at)}</Text>
+                                  {c.user_id !== user?.id && (
+                                    <Pressable
+                                      onPress={() => setReportTarget({ type: "forum_comment", id: c.id, label: `Comment by ${c.username}` })}
+                                      hitSlop={8}
+                                    >
+                                      <Ionicons name="flag-outline" size={12} color="#444" />
+                                    </Pressable>
+                                  )}
                                   {c.user_id === user?.id && (
                                     <Pressable onPress={() => handleDeleteComment(c)} hitSlop={8} disabled={deletingComment === c.id}>
                                       {deletingComment === c.id
@@ -301,7 +432,7 @@ export default function ForumDetailScreen() {
                                     </Pressable>
                                   )}
                                 </View>
-                                <Text style={styles.commentContent}>{c.content}</Text>
+                                <MentionText style={styles.commentContent}>{c.content}</MentionText>
                               </View>
                             </View>
                           ))}
@@ -338,6 +469,31 @@ export default function ForumDetailScreen() {
 
             {/* New post input */}
             <View style={styles.replyBar}>
+            {pollOptions.length > 0 && (
+              <View style={{ gap: 6, marginBottom: 8 }}>
+                {pollOptions.map((opt, i) => (
+                  <View key={i} style={styles.pollInputRow}>
+                    <TextInput
+                      style={styles.pollInput}
+                      placeholder={`Poll option ${i + 1}`}
+                      placeholderTextColor="#555"
+                      value={opt}
+                      onChangeText={(t) => setPollOptions((prev) => prev.map((x, j) => (j === i ? t : x)))}
+                      maxLength={60}
+                    />
+                    <Pressable onPress={() => setPollOptions((prev) => prev.filter((_, j) => j !== i))} hitSlop={6}>
+                      <Ionicons name="close-circle" size={18} color="#555" />
+                    </Pressable>
+                  </View>
+                ))}
+                {pollOptions.length < 4 && (
+                  <Pressable style={styles.pollAddBtn} onPress={() => setPollOptions((prev) => [...prev, ""])}>
+                    <Ionicons name="add" size={14} color="#06b6d4" />
+                    <Text style={styles.pollAddText}>Add option</Text>
+                  </Pressable>
+                )}
+              </View>
+            )}
               <TextInput
                 style={styles.replyInput}
                 placeholder="Start a new post…"
@@ -349,6 +505,14 @@ export default function ForumDetailScreen() {
                 editable={!posting}
               />
               <View style={styles.replyActions}>
+                <Pressable
+                  style={styles.pollToggleBtn}
+                onPress={() => setPollOptions((prev) => (prev.length ? [] : ["", ""]))}
+                hitSlop={6}
+              >
+                <Ionicons name="stats-chart-outline" size={15} color={pollOptions.length ? "#06b6d4" : "#555"} />
+                <Text style={[styles.pollAddText, !pollOptions.length && { color: "#555" }]}>Poll</Text>
+                </Pressable>
                 <Text style={styles.charCount}>{newPost.length}/{POST_LIMIT}</Text>
                 <Pressable
                   style={[styles.replyBtn, (!newPost.trim() || posting) && { opacity: 0.4 }]}
@@ -364,6 +528,7 @@ export default function ForumDetailScreen() {
           </KeyboardAvoidingView>
         </View>
       </SafeAreaView>
+      <ReportSheet target={reportTarget} onClose={() => setReportTarget(null)} />
     </View>
   );
 }
@@ -444,6 +609,27 @@ const styles = StyleSheet.create({
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center",
   },
+
+  pollWrap: { marginTop: 10, gap: 6 },
+  pollOption: {
+    borderRadius: 10, borderWidth: 1, borderColor: "#242424",
+    backgroundColor: "#0c0c0c", overflow: "hidden",
+  },
+  pollFill: { position: "absolute", left: 0, top: 0, bottom: 0, backgroundColor: "rgba(100,116,139,0.18)" },
+  pollFillMine: { backgroundColor: "rgba(6,182,212,0.16)" },
+  pollOptionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 9, gap: 8 },
+  pollOptionText: { flex: 1, color: "#ccc", fontSize: 13.5, fontWeight: "600" },
+  pollPct: { color: "#8a8a8a", fontSize: 12.5, fontWeight: "800" },
+  pollTotal: { color: "#555", fontSize: 11, marginTop: 2 },
+  pollInputRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  pollInput: {
+    flex: 1, backgroundColor: "#0c0c0c", borderRadius: 10,
+    borderWidth: 1, borderColor: "#222",
+    color: "#fff", fontSize: 13.5, paddingHorizontal: 11, paddingVertical: 8,
+  },
+  pollAddBtn: { flexDirection: "row", alignItems: "center", gap: 5, alignSelf: "flex-start", paddingVertical: 3 },
+  pollAddText: { color: "#06b6d4", fontSize: 12.5, fontWeight: "700" },
+  pollToggleBtn: { flexDirection: "row", alignItems: "center", gap: 4, marginRight: "auto" },
 
   replyBar: {
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a",

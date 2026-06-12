@@ -71,7 +71,15 @@ export default function ChatScreen() {
       return;
     }
 
-    const otherIds = convData.map((c: any) =>
+    // Hide conversations with users you've blocked
+    const { data: blocks } = await supabase
+      .from("user_blocks").select("blocked_id").eq("blocker_id", user.id);
+    const blockedIds = new Set((blocks ?? []).map((b: any) => b.blocked_id));
+    const visibleConvs = convData.filter((c: any) =>
+      !blockedIds.has(c.participant_1 === user.id ? c.participant_2 : c.participant_1)
+    );
+
+    const otherIds = visibleConvs.map((c: any) =>
       c.participant_1 === user.id ? c.participant_2 : c.participant_1
     );
 
@@ -88,7 +96,7 @@ export default function ChatScreen() {
       };
     }
 
-    const mapped: Conversation[] = convData.map((c: any) => {
+    const mapped: Conversation[] = visibleConvs.map((c: any) => {
       const otherId = c.participant_1 === user.id ? c.participant_2 : c.participant_1;
       const profile = profileMap[otherId];
       return {
