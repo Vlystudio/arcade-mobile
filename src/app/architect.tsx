@@ -86,7 +86,7 @@ export default function ArchitectScreen() {
       messagesTotalRes,
       activeTournamentsRes,
     ] = await Promise.all([
-      supabase.from("profiles").select("role, created_at"),
+      supabase.from("profiles").select("role, created_at, is_beta_tester"),
       supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "approved"),
       supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "approved").gte("created_at", monthAgo),
       supabase.from("scores").select("*", { count: "exact", head: true }).eq("status", "pending"),
@@ -113,10 +113,11 @@ export default function ArchitectScreen() {
       supabase.from("tournaments").select("*", { count: "exact", head: true }).neq("status", "completed").neq("status", "cancelled"),
     ]);
 
-    const roleCounts: Record<string, number> = { user: 0, admin: 0, owner: 0, architect: 0 };
+    const roleCounts: Record<string, number> = { user: 0, admin: 0, owner: 0, architect: 0, beta: 0 };
     for (const p of (profilesAll.data ?? []) as any[]) {
       const r = p.role ?? "user";
       roleCounts[r] = (roleCounts[r] ?? 0) + 1;
+      if ((p as any).is_beta_tester) roleCounts.beta += 1;
     }
 
     const tableCounts: Record<string, number> = {
@@ -394,10 +395,11 @@ export default function ArchitectScreen() {
             { role: "owner",     color: "#f59e0b" },
             { role: "admin",     color: "#3b82f6" },
             { role: "user",      color: "#777" },
-          ].map(({ role, color }, i) => (
-            <View key={role} style={[s.listRow, i < 3 && s.listDivider]}>
+            { role: "beta",      color: "#2dd4bf", label: "Beta Tester" },
+          ].map(({ role, color, label }: any, i) => (
+            <View key={role} style={[s.listRow, i < 4 && s.listDivider]}>
               <Ionicons name="checkmark-circle" size={14} color={color} />
-              <Text style={[s.listLabel, { color }]}>{role.charAt(0).toUpperCase() + role.slice(1)}</Text>
+              <Text style={[s.listLabel, { color }]}>{label ?? role.charAt(0).toUpperCase() + role.slice(1)}</Text>
               <Text style={s.listValue}>{(st.roleCounts[role] ?? 0).toLocaleString()}</Text>
             </View>
           ))}
