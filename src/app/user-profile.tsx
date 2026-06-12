@@ -30,6 +30,7 @@ type UserProfile = {
   is_private: boolean;
   role: AppRole;
   featured_game_id: string | null;
+  is_beta_tester: boolean;
 };
 
 type FriendStatus = "none" | "pending_sent" | "pending_received" | "friends";
@@ -106,6 +107,7 @@ export default function UserProfileScreen() {
       is_private: p.is_private ?? false,
       role: (p.role ?? "user") as AppRole,
       featured_game_id: p.featured_game_id ?? null,
+      is_beta_tester: !!(p as any).is_beta_tester,
     });
 
     const fr = friendRes.data;
@@ -293,7 +295,7 @@ export default function UserProfileScreen() {
           <View style={s.nameRow}>
             <Text style={s.heroName}>{profile.username}</Text>
             <RoleBadge role={profile.role} size={16} />
-            <BetaBadge visible={(profile as any).is_beta_tester} size={16} />
+            <BetaBadge visible={profile.is_beta_tester} size={16} />
           </View>
 
           {teamInfo && (
