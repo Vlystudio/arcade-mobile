@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { ListSkeleton } from "../components/skeleton";
+import { showToast } from "../components/toast";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { Avatar } from "../components/avatar";
@@ -52,6 +53,12 @@ export default function LeaguesScreen() {
   const [skeeSeasons, setSkeeSeasons] = useState<SkeeSeason[]>([]);
   const [skeeSeasonId, setSkeeSeasonId] = useState<string | "all">("all");
   const [skeeAwards, setSkeeAwards] = useState<WeeklyAwards | null>(null);
+
+  // Pick'em
+  const [myPick, setMyPick] = useState<string | null>(null);
+  const [pickemBoard, setPickemBoard] = useState<{ username: string; correct: number; picks: number }[]>([]);
+  const [picking, setPicking] = useState<string | null>(null);
+  const [picksLocked, setPicksLocked] = useState(false);
 
   async function loadLeagues() {
     if (!user) return;
@@ -130,6 +137,24 @@ export default function LeaguesScreen() {
     ]);
     setSkeeAwards(awards);
 
+    // Pick'em: my pick this week, lock state, season leaderboard
+    if (user) {
+      const monday = new Date();
+      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+      const weekOf = monday.toISOString().slice(0, 10);
+      const [pickRes, lockRes, boardRes] = await Promise.all([
+        supabase.from("pickem_picks").select("team_id").eq("user_id", user.id).eq("week_of", weekOf).maybeSingle(),
+        supabase.from("skeeball_sessions").select("id", { count: "exact", head: true }).eq("week_of", weekOf).eq("status", "completed"),
+        supabase.rpc("rpc_pickem_leaderboard", {
+          p_start: season?.start_week ?? null,
+          p_end: season?.end_week ?? null,
+        }),
+      ]);
+      setMyPick((pickRes.data as any)?.team_id ?? null);
+      setPicksLocked((lockRes.count ?? 0) > 0);
+      setPickemBoard((((boardRes.data as any)?.leaderboard ?? []) as any[]).slice(0, 5));
+    }
+
     setSkeeStandings(
       standings.map((r: StandingRow) => ({
         team_id: r.team_id,
@@ -175,6 +200,39 @@ export default function LeaguesScreen() {
       loadSkeeballLeague(myTeamId);
     }
   }, [user, myTeamId]);
+
+  async function makePick(teamId: string) {
+    if (picking || picksLocked) return;
+    setPicking(teamId);
+    const { data, error } = await supabase.rpc("rpc_make_pick", { p_team_id: teamId });
+    setPicking(null);
+    if (error || (data as any)?.error) {
+      showToast((data as any)?.message ?? "Couldn't save your pick.", "error");
+      if ((data as any)?.error === "locked") setPicksLocked(true);
+      return;
+    }
+    setMyPick(teamId);
+    showToast("Pick locked in — good luck!");
+  }
+
+  /** Web: export the current standings to CSV. */
+  function exportStandingsCsv() {
+    if (Platform.OS !== "web") return;
+    const seasonName = skeeSeasons.find((sn) => sn.id === skeeSeasonId)?.name ?? "all-time";
+    const header = "Rank,Team,Games,Avg,Gold,Silver,Bronze,Points";
+    const rows = skeeStandings.map((st, i) =>
+      [i + 1, `"${st.team_name.replace(/"/g, '""')}"`, st.matches_played, st.avg_score ?? "", st.gold, st.silver, st.bronze, st.total_points].join(",")
+    );
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `standings-${seasonName.toLowerCase().replace(/\s+/g, "-")}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
 
   /** Web: open a clean black-on-white standings + schedule sheet and print it. */
   async function printSchedule() {
@@ -322,10 +380,16 @@ export default function LeaguesScreen() {
                   <Text style={styles.liveCardSub}>Watch all lanes update in real time</Text>
                 </View>
                 {Platform.OS === "web" && (
-                  <Pressable style={styles.printBtn} onPress={(e) => { e.stopPropagation(); printSchedule(); }} hitSlop={6}>
-                    <Ionicons name="print-outline" size={15} color="#888" />
-                    <Text style={styles.printBtnText}>Print</Text>
-                  </Pressable>
+                  <>
+                    <Pressable style={styles.printBtn} onPress={(e) => { e.stopPropagation(); exportStandingsCsv(); }} hitSlop={6}>
+                      <Ionicons name="download-outline" size={15} color="#888" />
+                      <Text style={styles.printBtnText}>CSV</Text>
+                    </Pressable>
+                    <Pressable style={styles.printBtn} onPress={(e) => { e.stopPropagation(); printSchedule(); }} hitSlop={6}>
+                      <Ionicons name="print-outline" size={15} color="#888" />
+                      <Text style={styles.printBtnText}>Print</Text>
+                    </Pressable>
+                  </>
                 )}
                 <Ionicons name="chevron-forward" size={16} color="#444" />
               </Pressable>
@@ -341,6 +405,66 @@ export default function LeaguesScreen() {
                 </View>
                 <Ionicons name="chevron-forward" size={16} color="#444" />
               </Pressable>
+
+              {/* Hall of Fame + Events shortcuts */}
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
+                <Pressable style={[styles.scheduleCard, { flex: 1, marginBottom: 0, borderColor: "rgba(245,158,11,0.25)" }]} onPress={() => router.push("/hall-of-fame" as any)}>
+                  <Ionicons name="trophy" size={17} color="#f59e0b" />
+                  <Text style={[styles.liveCardTitle, { fontSize: 13 }]}>Hall of Fame</Text>
+                </Pressable>
+                <Pressable style={[styles.scheduleCard, { flex: 1, marginBottom: 0 }]} onPress={() => router.push("/events" as any)}>
+                  <Ionicons name="calendar" size={17} color="#06b6d4" />
+                  <Text style={[styles.liveCardTitle, { fontSize: 13 }]}>What's On</Text>
+                </Pressable>
+              </View>
+
+              {/* Weekly Pick'em */}
+              {(() => {
+                const sel = skeeSeasons.find((sn) => sn.id === skeeSeasonId);
+                if (!sel || sel.status !== "active") return null;
+                return (
+                  <View style={styles.pickemCard}>
+                    <View style={styles.potwHeader}>
+                      <Ionicons name="sparkles" size={13} color="#a855f7" />
+                      <Text style={[styles.potwLabel, { color: "#a855f7" }]}>
+                        Weekly Pick'em — who scores highest Monday?
+                      </Text>
+                    </View>
+                    {picksLocked ? (
+                      <Text style={styles.pickemHint}>
+                        Picks are locked — games have started. {myPick ? "Your pick is in!" : "You didn't pick this week."}
+                      </Text>
+                    ) : (
+                      <View style={styles.pickemTeams}>
+                        {skeeStandings.slice(0, 8).map((st) => (
+                          <Pressable
+                            key={st.team_id}
+                            style={[styles.pickemChip, myPick === st.team_id && styles.pickemChipActive]}
+                            onPress={() => makePick(st.team_id)}
+                            disabled={picking !== null}
+                          >
+                            <Text style={[styles.pickemChipText, myPick === st.team_id && { color: "#000" }]} numberOfLines={1}>
+                              {myPick === st.team_id ? "✓ " : ""}{st.team_name}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                    {pickemBoard.length > 0 && (
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={styles.pickemBoardLabel}>Predictors Leaderboard</Text>
+                        {pickemBoard.map((b, i) => (
+                          <View key={b.username + i} style={styles.pickemBoardRow}>
+                            <Text style={styles.pickemBoardRank}>{i + 1}</Text>
+                            <Text style={styles.pickemBoardName} numberOfLines={1}>{b.username}</Text>
+                            <Text style={styles.pickemBoardScore}>{b.correct}/{b.picks}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
 
               {/* Player of the Week */}
               {skeeAwards?.top && (
@@ -748,6 +872,24 @@ const styles = StyleSheet.create({
   raceMax: { color: "#777", fontSize: 11.5, fontWeight: "600" },
   raceTag: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
   raceTagText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.4 },
+
+  pickemCard: {
+    backgroundColor: "rgba(168,85,247,0.04)", borderRadius: 16, padding: 14, marginBottom: 12,
+    borderWidth: 1, borderColor: "rgba(168,85,247,0.2)", gap: 10,
+  },
+  pickemHint: { color: "#999", fontSize: 12.5 },
+  pickemTeams: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  pickemChip: {
+    borderRadius: 10, paddingHorizontal: 11, paddingVertical: 7,
+    backgroundColor: "#161616", borderWidth: 1, borderColor: "#2a2a2a", maxWidth: "48%",
+  },
+  pickemChipActive: { backgroundColor: "#a855f7", borderColor: "#a855f7" },
+  pickemChipText: { color: "#ccc", fontSize: 12.5, fontWeight: "700" },
+  pickemBoardLabel: { color: "#555", fontSize: 10.5, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6 },
+  pickemBoardRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4 },
+  pickemBoardRank: { width: 18, color: "#a855f7", fontSize: 12, fontWeight: "900" },
+  pickemBoardName: { flex: 1, color: "#ccc", fontSize: 13, fontWeight: "600" },
+  pickemBoardScore: { color: "#a855f7", fontSize: 13, fontWeight: "900" },
 
   weekProgressCard: {
     flexDirection: "row", alignItems: "center", gap: 12,

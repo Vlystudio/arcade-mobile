@@ -141,7 +141,17 @@ export default function ProfileScreen() {
   const [searchVisible, setSearchVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{ id: string; username: string; avatar_url: string | null; role: AppRole }[]>([]);
+  const [teamResults, setTeamResults] = useState<{ id: string; name: string }[]>([]);
+  const [forumResults, setForumResults] = useState<{ id: string; title: string }[]>([]);
   const [searching, setSearching] = useState(false);
+
+  // Change password
+  const [pwVisible, setPwVisible] = useState(false);
+  const [pwCurrent, setPwCurrent] = useState("");
+  const [pwNew, setPwNew] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState<string | null>(null);
 
   async function loadProfile() {
     if (!user) return;
@@ -412,27 +422,55 @@ export default function ProfileScreen() {
 
   async function searchUsers(q: string) {
     setSearchQuery(q);
-    if (!q.trim()) { setSearchResults([]); return; }
+    if (!q.trim()) { setSearchResults([]); setTeamResults([]); setForumResults([]); return; }
     setSearching(true);
-    const { data } = await supabase
-      .from("profiles")
-      .select("id, username, avatar_url, role")
-      .ilike("username", `%${q.trim()}%`)
-      .neq("id", user!.id)
-      .limit(15);
-    setSearchResults((data ?? []).map((p: any) => ({
+    const term = `%${q.trim()}%`;
+    const [usersRes, teamsRes, forumsRes] = await Promise.all([
+      supabase.from("profiles").select("id, username, avatar_url, role").ilike("username", term).neq("id", user!.id).limit(10),
+      supabase.from("teams").select("id, name").ilike("name", term).limit(6),
+      supabase.from("forums").select("id, title").eq("status", "approved").ilike("title", term).limit(6),
+    ]);
+    setSearchResults((usersRes.data ?? []).map((p: any) => ({
       id: p.id,
       username: p.username ?? "Unknown",
       avatar_url: p.avatar_url ?? null,
       role: (p.role ?? "user") as AppRole,
     })));
+    setTeamResults((teamsRes.data ?? []) as any);
+    setForumResults((forumsRes.data ?? []) as any);
     setSearching(false);
+  }
+
+  async function changePassword() {
+    setPwError(null);
+    if (pwNew.length < 6) { setPwError("New password must be at least 6 characters."); return; }
+    if (pwNew !== pwConfirm) { setPwError("New passwords don't match."); return; }
+    setPwSaving(true);
+    // Verify the current password before allowing the change
+    const { error: verifyError } = await supabase.auth.signInWithPassword({
+      email: email ?? "",
+      password: pwCurrent,
+    });
+    if (verifyError) {
+      setPwSaving(false);
+      setPwError("Current password is incorrect.");
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: pwNew });
+    setPwSaving(false);
+    if (error) { setPwError(error.message); return; }
+    setPwVisible(false);
+    setPwCurrent(""); setPwNew(""); setPwConfirm("");
+    showToast("Password updated");
+    sendSecurityAlert("password_changed" as any);
   }
 
   function closeSearch() {
     setSearchVisible(false);
     setSearchQuery("");
     setSearchResults([]);
+    setTeamResults([]);
+    setForumResults([]);
   }
 
   function handleLogout() {
@@ -739,6 +777,12 @@ export default function ProfileScreen() {
                 </View>
                 <View style={styles.settingsDivider} />
                 <SettingsRow
+                  icon="key-outline"
+                  label="Change Password"
+                  onPress={() => { setSettingsVisible(false); setTimeout(() => setPwVisible(true), 200); }}
+                />
+                <View style={styles.settingsDivider} />
+                <SettingsRow
                   icon={mfaEnabled ? "shield-checkmark" : "shield-outline"}
                   iconColor={mfaEnabled ? "#22c55e" : "#ef4444"}
                   iconBg={mfaEnabled ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)"}
@@ -972,27 +1016,64 @@ export default function ProfileScreen() {
               {searching && <ActivityIndicator size="small" color="#555" />}
             </View>
             <ScrollView style={{ maxHeight: 380 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              {searchResults.length === 0 && searchQuery.trim() !== "" && !searching ? (
+              {searchResults.length === 0 && teamResults.length === 0 && forumResults.length === 0 && searchQuery.trim() !== "" && !searching ? (
                 <View style={styles.searchNoResults}>
                   <Ionicons name="person-outline" size={28} color="#222" />
                   <Text style={styles.searchNoResultsText}>No users found</Text>
                 </View>
               ) : (
-                searchResults.map((r) => (
-                  <Pressable
-                    key={r.id}
-                    style={({ pressed }) => [styles.searchResultRow, pressed && { opacity: 0.7 }]}
-                    onPress={() => {
-                      closeSearch();
-                      router.push({ pathname: "/user-profile" as any, params: { userId: r.id } });
-                    }}
-                  >
-                    <Avatar uri={r.avatar_url} name={r.username} size={40} />
-                    <Text style={[styles.searchResultName, { flex: 1 }]}>{r.username}</Text>
-                    <RoleBadge role={r.role} size={14} />
-                    <Ionicons name="chevron-forward" size={16} color="#333" />
-                  </Pressable>
-                ))
+                <>
+                  {searchResults.length > 0 && <Text style={styles.searchSectionLabel}>People</Text>}
+                  {searchResults.map((r) => (
+                    <Pressable
+                      key={r.id}
+                      style={({ pressed }) => [styles.searchResultRow, pressed && { opacity: 0.7 }]}
+                      onPress={() => {
+                        closeSearch();
+                        router.push({ pathname: "/user-profile" as any, params: { userId: r.id } });
+                      }}
+                    >
+                      <Avatar uri={r.avatar_url} name={r.username} size={40} />
+                      <Text style={[styles.searchResultName, { flex: 1 }]}>{r.username}</Text>
+                      <RoleBadge role={r.role} size={14} />
+                      <Ionicons name="chevron-forward" size={16} color="#333" />
+                    </Pressable>
+                  ))}
+                  {teamResults.length > 0 && <Text style={styles.searchSectionLabel}>Teams</Text>}
+                  {teamResults.map((t) => (
+                    <Pressable
+                      key={t.id}
+                      style={({ pressed }) => [styles.searchResultRow, pressed && { opacity: 0.7 }]}
+                      onPress={() => {
+                        closeSearch();
+                        router.push({ pathname: "/team-detail" as any, params: { teamId: t.id, teamName: t.name } });
+                      }}
+                    >
+                      <View style={styles.searchTeamIcon}>
+                        <Ionicons name="people" size={17} color="#06b6d4" />
+                      </View>
+                      <Text style={[styles.searchResultName, { flex: 1 }]}>{t.name}</Text>
+                      <Ionicons name="chevron-forward" size={16} color="#333" />
+                    </Pressable>
+                  ))}
+                  {forumResults.length > 0 && <Text style={styles.searchSectionLabel}>Forums</Text>}
+                  {forumResults.map((f) => (
+                    <Pressable
+                      key={f.id}
+                      style={({ pressed }) => [styles.searchResultRow, pressed && { opacity: 0.7 }]}
+                      onPress={() => {
+                        closeSearch();
+                        router.push({ pathname: "/forum-detail" as any, params: { forumId: f.id, title: f.title } });
+                      }}
+                    >
+                      <View style={[styles.searchTeamIcon, { backgroundColor: "rgba(245,158,11,0.08)" }]}>
+                        <Ionicons name="chatbubbles" size={16} color="#f59e0b" />
+                      </View>
+                      <Text style={[styles.searchResultName, { flex: 1 }]}>{f.title}</Text>
+                      <Ionicons name="chevron-forward" size={16} color="#333" />
+                    </Pressable>
+                  ))}
+                </>
               )}
             </ScrollView>
             <Pressable style={[styles.pickerCancel, { marginTop: 10 }]} onPress={closeSearch}>
@@ -1019,6 +1100,57 @@ export default function ProfileScreen() {
             </Pressable>
             <Pressable style={styles.pickerCancel} onPress={() => setAvatarPickerVisible(false)}>
               <Text style={styles.pickerCancelText}>Cancel</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Change password */}
+      <Modal visible={pwVisible} transparent animationType="slide" onRequestClose={() => setPwVisible(false)}>
+        <View style={styles.sheetBg}>
+          <Pressable style={styles.sheetDismiss} onPress={() => setPwVisible(false)} />
+          <View style={styles.pickerSheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.pickerTitle}>Change Password</Text>
+            <TextInput
+              style={styles.pwInput}
+              placeholder="Current password"
+              placeholderTextColor="#555"
+              secureTextEntry
+              value={pwCurrent}
+              onChangeText={setPwCurrent}
+              autoComplete="current-password"
+              textContentType="password"
+            />
+            <TextInput
+              style={styles.pwInput}
+              placeholder="New password (min. 6 characters)"
+              placeholderTextColor="#555"
+              secureTextEntry
+              value={pwNew}
+              onChangeText={setPwNew}
+              autoComplete="new-password"
+              textContentType="newPassword"
+            />
+            <TextInput
+              style={styles.pwInput}
+              placeholder="Confirm new password"
+              placeholderTextColor="#555"
+              secureTextEntry
+              value={pwConfirm}
+              onChangeText={setPwConfirm}
+              autoComplete="new-password"
+              textContentType="newPassword"
+            />
+            {pwError && <Text style={styles.pwError}>{pwError}</Text>}
+            <Pressable
+              style={[styles.pickerOptionCamera, (pwSaving || !pwCurrent || !pwNew || !pwConfirm) && { opacity: 0.4 }]}
+              onPress={changePassword}
+              disabled={pwSaving || !pwCurrent || !pwNew || !pwConfirm}
+            >
+              {pwSaving
+                ? <ActivityIndicator size="small" color="#000" />
+                : <Text style={styles.pickerOptionCameraText}>Update Password</Text>}
             </Pressable>
           </View>
         </View>
@@ -1327,6 +1459,20 @@ const styles = StyleSheet.create({
   noGamesWrap: { alignItems: "center", gap: 8, paddingVertical: 24 },
   noGamesText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   noGamesSub: { color: "#777", fontSize: 12, textAlign: "center" },
+
+  searchSectionLabel: {
+    color: "#555", fontSize: 10.5, fontWeight: "800",
+    textTransform: "uppercase", letterSpacing: 1, marginTop: 10, marginBottom: 4,
+  },
+  searchTeamIcon: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center",
+  },
+  pwInput: {
+    backgroundColor: "#0a0a0a", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
+    color: "#fff", fontSize: 15, paddingHorizontal: 16, paddingVertical: 13,
+  },
+  pwError: { color: "#ef4444", fontSize: 13 },
 
   searchInputWrap: {
     flexDirection: "row", alignItems: "center", gap: 10,
