@@ -4,7 +4,7 @@ import Head from "expo-router/head";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-export const CURRENT_TOS_VERSION = "2026-06.2";
+export const CURRENT_TOS_VERSION = "2026-06.3";
 
 export default function TermsScreen() {
   return (
@@ -74,18 +74,7 @@ export default function TermsScreen() {
         </Section>
 
         <Section title="5. Private Messages">
-          {"ArcadeTracker's direct messaging feature uses end-to-end encryption. This means " +
-           "private messages between users are encrypted on your device before transmission " +
-           "and can only be decrypted by the intended recipient. ArcadeTracker staff cannot " +
-           "read the content of private messages.\n\n" +
-           "While we cannot monitor private messages, we strongly discourage the sharing of " +
-           "any prohibited content — including nudity, hate speech, harassment, or any of the " +
-           "content types listed in Section 4 — in private messages. Sharing such content " +
-           "through private messaging violates these Terms of Service and may result in " +
-           "account suspension if reported and verified.\n\n" +
-           "If another user reports harassment or abuse via private messages, we may take " +
-           "action based on the report and any metadata available to us, even if we cannot " +
-           "read message content."}
+          {"Direct messages are private to the participants in the conversation: they are protected with industry-standard encryption in transit and at rest, and no other user can read them. ArcadeTracker staff do not read private messages in the normal course of operating the App; message content may be accessed only when required to investigate reported abuse, enforce these Terms, or comply with legal obligations.\n\nDo not share prohibited content in private messages. Doing so violates these Terms of Service and may result in account suspension if reported and verified."}
         </Section>
 
         <Section title="6. User Content License">

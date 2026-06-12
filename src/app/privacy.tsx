@@ -105,11 +105,12 @@ export default function PrivacyScreen() {
            "content is stored in the rate limiting system — only request frequency counts."}
         </Section>
 
-        <Section title="Private Messages (End-to-End Encryption)">
-          {"Direct messages between users are end-to-end encrypted (E2EE) using a public-key " +
-           "cryptography system. Your messages are encrypted on your device before being " +
-           "transmitted and can only be decrypted by the intended recipient. ArcadeTracker staff " +
-           "cannot read the content of private messages.\n\n" +
+        <Section title="Private Messages">
+          {"Direct messages are private to the conversation's participants and are protected with " +
+           "industry-standard encryption in transit and at rest. Other users cannot read your " +
+           "messages. ArcadeTracker staff do not read private messages in the normal course of " +
+           "operating the App; message content may be accessed only to investigate reported " +
+           "abuse, enforce our Terms of Service, or comply with legal obligations.\n\n" +
            "Message metadata — such as the fact that a conversation exists between two users " +
            "and message timestamps — is stored in our database and is accessible to platform " +
            "administrators for safety and abuse investigation purposes."}

@@ -103,6 +103,11 @@ jobs:
         run: semgrep scan --config=auto --sarif --output=semgrep.sarif src/ api/ lib/
         continue-on-error: true  # advisory — see comment above
 
+      # Production gate: HIGH-severity (ERROR) findings are blocking.
+      # Lower severities remain advisory via the SARIF upload above.
+      - name: Semgrep high-severity gate (blocking)
+        run: semgrep scan --config=auto --severity ERROR --error src/ api/ lib/ supabase/functions/
+
       - name: Upload Semgrep SARIF
         uses: github/codeql-action/upload-sarif@v3
         if: always()

@@ -329,7 +329,7 @@ export default function ProfileScreen() {
 
     if (name.toLowerCase() !== (username ?? "").toLowerCase()) {
       const { data: existing } = await supabase
-        .from("profiles").select("id").ilike("username", name).neq("id", user.id).maybeSingle();
+        .from("public_profiles").select("id").ilike("username", name).neq("id", user.id).maybeSingle();
       if (existing) {
         Alert.alert("Username taken", "That username is already in use.");
         setSavingProfile(false);
@@ -405,10 +405,17 @@ export default function ProfileScreen() {
   async function openBlockedList() {
     setBlockedVisible(true);
     setBlockedLoading(true);
-    const { data } = await supabase
+    const { data: blockRows } = await supabase
       .from("user_blocks")
-      .select("blocked_id, profiles!user_blocks_blocked_id_fkey(username, avatar_url)")
+      .select("blocked_id")
       .eq("blocker_id", user!.id);
+    const blockedIds2 = (blockRows ?? []).map((b: any) => b.blocked_id);
+    let blockedProfs: Record<string, any> = {};
+    if (blockedIds2.length) {
+      const { data: bp } = await supabase.from("public_profiles").select("id, username, avatar_url").in("id", blockedIds2);
+      for (const x of bp ?? []) blockedProfs[(x as any).id] = x;
+    }
+    const data = (blockRows ?? []).map((b: any) => ({ blocked_id: b.blocked_id, profiles: blockedProfs[b.blocked_id] ?? null }));
     setBlockedUsers((data ?? []).map((b: any) => {
       const prof = Array.isArray(b.profiles) ? b.profiles[0] : b.profiles;
       return { id: b.blocked_id, username: prof?.username ?? "Unknown", avatar_url: prof?.avatar_url ?? null };
@@ -460,7 +467,7 @@ export default function ProfileScreen() {
     const term = `%${q.trim()}%`;
     const userTerm = `%${q.replace(/\s+/g, "")}%`;
     const [usersRes, teamsRes, forumsRes] = await Promise.all([
-      supabase.from("profiles").select("id, username, avatar_url, role, is_beta_tester").ilike("username", userTerm).neq("id", user!.id).limit(10),
+      supabase.from("public_profiles").select("id, username, avatar_url, badge_role, is_beta_tester").ilike("username", userTerm).neq("id", user!.id).limit(10),
       supabase.from("teams").select("id, name").ilike("name", term).limit(6),
       supabase.from("forums").select("id, title").eq("status", "approved").ilike("title", term).limit(6),
     ]);
@@ -468,7 +475,7 @@ export default function ProfileScreen() {
       id: p.id,
       username: p.username ?? "Unknown",
       avatar_url: p.avatar_url ?? null,
-      role: (p.role ?? "user") as AppRole,
+      role: (p.badge_role ?? "user") as AppRole,
       is_beta_tester: !!p.is_beta_tester,
     })));
     setTeamResults((teamsRes.data ?? []) as any);

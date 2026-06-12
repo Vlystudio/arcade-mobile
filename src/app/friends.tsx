@@ -69,12 +69,19 @@ export default function FriendsScreen() {
 
     const { data: all } = await supabase
       .from("friendships")
-      .select(`
-        id, status, requester_id, addressee_id,
-        requester:profiles!requester_id(id, username, avatar_url, online_status, role, is_beta_tester),
-        addressee:profiles!addressee_id(id, username, avatar_url, online_status, role, is_beta_tester)
-      `)
+      .select("id, status, requester_id, addressee_id")
       .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`);
+
+    const otherIds = [...new Set((all ?? []).flatMap((f: any) =>
+      [f.requester_id, f.addressee_id].filter((id: string) => id !== user.id)))];
+    let profMap: Record<string, any> = {};
+    if (otherIds.length) {
+      const { data: profs } = await supabase
+        .from("public_profiles")
+        .select("id, username, avatar_url, online_status, badge_role, is_beta_tester")
+        .in("id", otherIds);
+      for (const pr of profs ?? []) profMap[(pr as any).id] = pr;
+    }
 
     const map = new Map<string, { id: string; status: string; role: "requester" | "addressee" }>();
     const fList: Friend[] = [];
@@ -82,10 +89,8 @@ export default function FriendsScreen() {
 
     for (const f of all ?? []) {
       const isReq = f.requester_id === user.id;
-      const otherProfile = isReq
-        ? (Array.isArray(f.addressee) ? f.addressee[0] : f.addressee)
-        : (Array.isArray(f.requester) ? f.requester[0] : f.requester);
       const otherId = isReq ? f.addressee_id : f.requester_id;
+      const otherProfile = profMap[otherId];
 
       map.set(otherId, { id: f.id, status: f.status, role: isReq ? "requester" : "addressee" });
 
@@ -95,16 +100,16 @@ export default function FriendsScreen() {
           username: otherProfile?.username ?? "Unknown",
           avatar_url: otherProfile?.avatar_url ?? null,
           online_status: otherProfile?.online_status ?? "offline",
-          badge_role: (otherProfile as any)?.role ?? null,
+          badge_role: (otherProfile as any)?.badge_role ?? null,
           is_beta_tester: !!(otherProfile as any)?.is_beta_tester,
         });
       } else if (f.status === "pending" && !isReq) {
-        const req = Array.isArray(f.requester) ? f.requester[0] : f.requester;
+        const req = otherProfile;
         rList.push({
           friendshipId: f.id, id: f.requester_id,
           username: req?.username ?? "Unknown",
           avatar_url: req?.avatar_url ?? null,
-          badge_role: (req as any)?.role ?? null,
+          badge_role: (req as any)?.badge_role ?? null,
           is_beta_tester: !!(req as any)?.is_beta_tester,
         });
       }

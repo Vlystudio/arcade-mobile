@@ -245,7 +245,7 @@ export default function TeamDetailScreen() {
     const bannedUserIds = (bannedRes.data ?? []).map((b: any) => b.user_id as string);
     if (bannedUserIds.length > 0) {
       const { data: bannedProfiles } = await supabase
-        .from("profiles").select("id, username").in("id", bannedUserIds);
+        .from("public_profiles").select("id, username").in("id", bannedUserIds);
       const profileMap: Record<string, string> = {};
       for (const p of bannedProfiles ?? []) profileMap[(p as any).id] = (p as any).username ?? "Unknown";
       setBannedUsers((bannedRes.data ?? []).map((b: any) => ({

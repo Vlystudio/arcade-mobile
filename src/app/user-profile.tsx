@@ -67,11 +67,7 @@ export default function UserProfileScreen() {
     if (userId === user.id) { router.replace("/profile"); return; }
 
     const [profileRes, friendRes, blockRes, teamRes, friendsCntRes, trophiesRes] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, username, avatar_url, bio, is_private, role, featured_game_id, show_skeeball_stats, is_beta_tester")
-        .eq("id", userId)
-        .single(),
+      supabase.rpc("rpc_get_public_profile", { p_user_id: userId }),
       supabase
         .from("friendships")
         .select("id, status, requester_id")
@@ -96,18 +92,19 @@ export default function UserProfileScreen() {
     setFriendsCount(friendsCntRes.count ?? 0);
     setTrophiesCount(trophiesRes.count ?? 0);
 
-    if (!profileRes.data) { router.back(); return; }
+    if (!profileRes.data || (profileRes.data as any).error) { router.back(); return; }
 
-    const p = profileRes.data;
+    const p = profileRes.data as any;
     setProfile({
       id: p.id,
       username: p.username ?? "Unknown",
       avatar_url: p.avatar_url ?? null,
       bio: p.bio ?? null,
-      is_private: p.is_private ?? false,
-      role: (p.role ?? "user") as AppRole,
+      // can_see_stats already folds in privacy + friendship, server-side
+      is_private: !p.can_see_stats,
+      role: (p.badge_role ?? "user") as AppRole,
       featured_game_id: p.featured_game_id ?? null,
-      is_beta_tester: !!(p as any).is_beta_tester,
+      is_beta_tester: !!p.is_beta_tester,
     });
 
     const fr = friendRes.data;
@@ -120,7 +117,7 @@ export default function UserProfileScreen() {
       );
     }
 
-    const canSeeStats = !p.is_private || fr?.status === "accepted";
+    const canSeeStats = !!p.can_see_stats;
     if (canSeeStats) {
       const [scoresRes, placRes] = await Promise.all([
         supabase.from("scores")

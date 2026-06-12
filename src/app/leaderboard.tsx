@@ -110,7 +110,7 @@ export default function LeaderboardScreen() {
     let usernameMap: Record<string, string> = {};
     if (userIds.length > 0) {
       const { data: profilesData } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, username")
         .in("id", userIds);
       for (const p of profilesData ?? []) usernameMap[p.id] = p.username ?? "Unknown";
