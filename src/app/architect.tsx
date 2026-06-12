@@ -48,6 +48,7 @@ export default function ArchitectScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [apiStatus, setApiStatus] = useState<"checking" | "ok" | "error">("checking");
+  const [report, setReport] = useState<any | null>(null);
 
   async function loadStats() {
     if (!user) return;
@@ -215,7 +216,7 @@ export default function ArchitectScreen() {
     setRefreshing(false);
   }
 
-  useEffect(() => { if (user) loadStats(); }, [user]);
+  useEffect(() => { if (user) { loadStats(); supabase.rpc("rpc_architect_report").then(({ data }) => { if (data && !data.error) setReport(data); }); } }, [user]);
 
   if (authLoading || loading) {
     return <View style={s.loader}><ActivityIndicator size="large" color="#a855f7" /></View>;
@@ -454,6 +455,102 @@ export default function ArchitectScreen() {
         </View>
 
         <View style={{ height: 48 }} />
+        {report && (() => {
+          const integ = report.integrity ?? {};
+          const ai = report.ai_verification ?? {};
+          const api = report.api_health ?? {};
+          const integRows: [string, number][] = [
+            ["Auth users without profiles", integ.users_without_profiles],
+            ["Placeholder usernames", integ.placeholder_usernames],
+            ["Sessions stuck active >24h", integ.sessions_stuck_active],
+            ["Scores pending >7 days", integ.scores_pending_7d],
+            ["Storage cleanup backlog", integ.cleanup_queue_depth],
+          ];
+          return (
+            <>
+              <SectionLabel text="Data Integrity" />
+              <View style={s.listCard}>
+                {integRows.map(([label, n], i) => (
+                  <View key={label} style={[s.listRow, i < integRows.length - 1 && s.listDivider]}>
+                    <Ionicons name={Number(n) > 0 ? "warning-outline" : "checkmark-circle"} size={14} color={Number(n) > 0 ? "#ef4444" : "#22c55e"} />
+                    <Text style={s.listLabel}>{label}</Text>
+                    <Text style={[s.listValue, Number(n) > 0 && { color: "#ef4444" }]}>{n ?? 0}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <SectionLabel text="AI Score Verification" />
+              <View style={s.listCard}>
+                {([["Auto-denied", ai.auto_denied, "#ef4444"], ["Looks good", ai.looks_good, "#22c55e"],
+                   ["Needs review", ai.needs_review, "#f59e0b"], ["No reference photo", ai.no_reference, "#777"],
+                   ["Errors", ai.errors, "#ef4444"], ["AI/human disagreements", ai.disagreements, "#a855f7"]] as [string, number, string][])
+                  .map(([label, n, color], i, arr) => (
+                  <View key={label} style={[s.listRow, i < arr.length - 1 && s.listDivider]}>
+                    <Text style={s.listLabel}>{label}</Text>
+                    <Text style={[s.listValue, { color }]}>{n ?? 0}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <SectionLabel text="API & Quota Health" />
+              <View style={s.listCard}>
+                {([["Karaoke cache entries", api.karaoke_cache_entries], ["Quota saved (cache hits)", api.karaoke_cache_hits],
+                   ["Square webhook events (7d)", api.webhook_events_7d], ["Bad webhook signatures (7d)", api.webhook_bad_sig_7d],
+                   ["Rate-limit trips (24h)", api.rate_limit_trips_24h]] as [string, number][])
+                  .map(([label, n], i, arr) => (
+                  <View key={label} style={[s.listRow, i < arr.length - 1 && s.listDivider]}>
+                    <Text style={s.listLabel}>{label}</Text>
+                    <Text style={s.listValue}>{n ?? 0}</Text>
+                  </View>
+                ))}
+              </View>
+
+              <SectionLabel text="Security Events (7 days)" />
+              <View style={s.listCard}>
+                {(report.security?.by_type_7d ?? []).length === 0 ? (
+                  <View style={s.listRow}><Ionicons name="checkmark-circle" size={14} color="#22c55e" /><Text style={s.listLabel}>No security events this week</Text></View>
+                ) : (
+                  report.security.by_type_7d.map((t: any, i: number, arr: any[]) => (
+                    <View key={`${t.event_type}-${t.severity}`} style={[s.listRow, i < arr.length - 1 && s.listDivider]}>
+                      <Ionicons name={t.severity === "critical" ? "alert-circle" : "shield-outline"} size={14} color={t.severity === "critical" ? "#ef4444" : t.severity === "warn" ? "#f59e0b" : "#777"} />
+                      <Text style={s.listLabel}>{t.event_type}</Text>
+                      <Text style={s.listValue}>{t.n}</Text>
+                    </View>
+                  ))
+                )}
+              </View>
+
+              <SectionLabel text="Recent Admin Actions" />
+              <View style={s.listCard}>
+                {(report.audit_recent ?? []).map((a: any, i: number, arr: any[]) => (
+                  <View key={i} style={[s.listRow, i < arr.length - 1 && s.listDivider]}>
+                    <Text style={[s.listLabel, { flex: 1 }]} numberOfLines={1}>
+                      {a.admin_name ?? "system"} · {a.action}
+                    </Text>
+                    <Text style={[s.listValue, { color: "#777", fontSize: 11 }]}>
+                      {new Date(a.created_at).toLocaleDateString([], { month: "short", day: "numeric" })}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+
+              <SectionLabel text="Beta Reports" />
+              <View style={s.listCard}>
+                <View style={[s.listRow, s.listDivider]}>
+                  <Text style={s.listLabel}>Content reports pending</Text>
+                  <Text style={s.listValue}>{report.reports?.content_pending ?? 0}</Text>
+                </View>
+                {(report.reports?.beta_by_status ?? []).map((b: any, i: number, arr: any[]) => (
+                  <View key={b.status} style={[s.listRow, i < arr.length - 1 && s.listDivider]}>
+                    <Text style={s.listLabel}>Beta: {String(b.status).replace("_", " ")}</Text>
+                    <Text style={s.listValue}>{b.n}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          );
+        })()}
+
       </ScrollView>
     </SafeAreaView>
   );

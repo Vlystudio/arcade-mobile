@@ -16,6 +16,7 @@ import {
   Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "../context/auth-context";
 import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
@@ -67,6 +68,19 @@ export default function KaraokeScreen() {
 
   // Admin: remove/skip
   const [removingId, setRemovingId] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+
+  useEffect(() => {
+    AsyncStorage.getItem("karaoke_recent_searches").then((v) => {
+      if (v) try { setRecentSearches(JSON.parse(v)); } catch {}
+    });
+  }, []);
+
+  function rememberSearch(q: string) {
+    const next = [q, ...recentSearches.filter((r) => r.toLowerCase() !== q.toLowerCase())].slice(0, 5);
+    setRecentSearches(next);
+    AsyncStorage.setItem("karaoke_recent_searches", JSON.stringify(next)).catch(() => {});
+  }
 
   useEffect(() => {
     if (user) {
@@ -118,6 +132,7 @@ export default function KaraokeScreen() {
       const data = await resp.json();
       if (data.error) throw new Error(data.error);
       setSearchResults(data.items ?? []);
+      rememberSearch(searchQuery.trim());
     } catch (e: any) {
       const msg = e.message ?? "Search failed. Check your connection.";
       reportError("Karaoke.handleSearch", msg);
@@ -380,6 +395,17 @@ export default function KaraokeScreen() {
                     </Pressable>
                   </View>
 
+                  {recentSearches.length > 0 && searchResults.length === 0 && (
+                    <View style={s.recentRow}>
+                      {recentSearches.map((q) => (
+                        <Pressable key={q} style={s.recentChip} onPress={() => { setSearchQuery(q); }}>
+                          <Ionicons name="time-outline" size={11} color="#777" />
+                          <Text style={s.recentChipText} numberOfLines={1}>{q}</Text>
+                        </Pressable>
+                      ))}
+                    </View>
+                  )}
+
                   {!!searchError && <Text style={s.errorText}>{searchError}</Text>}
 
                   {searchResults.length > 0 && (
@@ -529,6 +555,14 @@ const s = StyleSheet.create({
   legalFooter: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingBottom: 20, flexWrap: "wrap" },
   legalFooterLink: { color: "#666", fontSize: 11.5, fontWeight: "600", textDecorationLine: "underline" },
   legalFooterDot: { color: "#333", fontSize: 11.5 },
+  recentRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  recentChip: {
+    flexDirection: "row", alignItems: "center", gap: 4, maxWidth: 160,
+    backgroundColor: "#0d0d0d", borderRadius: 999, borderWidth: 1, borderColor: "#222",
+    paddingHorizontal: 10, paddingVertical: 6,
+  },
+  recentChipText: { color: "#999", fontSize: 12 },
+
   ytResultsBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 8 },
   ytResultsBadgeText: { color: "#888", fontSize: 11.5, fontWeight: "700" },
 

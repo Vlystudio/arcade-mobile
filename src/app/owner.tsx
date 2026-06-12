@@ -45,6 +45,7 @@ const TYPE_COLORS: Record<string, string> = {
 export default function OwnerScreen() {
   const { user, loading: authLoading } = useRequireAuth();
   const [stats, setStats] = useState<OwnerStats | null>(null);
+  const [metrics, setMetrics] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -169,7 +170,12 @@ export default function OwnerScreen() {
     setRefreshing(false);
   }
 
-  useEffect(() => { if (user) loadStats(); }, [user]);
+  useEffect(() => { if (user) { loadStats(); loadMetrics(); } }, [user]);
+
+  async function loadMetrics() {
+    const { data } = await supabase.rpc("rpc_owner_metrics");
+    if (data && !data.error) setMetrics(data);
+  }
 
   if (authLoading || loading) {
     return <View style={s.loader}><ActivityIndicator size="large" color="#f59e0b" /></View>;
@@ -374,6 +380,131 @@ export default function OwnerScreen() {
           </View>
         </View>
 
+        {metrics && (() => {
+          const usd = (c: number) => `$${(c / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+          const ad = metrics.adoption ?? {};
+          const fn = metrics.funnel ?? {};
+          const dows = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+          const dowMax = Math.max(...(metrics.heat?.by_dow ?? []).map((d: any) => d.n), 1);
+          const topHours = [...(metrics.heat?.by_hour ?? [])].sort((a: any, b: any) => b.n - a.n).slice(0, 4);
+          const adoptionRows = [
+            ["Karaoke", ad.karaoke], ["Pick'em", ad.pickem], ["Fantasy", ad.fantasy],
+            ["Forums", ad.forums], ["Feed posts", ad.posts], ["DMs", ad.dms],
+          ] as [string, number][];
+          const funnelRows = [
+            ["Signed up", fn.signups], ["Added a photo", fn.with_avatar],
+            ["Joined a team", fn.on_team], ["Played a league game", fn.played_game],
+          ] as [string, number][];
+          return (
+            <>
+              <SectionLabel text="Revenue (Square, 8 weeks)" />
+              <View style={s.listCard}>
+                {(metrics.revenue?.weekly ?? []).length === 0 ? (
+                  <Text style={s.metricEmpty}>No completed Square payments yet.</Text>
+                ) : (
+                  metrics.revenue.weekly.map((w: any) => (
+                    <View key={w.week} style={s.metricRow}>
+                      <Text style={s.metricLabel}>{new Date(w.week).toLocaleDateString([], { month: "short", day: "numeric" })}</Text>
+                      <Text style={s.metricSub}>{w.payments} payments</Text>
+                      <Text style={[s.metricVal, { color: "#22c55e" }]}>{usd(Number(w.cents))}</Text>
+                    </View>
+                  ))
+                )}
+                <View style={s.metricRow}>
+                  <Text style={s.metricLabel}>Season registrations paid</Text>
+                  <Text style={s.metricVal}>{metrics.revenue?.registrations_paid ?? 0}</Text>
+                </View>
+              </View>
+
+              <SectionLabel text="Retention (weekly signup cohorts)" />
+              <View style={s.listCard}>
+                {(metrics.retention ?? []).length === 0 ? (
+                  <Text style={s.metricEmpty}>No signups in the last 8 weeks.</Text>
+                ) : (
+                  metrics.retention.map((r: any) => (
+                    <View key={r.week} style={s.metricRow}>
+                      <Text style={s.metricLabel}>{new Date(r.week).toLocaleDateString([], { month: "short", day: "numeric" })}</Text>
+                      <Text style={s.metricSub}>{r.signups} joined</Text>
+                      <Text style={[s.metricVal, { color: "#06b6d4" }]}>
+                        {r.signups > 0 ? Math.round((r.active_w1 / r.signups) * 100) : 0}% active wk 1
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </View>
+
+              <SectionLabel text="League Night Attendance" />
+              <View style={s.listCard}>
+                {(metrics.attendance ?? []).length === 0 ? (
+                  <Text style={s.metricEmpty}>No completed league games yet.</Text>
+                ) : (
+                  metrics.attendance.map((a: any) => (
+                    <View key={a.week_of} style={s.metricRow}>
+                      <Text style={s.metricLabel}>{new Date(a.week_of).toLocaleDateString([], { month: "short", day: "numeric" })}</Text>
+                      <Text style={s.metricSub}>{a.teams} teams · {a.games} games</Text>
+                      <Text style={[s.metricVal, { color: "#f59e0b" }]}>{a.players} players</Text>
+                    </View>
+                  ))
+                )}
+              </View>
+
+              <SectionLabel text={`Feature Adoption (30d · ${ad.actives ?? 0} active players)`} />
+              <View style={s.listCard}>
+                {adoptionRows.map(([label, n]) => {
+                  const pct = ad.actives > 0 ? Math.round(((n ?? 0) / ad.actives) * 100) : 0;
+                  return (
+                    <View key={label} style={s.metricRow}>
+                      <Text style={s.metricLabel}>{label}</Text>
+                      <View style={s.metricBarTrack}>
+                        <View style={[s.metricBarFill, { width: `${Math.min(pct, 100)}%` as any }]} />
+                      </View>
+                      <Text style={s.metricVal}>{pct}%</Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <SectionLabel text="Signup Funnel" />
+              <View style={s.listCard}>
+                {funnelRows.map(([label, n], i) => {
+                  const base = funnelRows[0][1] || 1;
+                  const pct = Math.round(((n ?? 0) / base) * 100);
+                  return (
+                    <View key={label} style={s.metricRow}>
+                      <Text style={s.metricLabel}>{i + 1}. {label}</Text>
+                      <View style={s.metricBarTrack}>
+                        <View style={[s.metricBarFill, { width: `${Math.min(pct, 100)}%` as any, backgroundColor: "#a855f7" }]} />
+                      </View>
+                      <Text style={s.metricVal}>{n ?? 0}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <SectionLabel text="When People Play (30d)" />
+              <View style={s.listCard}>
+                {dows.map((label, dow) => {
+                  const n = (metrics.heat?.by_dow ?? []).find((d: any) => d.dow === dow)?.n ?? 0;
+                  return (
+                    <View key={label} style={s.metricRow}>
+                      <Text style={s.metricLabel}>{label}</Text>
+                      <View style={s.metricBarTrack}>
+                        <View style={[s.metricBarFill, { width: `${Math.round((n / dowMax) * 100)}%` as any, backgroundColor: "#f59e0b" }]} />
+                      </View>
+                      <Text style={s.metricVal}>{n}</Text>
+                    </View>
+                  );
+                })}
+                {topHours.length > 0 && (
+                  <Text style={s.metricEmpty}>
+                    Peak hours: {topHours.map((h: any) => `${h.hour}:00`).join(", ")}
+                  </Text>
+                )}
+              </View>
+            </>
+          );
+        })()}
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
@@ -482,6 +613,14 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: "#1a1a1a",
   },
   emptyText: { color: "#777", fontSize: 14 },
+
+  metricRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 6 },
+  metricLabel: { width: 120, color: "#ccc", fontSize: 12.5, fontWeight: "700" },
+  metricSub: { flex: 1, color: "#777", fontSize: 11.5 },
+  metricVal: { color: "#fff", fontSize: 13, fontWeight: "900", minWidth: 44, textAlign: "right" },
+  metricBarTrack: { flex: 1, height: 7, borderRadius: 4, backgroundColor: "#1a1a1a", overflow: "hidden" },
+  metricBarFill: { height: 7, borderRadius: 4, backgroundColor: "#06b6d4" },
+  metricEmpty: { color: "#666", fontSize: 12, paddingVertical: 6 },
 
   impactCard: {
     flexDirection: "row", alignItems: "flex-start",
