@@ -377,7 +377,7 @@ const s = StyleSheet.create({
     backgroundColor: "#1a1a1a", borderRadius: 22, paddingHorizontal: 26, paddingVertical: 12,
     borderWidth: 1, borderColor: "#2a2a2a",
   },
-  ctaSecondaryText: { color: "#555", fontWeight: "700", fontSize: 15 },
+  ctaSecondaryText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 
   privateWall: {
     alignItems: "center", gap: 10, paddingVertical: 52,
@@ -385,10 +385,10 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: "#1a1a1a", marginTop: 8,
   },
   privateTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  privateSub: { color: "#555", fontSize: 13, textAlign: "center", paddingHorizontal: 24 },
+  privateSub: { color: "#8a8a8a", fontSize: 13, textAlign: "center", paddingHorizontal: 24 },
 
   sectionLabel: {
-    color: "#3a3a3a", fontSize: 10, fontWeight: "800",
+    color: "#6b6b6b", fontSize: 10, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1.4, marginBottom: 12,
   },
   statsRow: { flexDirection: "row", gap: 10 },
@@ -398,19 +398,19 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e", gap: 4,
   },
   statValue: { fontSize: 26, fontWeight: "900", letterSpacing: -0.5 },
-  statLabel: { color: "#444", fontSize: 11, fontWeight: "600", textAlign: "center" },
-  featuredLabel: { color: "#444", fontSize: 12, marginTop: 8, textAlign: "center" },
+  statLabel: { color: "#777", fontSize: 11, fontWeight: "600", textAlign: "center" },
+  featuredLabel: { color: "#777", fontSize: 12, marginTop: 8, textAlign: "center" },
 
   listCard: { backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden" },
   listRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
   listDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   medal: { fontSize: 22, minWidth: 28, textAlign: "center" },
   placementTitle: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  placementDate: { color: "#444", fontSize: 12, marginTop: 2 },
+  placementDate: { color: "#777", fontSize: 12, marginTop: 2 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: "#1a1a1a" },
   badge1: { backgroundColor: "rgba(245,158,11,0.12)", borderWidth: 1, borderColor: "rgba(245,158,11,0.3)" },
   badge2: { backgroundColor: "rgba(148,163,184,0.12)", borderWidth: 1, borderColor: "rgba(148,163,184,0.3)" },
   badge3: { backgroundColor: "rgba(205,124,62,0.12)", borderWidth: 1, borderColor: "rgba(205,124,62,0.3)" },
-  badgeText: { color: "#555", fontSize: 12, fontWeight: "800" },
+  badgeText: { color: "#8a8a8a", fontSize: 12, fontWeight: "800" },
   badgeTextTop: { color: "#fff" },
 });

@@ -324,7 +324,7 @@ export default function FFTournamentScreen() {
                       </View>
                       {c.top4s > 0 && (
                         <View style={st.champStatBadge}>
-                          <Text style={{ fontSize: 10, color: "#555" }}>Top 4</Text>
+                          <Text style={{ fontSize: 10, color: "#8a8a8a" }}>Top 4</Text>
                           <Text style={st.champStatNum}>{c.top4s}</Text>
                         </View>
                       )}
@@ -456,7 +456,7 @@ export default function FFTournamentScreen() {
                 {(() => {
                   const round = viewBracketData?.rounds?.find(r => r.round_number === viewBracketTab);
                   if (!round) return (
-                    <Text style={{ color: "#444", textAlign: "center", marginTop: 40, fontSize: 14 }}>Round not yet started</Text>
+                    <Text style={{ color: "#777", textAlign: "center", marginTop: 40, fontSize: 14 }}>Round not yet started</Text>
                   );
                   return (round.groups ?? []).map(g => (
                     <View key={g.id} style={st.bvGroupCard}>
@@ -518,7 +518,7 @@ const st = StyleSheet.create({
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#111", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#1e1e1e" },
   headerIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
   headerTitle: { color: "#fff", fontSize: 17, fontWeight: "900" },
-  headerSub: { color: "#444", fontSize: 12, marginTop: 1 },
+  headerSub: { color: "#777", fontSize: 12, marginTop: 1 },
 
   content: { paddingHorizontal: 18 },
 
@@ -537,7 +537,7 @@ const st = StyleSheet.create({
 
   signupRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" },
   playersChip: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#0d0d0d", borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: "#1a1a1a" },
-  playersText: { color: "#555", fontSize: 12, fontWeight: "600" },
+  playersText: { color: "#8a8a8a", fontSize: 12, fontWeight: "600" },
   signupStatusChip: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1 },
   signupStatusDot: { width: 6, height: 6, borderRadius: 3 },
   signupStatusText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
@@ -551,14 +551,14 @@ const st = StyleSheet.create({
 
   noActiveCard: { backgroundColor: "#0d0d0d", borderRadius: 20, padding: 32, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 20 },
   noActiveTitle: { color: "#fff", fontSize: 16, fontWeight: "800", marginBottom: 6 },
-  noActiveSub: { color: "#444", fontSize: 13, textAlign: "center" },
+  noActiveSub: { color: "#777", fontSize: 13, textAlign: "center" },
 
   // Section
   section: { marginBottom: 20 },
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 14 },
   sectionEmoji: { fontSize: 22 },
   sectionTitle: { color: "#fff", fontSize: 17, fontWeight: "900" },
-  sectionSub: { color: "#444", fontSize: 12, marginTop: 1 },
+  sectionSub: { color: "#777", fontSize: 12, marginTop: 1 },
 
   // Champion rows
   champRow: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#0d0d0d", borderRadius: 14, padding: 14, marginBottom: 6, borderWidth: 1, borderColor: "#1a1a1a" },
@@ -566,16 +566,16 @@ const st = StyleSheet.create({
   champRankCol: { width: 32, alignItems: "center" },
   champRankNum: { color: "#333", fontSize: 13, fontWeight: "800" },
   champName: { color: "#ccc", fontSize: 15, fontWeight: "800" },
-  champLastWin: { color: "#444", fontSize: 11, marginTop: 2 },
+  champLastWin: { color: "#777", fontSize: 11, marginTop: 2 },
   champStats: { flexDirection: "row", gap: 6, alignItems: "center" },
   champStatBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#111", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: "#1e1e1e" },
-  champStatNum: { color: "#555", fontSize: 12, fontWeight: "800" },
+  champStatNum: { color: "#8a8a8a", fontSize: 12, fontWeight: "800" },
 
   // History cards
   histCard: { backgroundColor: "#0d0d0d", borderRadius: 16, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 8, overflow: "hidden" },
   histCardTop: { flexDirection: "row", alignItems: "center", padding: 14, paddingBottom: 10 },
   histDate: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  histLabel: { color: "#444", fontSize: 11, marginTop: 2 },
+  histLabel: { color: "#777", fontSize: 11, marginTop: 2 },
   histBracketBtn: { flexDirection: "row", alignItems: "center", gap: 3, backgroundColor: "rgba(168,85,247,0.08)", borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(168,85,247,0.2)" },
   histBracketBtnText: { color: "#a855f7", fontSize: 12, fontWeight: "700" },
   histPodium: { paddingHorizontal: 14, paddingBottom: 14, gap: 4 },
@@ -586,7 +586,7 @@ const st = StyleSheet.create({
   // Empty state
   emptyCard: { backgroundColor: "#0d0d0d", borderRadius: 20, padding: 40, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 20 },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "900", marginBottom: 6 },
-  emptySub: { color: "#444", fontSize: 13, textAlign: "center", lineHeight: 20 },
+  emptySub: { color: "#777", fontSize: 13, textAlign: "center", lineHeight: 20 },
 
   // Bracket viewer
   bvHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 16 },
@@ -595,7 +595,7 @@ const st = StyleSheet.create({
   bvRoundTabs: { flexDirection: "row", paddingHorizontal: 16, gap: 6, paddingBottom: 4 },
   bvRoundTab: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: "#0f0f0f", borderWidth: 1, borderColor: "#1a1a1a" },
   bvRoundTabActive: { backgroundColor: "rgba(168,85,247,0.12)", borderColor: "rgba(168,85,247,0.3)" },
-  bvRoundTabText: { color: "#444", fontSize: 11, fontWeight: "700" },
+  bvRoundTabText: { color: "#777", fontSize: 11, fontWeight: "700" },
   bvRoundDot: { width: 6, height: 6, borderRadius: 3 },
   bvWinnersCard: { backgroundColor: "rgba(168,85,247,0.08)", borderRadius: 16, borderWidth: 1, borderColor: "rgba(168,85,247,0.2)", padding: 18, marginBottom: 20 },
   bvWinnersTitle: { color: "#fff", fontSize: 18, fontWeight: "900", textAlign: "center", marginBottom: 14 },

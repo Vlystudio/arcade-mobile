@@ -3,7 +3,8 @@ import { Image } from "expo-image";
 import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import Head from "expo-router/head";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -33,6 +34,7 @@ import { AppTour } from "../components/app-tour";
 import { useTour } from "../hooks/use-tour";
 import { getTourSteps } from "../../lib/tour-steps";
 import { PlayerLeagueCard } from "../components/skeeball-stats";
+import { showToast } from "../components/toast";
 import { fetchPlayerInsights, fetchPlayerStats, fetchSkeeSeasons, type PlayerInsights, type PlayerStats, type SkeeSeason } from "../lib/skeeball-stats";
 
 type GameOption = { id: string; name: string; type: string; count: number };
@@ -78,6 +80,35 @@ export default function ProfileScreen() {
   const [skeeSeason, setSkeeSeason] = useState<SkeeSeason | null>(null);
   const [showSkeeStats, setShowSkeeStats] = useState(true);
   const [savingSkeeToggle, setSavingSkeeToggle] = useState(false);
+  const [sharingStats, setSharingStats] = useState(false);
+  const statCardRef = useRef<View>(null);
+
+  /** Web: render the league card to a PNG and download it (html2canvas). */
+  async function shareStatsCard() {
+    if (Platform.OS !== "web" || sharingStats) return;
+    const node = statCardRef.current as unknown as HTMLElement | null;
+    if (!node) return;
+    setSharingStats(true);
+    try {
+      const html2canvas = require("html2canvas").default ?? require("html2canvas");
+      const canvas = await html2canvas(node, {
+        backgroundColor: "#0a0a0a",
+        scale: 2,
+        logging: false,
+        useCORS: true,
+      });
+      const a = document.createElement("a");
+      a.href = canvas.toDataURL("image/png");
+      a.download = `${username ?? "my"}-skeeball-stats.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch {
+      Alert.alert("Share failed", "Couldn't render the stat card. Please try again.");
+    } finally {
+      setSharingStats(false);
+    }
+  }
 
   // Tournament placements
   const [tournPlacements, setTournPlacements] = useState<TournPlacement[]>([]);
@@ -306,6 +337,7 @@ export default function ProfileScreen() {
     setUsername(name);
     setBio(newBio || null);
     setEditVisible(false);
+    showToast("Profile updated");
   }
 
   async function loadMfaStatus() {
@@ -414,6 +446,7 @@ export default function ProfileScreen() {
 
   return (
     <View style={styles.root}>
+      <Head><title>Profile · ArcadeTracker</title></Head>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         {/* ── Top bar: @username + actions (IG style) ── */}
         <View style={styles.topBar}>
@@ -558,10 +591,24 @@ export default function ProfileScreen() {
           {/* ── Skee-Ball League stats ── */}
           {showSkeeStats && leagueStats && leagueStats.totals.games > 0 && (
             <View style={{ marginBottom: 22 }}>
-              <Text style={styles.sectionLabel}>
-                {skeeSeason ? skeeSeason.name : "Skee-Ball League"}
-              </Text>
-              <PlayerLeagueCard stats={leagueStats} season={skeeSeason} insights={leagueInsights} />
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <Text style={styles.sectionLabel}>
+                  {skeeSeason ? skeeSeason.name : "Skee-Ball League"}
+                </Text>
+                {Platform.OS === "web" && (
+                  <Pressable style={styles.shareStatsBtn} onPress={shareStatsCard} disabled={sharingStats}>
+                    {sharingStats
+                      ? <ActivityIndicator size="small" color="#06b6d4" />
+                      : <>
+                          <Ionicons name="download-outline" size={12} color="#06b6d4" />
+                          <Text style={styles.shareStatsBtnText}>Share stats</Text>
+                        </>}
+                  </Pressable>
+                )}
+              </View>
+              <View ref={statCardRef as any} collapsable={false}>
+                <PlayerLeagueCard stats={leagueStats} season={skeeSeason} insights={leagueInsights} />
+              </View>
             </View>
           )}
 
@@ -795,7 +842,7 @@ export default function ProfileScreen() {
                   autoCorrect={false}
                   maxLength={20}
                   placeholder="username"
-                  placeholderTextColor="#333"
+                  placeholderTextColor="#555"
                 />
               </View>
 
@@ -809,7 +856,7 @@ export default function ProfileScreen() {
                   multiline
                   maxLength={BIO_LIMIT}
                   placeholder="Write something about yourself…"
-                  placeholderTextColor="#333"
+                  placeholderTextColor="#555"
                 />
                 <Text style={styles.editBioCount}>{draftBio.length}/{BIO_LIMIT}</Text>
               </View>
@@ -875,7 +922,7 @@ export default function ProfileScreen() {
               <TextInput
                 style={styles.searchTextInput}
                 placeholder="Search by username…"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 autoFocus
                 autoCapitalize="none"
                 value={searchQuery}
@@ -1057,7 +1104,7 @@ const styles = StyleSheet.create({
   teamRow: { flexDirection: "row", alignItems: "center", gap: 4 },
   teamText: { color: "#06b6d4", fontSize: 13, fontWeight: "700" },
   bioText: { color: "#ccc", fontSize: 13.5, lineHeight: 19, marginTop: 1 },
-  emailText: { color: "#3a3a3a", fontSize: 12, marginTop: 1 },
+  emailText: { color: "#6b6b6b", fontSize: 12, marginTop: 1 },
 
   // ── Action buttons ──
   btnRow: { flexDirection: "row", gap: 7, marginTop: 14, marginBottom: 20 },
@@ -1074,7 +1121,7 @@ const styles = StyleSheet.create({
   },
 
   sectionLabel: {
-    color: "#3a3a3a", fontSize: 10, fontWeight: "800",
+    color: "#6b6b6b", fontSize: 10, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1.4, marginBottom: 12,
   },
 
@@ -1095,14 +1142,14 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e", gap: 4,
   },
   statBoxValue: { fontSize: 26, fontWeight: "900", letterSpacing: -0.5 },
-  statBoxLabel: { color: "#444", fontSize: 11, fontWeight: "600" },
+  statBoxLabel: { color: "#777", fontSize: 11, fontWeight: "600" },
 
   noGameCard: {
     backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e",
     padding: 24, alignItems: "center", gap: 8, marginBottom: 22,
   },
   noGameText: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  noGameSub: { color: "#444", fontSize: 12, textAlign: "center" },
+  noGameSub: { color: "#777", fontSize: 12, textAlign: "center" },
 
   pendingBanner: {
     flexDirection: "row", alignItems: "center", gap: 10,
@@ -1121,12 +1168,12 @@ const styles = StyleSheet.create({
   placementDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   placementMedal:   { fontSize: 22, minWidth: 28, textAlign: "center" },
   placementTitle:   { color: "#fff", fontSize: 14, fontWeight: "800" },
-  placementDate:    { color: "#444", fontSize: 12, marginTop: 2 },
+  placementDate:    { color: "#777", fontSize: 12, marginTop: 2 },
   placementBadge:   { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: "#1a1a1a" },
   placementBadge1st:{ backgroundColor: "rgba(245,158,11,0.12)", borderWidth: 1, borderColor: "rgba(245,158,11,0.3)" },
   placementBadge2nd:{ backgroundColor: "rgba(148,163,184,0.12)", borderWidth: 1, borderColor: "rgba(148,163,184,0.3)" },
   placementBadge3rd:{ backgroundColor: "rgba(205,124,62,0.12)", borderWidth: 1, borderColor: "rgba(205,124,62,0.3)" },
-  placementBadgeText:    { color: "#555", fontSize: 12, fontWeight: "800" },
+  placementBadgeText:    { color: "#8a8a8a", fontSize: 12, fontWeight: "800" },
   placementBadgeTextTop: { color: "#fff" },
 
   // ── Shared bottom sheets ──
@@ -1136,6 +1183,7 @@ const styles = StyleSheet.create({
 
   // ── Settings sheet ──
   settingsSheet: {
+    width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#0d0d0d", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 18, paddingTop: 14, paddingBottom: 12,
     borderTopWidth: 1, borderColor: "#1e1e1e",
@@ -1143,7 +1191,7 @@ const styles = StyleSheet.create({
   },
   settingsTitle: { color: "#fff", fontSize: 17, fontWeight: "900", textAlign: "center", marginBottom: 16 },
   settingsGroupLabel: {
-    color: "#3a3a3a", fontSize: 10, fontWeight: "800",
+    color: "#6b6b6b", fontSize: 10, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1.4,
     marginBottom: 8, marginTop: 14, paddingHorizontal: 4,
   },
@@ -1157,7 +1205,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   settingsRowLabel: { color: "#fff", fontSize: 14.5, fontWeight: "600" },
-  settingsRowSub: { color: "#555", fontSize: 11.5, marginTop: 1 },
+  settingsRowSub: { color: "#8a8a8a", fontSize: 11.5, marginTop: 1 },
   settingsDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#1e1e1e", marginLeft: 58 },
   settingsBadge: {
     minWidth: 21, height: 21, borderRadius: 11, paddingHorizontal: 6,
@@ -1197,17 +1245,18 @@ const styles = StyleSheet.create({
   },
   editBioInput: { minHeight: 88, maxHeight: 130, textAlignVertical: "top", paddingTop: 13 },
   editBioCount: { color: "#333", fontSize: 11, textAlign: "right", marginTop: 5 },
-  editHint: { color: "#3a3a3a", fontSize: 12, textAlign: "center", lineHeight: 17, paddingHorizontal: 12 },
+  editHint: { color: "#6b6b6b", fontSize: 12, textAlign: "center", lineHeight: 17, paddingHorizontal: 12 },
 
   // ── Picker sheets (game / search / avatar) ──
   pickerSheet: {
+    width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
     borderTopWidth: 1, borderColor: "#1e1e1e", gap: 10,
     maxHeight: "75%",
   },
   pickerTitle: { color: "#fff", fontSize: 16, fontWeight: "900", textAlign: "center" },
-  pickerSub: { color: "#444", fontSize: 12, textAlign: "center", marginBottom: 4 },
+  pickerSub: { color: "#777", fontSize: 12, textAlign: "center", marginBottom: 4 },
   pickerOptionCamera: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: "#06b6d4", borderRadius: 16, padding: 16,
@@ -1220,7 +1269,7 @@ const styles = StyleSheet.create({
   },
   pickerOptionLibraryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   pickerCancel: { backgroundColor: "#0d0d0d", borderRadius: 16, padding: 16, alignItems: "center", marginTop: 4 },
-  pickerCancelText: { color: "#555", fontWeight: "700", fontSize: 15 },
+  pickerCancelText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 
   gameList: { maxHeight: 320 },
   gameOption: {
@@ -1232,11 +1281,11 @@ const styles = StyleSheet.create({
   gameOptionLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
   gameTypeDot: { width: 10, height: 10, borderRadius: 5 },
   gameOptionName: { color: "#fff", fontWeight: "800", fontSize: 14 },
-  gameOptionCount: { color: "#444", fontSize: 11, marginTop: 2 },
+  gameOptionCount: { color: "#777", fontSize: 11, marginTop: 2 },
 
   noGamesWrap: { alignItems: "center", gap: 8, paddingVertical: 24 },
   noGamesText: { color: "#fff", fontWeight: "800", fontSize: 15 },
-  noGamesSub: { color: "#444", fontSize: 12, textAlign: "center" },
+  noGamesSub: { color: "#777", fontSize: 12, textAlign: "center" },
 
   searchInputWrap: {
     flexDirection: "row", alignItems: "center", gap: 10,
@@ -1252,5 +1301,13 @@ const styles = StyleSheet.create({
   },
   searchResultName: { color: "#fff", fontSize: 15, fontWeight: "700" },
   searchNoResults: { alignItems: "center", gap: 8, paddingVertical: 32 },
-  searchNoResultsText: { color: "#444", fontSize: 14 },
+
+  shareStatsBtn: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(6,182,212,0.07)", borderRadius: 8,
+    paddingHorizontal: 9, paddingVertical: 5, marginBottom: 12,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.2)",
+  },
+  shareStatsBtnText: { color: "#06b6d4", fontSize: 11, fontWeight: "800" },
+  searchNoResultsText: { color: "#777", fontSize: 14 },
 });

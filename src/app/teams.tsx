@@ -1,6 +1,7 @@
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useFocusEffect } from "expo-router";
+import Head from "expo-router/head";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,6 +18,8 @@ import {
 import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
+import { ListSkeleton } from "../components/skeleton";
+import { showToast } from "../components/toast";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
@@ -263,6 +266,7 @@ export default function TeamsScreen() {
     } else {
       setRequestJoinTeam(null);
       setRequestMessage("");
+      showToast("Request sent");
       await loadTeams();
     }
   }
@@ -484,7 +488,7 @@ export default function TeamsScreen() {
   useFocusEffect(useCallback(() => { if (user) loadTeams(); }, [user]));
 
   if (authLoading || loading || activeSeason === undefined) {
-    return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
+    return <ListSkeleton rows={5} />;
   }
 
   // Everyone can browse teams and request to join. Only a paid team
@@ -508,6 +512,7 @@ export default function TeamsScreen() {
 
   return (
     <View style={styles.root}>
+      <Head><title>Teams · ArcadeTracker</title></Head>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <ScrollView
           showsVerticalScrollIndicator={false}
@@ -583,7 +588,7 @@ export default function TeamsScreen() {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search teams by name…"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 autoCapitalize="none"
                 value={searchText}
                 onChangeText={setSearchText}
@@ -749,7 +754,7 @@ export default function TeamsScreen() {
             <TextInput
               style={styles.modalInput}
               placeholder="Team name"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={newTeamName}
               onChangeText={setNewTeamName}
               autoFocus
@@ -820,7 +825,7 @@ export default function TeamsScreen() {
             <TextInput
               style={[styles.modalInput, styles.messageInput]}
               placeholder="Tell the captain about yourself…"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={requestMessage}
               onChangeText={setRequestMessage}
               multiline
@@ -952,7 +957,7 @@ export default function TeamsScreen() {
             <TextInput
               style={styles.modalInput}
               placeholder="New team name"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={renameText}
               onChangeText={setRenameText}
               autoFocus
@@ -1004,7 +1009,7 @@ export default function TeamsScreen() {
                   <TextInput
                     style={styles.searchInput}
                     placeholder="Search by username…"
-                    placeholderTextColor="#333"
+                    placeholderTextColor="#555"
                     autoFocus
                     autoCapitalize="none"
                     value={inviteSearch}
@@ -1017,7 +1022,7 @@ export default function TeamsScreen() {
                 <TextInput
                   style={[styles.modalInput, styles.messageInput]}
                   placeholder="Why you should join us…"
-                  placeholderTextColor="#333"
+                  placeholderTextColor="#555"
                   value={inviteMessage}
                   onChangeText={setInviteMessage}
                   multiline
@@ -1130,7 +1135,7 @@ const styles = StyleSheet.create({
 
   pageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 },
   pageTitle: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5, marginBottom: 2 },
-  pageSub: { color: "#555", fontSize: 14 },
+  pageSub: { color: "#8a8a8a", fontSize: 14 },
   headerBtns: { flexDirection: "row", gap: 8 },
   leaguesBtn: {
     flexDirection: "row", alignItems: "center", gap: 5,
@@ -1154,12 +1159,12 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: "#fff", fontSize: 15 },
 
-  sectionLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
+  sectionLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
 
   emptyCard: { backgroundColor: "#0d0d0d", borderRadius: 20, padding: 40, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a" },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800", marginBottom: 6 },
-  emptySub: { color: "#555", fontSize: 14 },
-  allJoined: { color: "#444", fontSize: 14, textAlign: "center", paddingVertical: 20 },
+  emptySub: { color: "#8a8a8a", fontSize: 14 },
+  allJoined: { color: "#777", fontSize: 14, textAlign: "center", paddingVertical: 20 },
 
   teamCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 10, borderWidth: 1, borderColor: "#1e1e1e" },
   teamCardMine: { borderColor: "rgba(6,182,212,0.25)" },
@@ -1169,7 +1174,7 @@ const styles = StyleSheet.create({
   teamInfo: { flex: 1 },
   teamNameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2 },
   teamName: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  teamMeta: { color: "#555", fontSize: 13 },
+  teamMeta: { color: "#8a8a8a", fontSize: 13 },
   captainTag: { backgroundColor: "rgba(245,158,11,0.12)", borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
   captainTagText: { color: "#f59e0b", fontSize: 10, fontWeight: "800" },
 
@@ -1191,18 +1196,19 @@ const styles = StyleSheet.create({
   requestBtn: { backgroundColor: "#1a1a1a", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: "#2a2a2a" },
   requestBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
   pendingBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#2a2a2a" },
-  pendingBtnText: { color: "#555", fontWeight: "700", fontSize: 13 },
+  pendingBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 13 },
 
   inviteActions: { gap: 6 },
   acceptBtn: { backgroundColor: "#06b6d4", borderRadius: 9, paddingHorizontal: 14, paddingVertical: 7 },
   acceptBtnText: { color: "#000", fontWeight: "900", fontSize: 13 },
   declineBtn: { borderRadius: 9, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: "#2a2a2a" },
-  declineBtnText: { color: "#555", fontWeight: "700", fontSize: 13 },
+  declineBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 13 },
 
   // Modals
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   modalDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   modalSheet: {
+    width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: Platform.OS === "ios" ? 36 : 24,
     borderTopWidth: 1, borderColor: "#1e1e1e",
@@ -1210,11 +1216,11 @@ const styles = StyleSheet.create({
   confirmSheet: { borderRadius: 28, marginHorizontal: 20, marginBottom: 40 },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
-  modalSub: { color: "#555", fontSize: 14, marginBottom: 18 },
+  modalSub: { color: "#8a8a8a", fontSize: 14, marginBottom: 18 },
   modalInput: { backgroundColor: "#0a0a0a", color: "#fff", padding: 15, borderRadius: 14, fontSize: 16, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 6 },
   messageInput: { height: 88, textAlignVertical: "top", paddingTop: 12 },
   charCount: { color: "#333", fontSize: 11, textAlign: "right", marginBottom: 14 },
-  fieldLabel: { color: "#444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 },
+  fieldLabel: { color: "#777", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 },
   modalBtns: { flexDirection: "row", gap: 10, marginTop: 4 },
   modalCancel: { flex: 1, backgroundColor: "#1a1a1a", borderRadius: 14, padding: 15, alignItems: "center" },
   modalCancelText: { color: "#888", fontWeight: "700" },
@@ -1234,7 +1240,7 @@ const styles = StyleSheet.create({
   resultUsername: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
   sendBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#06b6d4", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
   sendBtnText: { color: "#000", fontWeight: "800", fontSize: 13 },
-  noResults: { color: "#444", textAlign: "center", paddingVertical: 20, fontSize: 14 },
+  noResults: { color: "#777", textAlign: "center", paddingVertical: 20, fontSize: 14 },
   noRequestsWrap: { alignItems: "center", paddingVertical: 32, gap: 8 },
 
   inviteSentBox: { alignItems: "center", paddingVertical: 24, gap: 10 },
@@ -1243,7 +1249,7 @@ const styles = StyleSheet.create({
   inviteAnotherText: { color: "#06b6d4", fontWeight: "700", fontSize: 14 },
 
   requestRow: { flexDirection: "row", alignItems: "flex-start", gap: 14, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
-  requestDirection: { color: "#555", fontSize: 12, marginTop: 2 },
+  requestDirection: { color: "#8a8a8a", fontSize: 12, marginTop: 2 },
   messageBubble: { backgroundColor: "#0d0d0d", borderRadius: 10, padding: 10, marginTop: 8, borderWidth: 1, borderColor: "#1e1e1e" },
   messageBubbleText: { color: "#888", fontSize: 13, lineHeight: 18 },
   requestBtnRow: { flexDirection: "row", gap: 8, alignSelf: "center" },
@@ -1253,12 +1259,12 @@ const styles = StyleSheet.create({
   transferRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   transferRowSelected: { backgroundColor: "rgba(6,182,212,0.06)", borderRadius: 12, paddingHorizontal: 8, marginHorizontal: -8 },
 
-  slotLabel: { color: "#555", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
+  slotLabel: { color: "#8a8a8a", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
   slotRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
   slotChip: { flex: 1, paddingVertical: 9, borderRadius: 12, backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#2a2a2a", alignItems: "center" },
   slotChipActive: { backgroundColor: "rgba(6,182,212,0.14)", borderColor: "#06b6d4" },
   slotChipActive2: { backgroundColor: "rgba(245,158,11,0.12)", borderColor: "#f59e0b" },
-  slotChipText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  slotChipText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
   slotChipTextActive: { color: "#06b6d4", fontWeight: "800" },
   slotChipTextActive2: { color: "#f59e0b", fontWeight: "800" },
 

@@ -392,7 +392,7 @@ export default function ArchitectScreen() {
             { role: "architect", color: "#a855f7" },
             { role: "owner",     color: "#f59e0b" },
             { role: "admin",     color: "#3b82f6" },
-            { role: "user",      color: "#444" },
+            { role: "user",      color: "#777" },
           ].map(({ role, color }, i) => (
             <View key={role} style={[s.listRow, i < 3 && s.listDivider]}>
               <Ionicons name="checkmark-circle" size={14} color={color} />
@@ -523,7 +523,7 @@ const s = StyleSheet.create({
   },
   backBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  headerSub: { color: "#555", fontSize: 12 },
+  headerSub: { color: "#8a8a8a", fontSize: 12 },
   archBadge: {
     marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "rgba(168,85,247,0.12)", borderRadius: 10,
@@ -533,7 +533,7 @@ const s = StyleSheet.create({
   archBadgeText: { color: "#a855f7", fontSize: 11, fontWeight: "800" },
 
   sectionLabel: {
-    color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase",
+    color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase",
     letterSpacing: 1.2, marginTop: 24, marginBottom: 10,
   },
   peakNote: { color: "#f59e0b", fontSize: 12, fontWeight: "600", marginTop: 8, textAlign: "center" },
@@ -545,7 +545,7 @@ const s = StyleSheet.create({
   },
   statIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   statValue: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5, marginBottom: 2 },
-  statLabel: { color: "#555", fontSize: 12, fontWeight: "600" },
+  statLabel: { color: "#8a8a8a", fontSize: 12, fontWeight: "600" },
 
   chartCard: {
     flexDirection: "row", alignItems: "flex-end", justifyContent: "space-around",
@@ -553,10 +553,10 @@ const s = StyleSheet.create({
     padding: 16, height: 130,
   },
   barCol: { flex: 1, alignItems: "center", height: "100%", justifyContent: "flex-end" },
-  barColValue: { color: "#555", fontSize: 10, fontWeight: "700", marginBottom: 4 },
+  barColValue: { color: "#8a8a8a", fontSize: 10, fontWeight: "700", marginBottom: 4 },
   barColTrack: { width: "60%", flex: 1, backgroundColor: "#1a1a1a", borderRadius: 3, overflow: "hidden", justifyContent: "flex-end" },
   barColFill: { width: "100%", borderRadius: 3 },
-  barColLabel: { color: "#444", fontSize: 10, fontWeight: "700", marginTop: 6 },
+  barColLabel: { color: "#777", fontSize: 10, fontWeight: "700", marginTop: 6 },
 
   listCard: {
     backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e",
@@ -565,6 +565,6 @@ const s = StyleSheet.create({
   listRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13, gap: 10 },
   listDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   listLabel: { flex: 1, color: "#fff", fontSize: 13, fontWeight: "700" },
-  listValue: { color: "#555", fontSize: 12, fontWeight: "700" },
+  listValue: { color: "#8a8a8a", fontSize: 12, fontWeight: "700" },
   dot: { width: 8, height: 8, borderRadius: 4 },
 });

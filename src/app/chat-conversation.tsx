@@ -372,7 +372,7 @@ export default function ChatConversationScreen() {
           <TextInput
             style={styles.input}
             placeholder="Message…"
-            placeholderTextColor="#333"
+            placeholderTextColor="#555"
             value={text}
             onChangeText={setText}
             multiline
@@ -452,8 +452,8 @@ const styles = StyleSheet.create({
 
   messageList: { paddingHorizontal: 16, paddingVertical: 12, gap: 2 },
   emptyChat: { paddingTop: 80, alignItems: "center" },
-  emptyChatText: { color: "#444", fontSize: 14 },
-  timestamp: { color: "#444", fontSize: 11, textAlign: "center", marginVertical: 12 },
+  emptyChatText: { color: "#777", fontSize: 14 },
+  timestamp: { color: "#777", fontSize: 11, textAlign: "center", marginVertical: 12 },
 
   bubbleWrap: { flexDirection: "row", marginBottom: 3 },
   bubbleWrapMe: { justifyContent: "flex-end" },
@@ -506,7 +506,7 @@ const styles = StyleSheet.create({
   },
   pickerOptLibraryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   pickerCancel: { backgroundColor: "#0d0d0d", borderRadius: 16, padding: 16, alignItems: "center" },
-  pickerCancelText: { color: "#555", fontWeight: "700", fontSize: 15 },
+  pickerCancelText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 
   viewer: {
     flex: 1, backgroundColor: "rgba(0,0,0,0.95)",

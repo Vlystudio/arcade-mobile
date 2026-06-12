@@ -205,7 +205,7 @@ const s = StyleSheet.create({
     letterSpacing: -0.5, marginBottom: 10, textAlign: "center",
   },
   sub: {
-    color: "#555", fontSize: 15, textAlign: "center",
+    color: "#8a8a8a", fontSize: 15, textAlign: "center",
     lineHeight: 22, marginBottom: 24,
   },
   countRow: {
@@ -214,7 +214,7 @@ const s = StyleSheet.create({
     paddingHorizontal: 16, paddingVertical: 10,
     borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24,
   },
-  countText: { color: "#555", fontSize: 13, fontWeight: "600" },
+  countText: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
   primaryBtn: {
     backgroundColor: "#06b6d4", borderRadius: 16,
     paddingVertical: 16, paddingHorizontal: 40,
@@ -225,5 +225,5 @@ const s = StyleSheet.create({
     borderRadius: 16, paddingVertical: 14, paddingHorizontal: 40,
     alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", width: "100%",
   },
-  secondaryBtnText: { color: "#555", fontWeight: "700", fontSize: 15 },
+  secondaryBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 });

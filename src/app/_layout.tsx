@@ -1,7 +1,8 @@
 import * as Sentry from "@sentry/react-native";
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
-import { Stack } from "expo-router";
+import { Stack, usePathname } from "expo-router";
 import React from "react";
+import { Platform, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 Sentry.init({
@@ -19,8 +20,38 @@ import { LocationProvider } from "../context/location-context";
 import { EnvBanner } from "../components/env-banner";
 import { ScreenshotButton } from "../components/screenshot-button";
 import { configureNotificationHandler, registerForPush } from "../lib/push";
+import { ToastHost } from "../components/toast";
 
 configureNotificationHandler();
+
+// Web: full-bleed routes (TV/dashboard use-cases) and wide dashboard routes.
+// Everything else renders in a centered phone-style column like IG/X web.
+const WEB_FULL_ROUTES = new Set(["/skeeball-live", "/karaoke-display", "/demo"]);
+const WEB_WIDE_ROUTES = new Set(["/admin", "/owner", "/architect"]);
+
+/** Centers the whole app in a column on desktop web; no-op on native. */
+function AppColumn({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  if (Platform.OS !== "web") return <>{children}</>;
+  if (WEB_FULL_ROUTES.has(pathname)) return <>{children}</>;
+  const maxWidth = WEB_WIDE_ROUTES.has(pathname) ? 1140 : 680;
+  return (
+    <View style={{ flex: 1, backgroundColor: "#000", alignItems: "center" }}>
+      <View
+        style={{
+          flex: 1,
+          width: "100%",
+          maxWidth,
+          borderLeftWidth: 1,
+          borderRightWidth: 1,
+          borderColor: "#161616",
+        }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
 
 /** Registers the device for push once a user is signed in. Renders nothing. */
 function PushRegistrar() {
@@ -39,6 +70,7 @@ export default function RootLayout() {
       <LocationProvider>
       <CartProvider>
       <ThemeProvider value={DarkTheme}>
+        <AppColumn>
         <EnvBanner />
         <PushRegistrar />
         <ScreenshotButton />
@@ -104,6 +136,8 @@ export default function RootLayout() {
           <Stack.Screen name="skeeball-compare" options={{ headerShown: false }} />
           <Stack.Screen name="skeeball-live" options={{ headerShown: false }} />
         </Stack>
+        <ToastHost />
+        </AppColumn>
       </ThemeProvider>
       </CartProvider>
       </LocationProvider>

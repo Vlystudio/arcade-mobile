@@ -157,7 +157,8 @@ export default function SignupScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Username"
-                placeholderTextColor="#333"
+                textContentType="username"
+                placeholderTextColor="#555"
                 autoCapitalize="none"
                 autoComplete="username-new"
                 returnKeyType="next"
@@ -171,7 +172,8 @@ export default function SignupScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Email address"
-                placeholderTextColor="#333"
+                textContentType="emailAddress"
+                placeholderTextColor="#555"
                 autoCapitalize="none"
                 keyboardType="email-address"
                 autoComplete="email"
@@ -186,7 +188,8 @@ export default function SignupScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Password (min. 6 characters)"
-                placeholderTextColor="#333"
+                textContentType="newPassword"
+                placeholderTextColor="#555"
                 secureTextEntry={!showPassword}
                 autoComplete="new-password"
                 returnKeyType="next"
@@ -203,7 +206,8 @@ export default function SignupScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Confirm password"
-                placeholderTextColor="#333"
+                textContentType="newPassword"
+                placeholderTextColor="#555"
                 secureTextEntry={!showConfirmPassword}
                 autoComplete="new-password"
                 returnKeyType="done"
@@ -314,11 +318,11 @@ const styles = StyleSheet.create({
   },
   logoMarkText: { color: "#000", fontSize: 22, fontWeight: "900", letterSpacing: -1 },
   appName:  { color: "#fff", fontSize: 26, fontWeight: "900", letterSpacing: -0.5, marginBottom: 6 },
-  tagline:  { color: "#444", fontSize: 14 },
+  tagline:  { color: "#777", fontSize: 14 },
 
   form: { backgroundColor: "#111", borderRadius: 24, padding: 24, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24 },
   formTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
-  formSub:   { color: "#555", fontSize: 14, marginBottom: 20 },
+  formSub:   { color: "#8a8a8a", fontSize: 14, marginBottom: 20 },
 
   inputWrap: {
     flexDirection: "row", alignItems: "center",
@@ -362,7 +366,7 @@ const styles = StyleSheet.create({
   submitBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
 
   footer: { flexDirection: "row", justifyContent: "center", alignItems: "center" },
-  footerText: { color: "#555", fontSize: 14 },
+  footerText: { color: "#8a8a8a", fontSize: 14 },
   footerLink: { color: "#06b6d4", fontSize: 14, fontWeight: "800" },
 
   // Modal / bottom sheet
@@ -383,7 +387,7 @@ const styles = StyleSheet.create({
   },
 
   sheetTitle: { color: "#fff", fontSize: 20, fontWeight: "900", textAlign: "center", marginBottom: 8 },
-  sheetSub:   { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20, marginBottom: 24 },
+  sheetSub:   { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20, marginBottom: 24 },
   sheetSubBold: { color: "#888", fontWeight: "800" },
 
   suggestionList: { gap: 10, marginBottom: 20 },
@@ -394,12 +398,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e",
   },
   suggestionChipPressed: { borderColor: "#06b6d4", backgroundColor: "rgba(6,182,212,0.05)" },
-  suggestionAt:   { color: "#444", fontSize: 16, fontWeight: "700" },
+  suggestionAt:   { color: "#777", fontSize: 16, fontWeight: "700" },
   suggestionName: { flex: 1, color: "#fff", fontSize: 16, fontWeight: "800" },
 
   sheetInputRow: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 6, paddingVertical: 10,
   },
-  sheetInputText: { color: "#555", fontSize: 13 },
+  sheetInputText: { color: "#8a8a8a", fontSize: 13 },
 });

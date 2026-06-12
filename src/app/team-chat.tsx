@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   headerTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
-  headerSub: { color: "#444", fontSize: 12 },
+  headerSub: { color: "#777", fontSize: 12 },
 
   loadingWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
 
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
   bubbleName: { color: "#06b6d4", fontSize: 11, fontWeight: "800", marginBottom: 3 },
   bubbleText: { color: "#e0e0e0", fontSize: 14, lineHeight: 20 },
   bubbleTextMe: { color: "#000" },
-  bubbleTime: { color: "#444", fontSize: 10, marginTop: 4, textAlign: "right" },
+  bubbleTime: { color: "#777", fontSize: 10, marginTop: 4, textAlign: "right" },
   bubbleTimeMe: { color: "rgba(0,0,0,0.45)" },
 
   inputRow: {

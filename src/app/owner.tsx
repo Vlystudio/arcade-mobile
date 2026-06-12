@@ -420,7 +420,7 @@ const s = StyleSheet.create({
   },
   backBtn: { width: 38, height: 38, alignItems: "center", justifyContent: "center" },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  headerSub: { color: "#555", fontSize: 12 },
+  headerSub: { color: "#8a8a8a", fontSize: 12 },
   ownerBadge: {
     marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "rgba(245,158,11,0.12)", borderRadius: 10,
@@ -430,7 +430,7 @@ const s = StyleSheet.create({
   ownerBadgeText: { color: "#f59e0b", fontSize: 11, fontWeight: "800" },
 
   sectionLabel: {
-    color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase",
+    color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase",
     letterSpacing: 1.2, marginTop: 24, marginBottom: 10,
   },
 
@@ -448,10 +448,10 @@ const s = StyleSheet.create({
     padding: 16, height: 110,
   },
   barCol: { flex: 1, alignItems: "center", height: "100%", justifyContent: "flex-end" },
-  barColValue: { color: "#555", fontSize: 11, fontWeight: "700", marginBottom: 4 },
+  barColValue: { color: "#8a8a8a", fontSize: 11, fontWeight: "700", marginBottom: 4 },
   barColTrack: { width: "60%", flex: 1, backgroundColor: "#1a1a1a", borderRadius: 3, overflow: "hidden", justifyContent: "flex-end" },
   barColFill:  { width: "100%", borderRadius: 3 },
-  barColLabel: { color: "#444", fontSize: 11, fontWeight: "700", marginTop: 6 },
+  barColLabel: { color: "#777", fontSize: 11, fontWeight: "700", marginTop: 6 },
 
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   statCard: {
@@ -460,7 +460,7 @@ const s = StyleSheet.create({
   },
   statIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   statValue: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5, marginBottom: 2 },
-  statLabel: { color: "#555", fontSize: 12, fontWeight: "600" },
+  statLabel: { color: "#8a8a8a", fontSize: 12, fontWeight: "600" },
   deltaText: { fontSize: 11, fontWeight: "700", marginTop: 4 },
 
   listCard: {
@@ -470,7 +470,7 @@ const s = StyleSheet.create({
   listRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 10 },
   listDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   listLabel: { flex: 1, color: "#fff", fontSize: 14, fontWeight: "700" },
-  listValue: { color: "#555", fontSize: 13, fontWeight: "700" },
+  listValue: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
   rankText: { color: "#333", fontSize: 12, fontWeight: "900", width: 24 },
 
   gameColorDot: { width: 8, height: 8, borderRadius: 4 },
@@ -481,7 +481,7 @@ const s = StyleSheet.create({
     backgroundColor: "#0d0d0d", borderRadius: 18, padding: 32, alignItems: "center",
     borderWidth: 1, borderColor: "#1a1a1a",
   },
-  emptyText: { color: "#444", fontSize: 14 },
+  emptyText: { color: "#777", fontSize: 14 },
 
   impactCard: {
     flexDirection: "row", alignItems: "flex-start",

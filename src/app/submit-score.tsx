@@ -514,10 +514,10 @@ const styles = StyleSheet.create({
     alignItems: "flex-start", marginBottom: 14,
   },
   gameName: { color: "#fff", fontSize: 22, fontWeight: "900", marginBottom: 4 },
-  laneLabel: { color: "#555", fontSize: 13 },
+  laneLabel: { color: "#8a8a8a", fontSize: 13 },
   ballsLeft: { alignItems: "center" },
   ballsLeftNum: { color: "#06b6d4", fontSize: 28, fontWeight: "900" },
-  ballsLeftLabel: { color: "#555", fontSize: 11 },
+  ballsLeftLabel: { color: "#8a8a8a", fontSize: 11 },
   pendingBadge: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: "rgba(245,158,11,0.12)", borderRadius: 20,
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
   scorePts: { color: "#333", fontSize: 22, fontWeight: "700", paddingBottom: 18 },
 
   ringHint: {
-    color: "#444", fontSize: 12, fontWeight: "700",
+    color: "#777", fontSize: 12, fontWeight: "700",
     textTransform: "uppercase", letterSpacing: 1.2,
     textAlign: "center", marginBottom: 18,
   },
@@ -563,7 +563,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     justifyContent: "center", gap: 5, paddingVertical: 8,
   },
-  undoText: { color: "#555", fontSize: 13, fontWeight: "600" },
+  undoText: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
 
   submitSection: { marginTop: 8 },
   finalRow: {
@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
     borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 14,
   },
-  finalLabel: { color: "#555", fontSize: 14, fontWeight: "700" },
+  finalLabel: { color: "#8a8a8a", fontSize: 14, fontWeight: "700" },
   finalScore: { color: "#22c55e", fontSize: 36, fontWeight: "900" },
 
   submitBtn: {
@@ -587,7 +587,7 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent", borderRadius: 14, paddingVertical: 14,
     alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e",
   },
-  restartText: { color: "#444", fontWeight: "700" },
+  restartText: { color: "#777", fontWeight: "700" },
 
   arcadeSection: { marginTop: 4 },
   arcadeHint: { color: "#aaa", fontSize: 13, fontWeight: "700", textAlign: "center", marginBottom: 14, textTransform: "uppercase", letterSpacing: 1 },
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(239,68,68,0.3)",
   },
   requiredText: { color: "#ef4444", fontSize: 10, fontWeight: "800" },
-  proofSub: { color: "#444", fontSize: 12, marginBottom: 16 },
+  proofSub: { color: "#777", fontSize: 12, marginBottom: 16 },
 
   proofPicker: {
     height: 180, borderRadius: 16, overflow: "hidden",
@@ -659,9 +659,9 @@ const styles = StyleSheet.create({
     borderColor: "rgba(6,182,212,0.3)", alignItems: "center", justifyContent: "center",
   },
   proofEmptyText: { color: "#fff", fontWeight: "800", fontSize: 15 },
-  proofEmptyHint: { color: "#444", fontSize: 12 },
+  proofEmptyHint: { color: "#777", fontSize: 12 },
 
-  reviewNote: { color: "#444", fontSize: 12, textAlign: "center", marginTop: 6, lineHeight: 18 },
+  reviewNote: { color: "#777", fontSize: 12, textAlign: "center", marginTop: 6, lineHeight: 18 },
   submitErrorBox: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 12,
@@ -672,7 +672,7 @@ const styles = StyleSheet.create({
 
   reqList: { gap: 6, marginBottom: 14, paddingHorizontal: 4 },
   reqItem: { flexDirection: "row", alignItems: "center", gap: 8 },
-  reqText: { color: "#444", fontSize: 13 },
+  reqText: { color: "#777", fontSize: 13 },
   reqTextDone: { color: "#22c55e" },
 
   successOverlay: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
@@ -683,5 +683,5 @@ const styles = StyleSheet.create({
     justifyContent: "center", marginBottom: 24,
   },
   successTitle: { color: "#fff", fontSize: 26, fontWeight: "900", marginBottom: 10 },
-  successSub: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  successSub: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
 });

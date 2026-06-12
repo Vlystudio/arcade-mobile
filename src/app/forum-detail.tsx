@@ -20,6 +20,7 @@ import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 
 import { API_BASE as MOD_BASE } from "../../lib/api-base";
+import { showToast } from "../components/toast";
 import { validateChatMessage, VALIDATION_LIMITS } from "../../lib/validation";
 const POST_LIMIT = VALIDATION_LIMITS.chatMessage;
 const COMMENT_LIMIT = 1000;
@@ -203,6 +204,7 @@ export default function ForumDetailScreen() {
             ...prev,
             [comment.post_id]: (prev[comment.post_id] ?? []).filter((c) => c.id !== comment.id),
           }));
+          showToast("Comment deleted", "info");
         },
       },
     ]);
@@ -309,7 +311,7 @@ export default function ForumDetailScreen() {
                             <TextInput
                               style={styles.commentInput}
                               placeholder="Write a comment…"
-                              placeholderTextColor="#333"
+                              placeholderTextColor="#555"
                               value={commentDraft}
                               onChangeText={setCommentDraft}
                               multiline
@@ -339,7 +341,7 @@ export default function ForumDetailScreen() {
               <TextInput
                 style={styles.replyInput}
                 placeholder="Start a new post…"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={newPost}
                 onChangeText={setNewPost}
                 multiline
@@ -389,14 +391,14 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   headerTitle: { color: "#fff", fontSize: 17, fontWeight: "900" },
-  headerSub: { color: "#444", fontSize: 12, marginTop: 1 },
+  headerSub: { color: "#777", fontSize: 12, marginTop: 1 },
 
   emptyContainer: { flexGrow: 1 },
   list: { padding: 16, paddingBottom: 8 },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   emptyIcon: { width: 70, height: 70, borderRadius: 35, backgroundColor: "#141414", borderWidth: 1, borderColor: "#222", alignItems: "center", justifyContent: "center" },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
-  emptySub: { color: "#555", fontSize: 14 },
+  emptySub: { color: "#8a8a8a", fontSize: 14 },
 
   postCard: {
     backgroundColor: "#111", borderRadius: 16,
@@ -406,7 +408,7 @@ const styles = StyleSheet.create({
   postHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
   postMeta: { flex: 1 },
   postAuthor: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  postTime: { color: "#444", fontSize: 11, marginTop: 2 },
+  postTime: { color: "#777", fontSize: 11, marginTop: 2 },
   postContent: { color: "#ccc", fontSize: 15, lineHeight: 22 },
 
   postFooter: {
@@ -415,7 +417,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1c1c1c",
   },
   commentToggle: { flexDirection: "row", alignItems: "center", gap: 6 },
-  commentToggleText: { color: "#444", fontSize: 12.5, fontWeight: "700" },
+  commentToggleText: { color: "#777", fontSize: 12.5, fontWeight: "700" },
 
   // ── Comment thread ──
   thread: { marginTop: 10, gap: 10 },
@@ -424,7 +426,7 @@ const styles = StyleSheet.create({
   commentBody: { flex: 1, backgroundColor: "#0c0c0c", borderRadius: 12, padding: 10, borderWidth: 1, borderColor: "#191919" },
   commentTopRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 3 },
   commentAuthor: { color: "#ddd", fontSize: 12.5, fontWeight: "800", flexShrink: 1 },
-  commentTime: { color: "#3a3a3a", fontSize: 10.5, flex: 1 },
+  commentTime: { color: "#6b6b6b", fontSize: 10.5, flex: 1 },
   commentContent: { color: "#aaa", fontSize: 13.5, lineHeight: 19 },
 
   commentComposer: {

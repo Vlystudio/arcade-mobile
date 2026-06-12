@@ -392,7 +392,7 @@ const s = StyleSheet.create({
   seasonName: { color: "#fff", fontSize: 22, fontWeight: "900", marginBottom: 4 },
   seasonSub: { color: "#888", fontSize: 13 },
 
-  sectionLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2 },
+  sectionLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2 },
 
   prizeCard: {
     backgroundColor: "#0d0d0d", borderRadius: 18, paddingHorizontal: 18, paddingVertical: 4,
@@ -412,7 +412,7 @@ const s = StyleSheet.create({
   optIconSelected: { backgroundColor: "#06b6d4" },
   optTitle: { color: "#fff", fontSize: 16, fontWeight: "800", marginBottom: 2 },
   optPrice: { color: "#06b6d4", fontSize: 20, fontWeight: "900" },
-  optDesc: { color: "#555", fontSize: 13, lineHeight: 18 },
+  optDesc: { color: "#8a8a8a", fontSize: 13, lineHeight: 18 },
   radio: {
     width: 22, height: 22, borderRadius: 11,
     borderWidth: 2, borderColor: "#333",
@@ -442,13 +442,13 @@ const s = StyleSheet.create({
   payBtnOff: { backgroundColor: "#1a1a1a" },
   payBtnText: { color: "#000", fontSize: 16, fontWeight: "900" },
 
-  hint: { color: "#444", fontSize: 12, textAlign: "center", lineHeight: 17 },
+  hint: { color: "#777", fontSize: 12, textAlign: "center", lineHeight: 17 },
   legalNote: { color: "#2a2a2a", fontSize: 11, textAlign: "center", lineHeight: 16 },
 
   // No season / already paid states
   emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32, gap: 12 },
   emptyTitle: { color: "#fff", fontSize: 20, fontWeight: "900", textAlign: "center" },
-  emptySub: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
   backBtn2: { backgroundColor: "#1a1a1a", borderRadius: 14, paddingHorizontal: 28, paddingVertical: 13, marginTop: 8 },
   backBtn2Text: { color: "#06b6d4", fontWeight: "800", fontSize: 15 },
 
@@ -458,7 +458,7 @@ const s = StyleSheet.create({
     marginBottom: 8,
   },
   paidTitle: { color: "#fff", fontSize: 22, fontWeight: "900", textAlign: "center" },
-  paidSub: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  paidSub: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
   goTeamsBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 28, paddingVertical: 13, marginTop: 8,

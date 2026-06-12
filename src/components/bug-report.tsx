@@ -213,7 +213,7 @@ function BugReportModal({
               <TextInput
                 style={s.textInput}
                 placeholder="Describe what happened and what you expected..."
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -333,7 +333,7 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   fieldHint: {
-    color: "#555",
+    color: "#8a8a8a",
     fontSize: 12,
     lineHeight: 17,
     marginTop: 2,
@@ -352,7 +352,7 @@ const s = StyleSheet.create({
     borderStyle: "dashed",
   },
   attachBtnText: {
-    color: "#444",
+    color: "#777",
     fontSize: 13,
     flex: 1,
     lineHeight: 18,
@@ -426,7 +426,7 @@ const s = StyleSheet.create({
     textAlign: "center",
   },
   successBody: {
-    color: "#555",
+    color: "#8a8a8a",
     fontSize: 14,
     textAlign: "center",
     lineHeight: 20,

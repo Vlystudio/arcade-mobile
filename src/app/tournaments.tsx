@@ -481,7 +481,7 @@ export default function TournamentsScreen() {
               <>
                 <View style={[s.sectionRow, { marginTop: 8 }]}>
                   <Ionicons name="checkmark-done" size={13} color="#444" />
-                  <Text style={[s.sectionLabel, { color: "#444" }]}>PAST TOURNAMENTS</Text>
+                  <Text style={[s.sectionLabel, { color: "#777" }]}>PAST TOURNAMENTS</Text>
                 </View>
                 {completed.map(t => <TournamentCard key={t.id} t={t} onRegister={handleRegister} onUnregister={handleUnregister} onManage={openManage} />)}
               </>
@@ -492,7 +492,7 @@ export default function TournamentsScreen() {
               <>
                 <View style={[s.sectionRow, { marginTop: 8 }]}>
                   <Ionicons name="document-text-outline" size={13} color="#555" />
-                  <Text style={[s.sectionLabel, { color: "#555" }]}>MY REQUESTS</Text>
+                  <Text style={[s.sectionLabel, { color: "#8a8a8a" }]}>MY REQUESTS</Text>
                 </View>
                 {myRequests.map(r => (
                   <View key={r.id} style={s.reqCard}>
@@ -537,7 +537,7 @@ export default function TournamentsScreen() {
               <TextInput
                 style={[s.input, s.textArea, { height: 120 }]}
                 placeholder={"e.g. We'll be at lanes 4-6. Arrive 15 min early. Bring your A-game!"}
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={announcementDraft}
                 onChangeText={(v) => setAnnouncementDraft(v.slice(0, 1000))}
                 multiline
@@ -651,10 +651,10 @@ export default function TournamentsScreen() {
             </View>
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <Text style={s.fieldLabel}>Tournament Name *</Text>
-              <TextInput style={s.input} placeholder="e.g. Spring Skee-Ball Open" placeholderTextColor="#333" value={reqTitle} onChangeText={setReqTitle} />
+              <TextInput style={s.input} placeholder="e.g. Spring Skee-Ball Open" placeholderTextColor="#555" value={reqTitle} onChangeText={setReqTitle} />
 
               <Text style={s.fieldLabel}>Description</Text>
-              <TextInput style={[s.input, s.textArea]} placeholder="Format, rules, prizes…" placeholderTextColor="#333" value={reqDesc} onChangeText={setReqDesc} multiline numberOfLines={3} />
+              <TextInput style={[s.input, s.textArea]} placeholder="Format, rules, prizes…" placeholderTextColor="#555" value={reqDesc} onChangeText={setReqDesc} multiline numberOfLines={3} />
 
               <Text style={s.fieldLabel}>Game Type</Text>
               <View style={s.chipWrap}>
@@ -669,7 +669,7 @@ export default function TournamentsScreen() {
               <TextInput
                 style={s.input}
                 placeholder="MM/DD/YYYY"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={reqDate}
                 keyboardType="number-pad"
                 maxLength={10}
@@ -683,7 +683,7 @@ export default function TournamentsScreen() {
               />
 
               <Text style={s.fieldLabel}>Max Teams</Text>
-              <TextInput style={s.input} placeholder="8" placeholderTextColor="#333" keyboardType="number-pad" value={reqMaxTeams} onChangeText={setReqMaxTeams} />
+              <TextInput style={s.input} placeholder="8" placeholderTextColor="#555" keyboardType="number-pad" value={reqMaxTeams} onChangeText={setReqMaxTeams} />
 
               {submitError && (
                 <View style={s.errorRow}>
@@ -780,7 +780,7 @@ export default function TournamentsScreen() {
                 {/* Round groups */}
                 {(() => {
                   const round = viewBracketData?.rounds?.find(r => r.round_number === viewBracketTab);
-                  if (!round) return <Text style={{ color: "#444", textAlign: "center", marginTop: 40, fontSize: 14 }}>Round not yet started</Text>;
+                  if (!round) return <Text style={{ color: "#777", textAlign: "center", marginTop: 40, fontSize: 14 }}>Round not yet started</Text>;
                   return (round.groups ?? []).map(g => (
                     <View key={g.id} style={s.bvGroupCard}>
                       <View style={s.bvGroupHeader}>
@@ -931,7 +931,7 @@ function TournamentCard({ t, onRegister, onUnregister, onManage }: {
               onPress={() => !isFull && onRegister(t.id)}
               disabled={isFull}
             >
-              <Text style={[s.registerBtnText, isFull && { color: "#444" }]}>
+              <Text style={[s.registerBtnText, isFull && { color: "#777" }]}>
                 {isFull ? "Full" : joinLabel}
               </Text>
             </Pressable>
@@ -964,7 +964,7 @@ const s = StyleSheet.create({
 
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 20 },
   pageTitle: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5 },
-  pageSub: { color: "#555", fontSize: 14, marginTop: 2 },
+  pageSub: { color: "#8a8a8a", fontSize: 14, marginTop: 2 },
   requestBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#06b6d4", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 9 },
   requestBtnText: { color: "#000", fontWeight: "800", fontSize: 14 },
 
@@ -973,7 +973,7 @@ const s = StyleSheet.create({
 
   emptyCard: { backgroundColor: "#0d0d0d", borderRadius: 22, padding: 40, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a", marginTop: 8 },
   emptyTitle: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 6 },
-  emptySub: { color: "#444", fontSize: 14, textAlign: "center", marginBottom: 20 },
+  emptySub: { color: "#777", fontSize: 14, textAlign: "center", marginBottom: 20 },
   emptyBtn: { backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 22, paddingVertical: 12 },
   emptyBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
 
@@ -985,25 +985,25 @@ const s = StyleSheet.create({
   statusBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1 },
   statusText: { fontSize: 10, fontWeight: "800" },
   cardTitle: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 6 },
-  cardDesc: { color: "#555", fontSize: 13, lineHeight: 19, marginBottom: 12 },
+  cardDesc: { color: "#8a8a8a", fontSize: 13, lineHeight: 19, marginBottom: 12 },
 
   metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 14 },
   metaChip: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#0d0d0d", borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: "#1a1a1a" },
-  metaText: { color: "#555", fontSize: 12 },
+  metaText: { color: "#8a8a8a", fontSize: 12 },
 
   cardFooter: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", paddingTop: 14 },
   regRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   regBadge: { flexDirection: "row", alignItems: "center", gap: 6 },
   regText: { color: "#22c55e", fontWeight: "700", fontSize: 14 },
   unregBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: "#2a2a2a" },
-  unregText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  unregText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
   registerBtn: { backgroundColor: "#06b6d4", borderRadius: 13, paddingVertical: 12, alignItems: "center" },
   registerBtnOff: { backgroundColor: "#1a1a1a" },
   registerBtnText: { color: "#000", fontWeight: "900", fontSize: 15 },
 
   reqCard: { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#0d0d0d", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a" },
   reqTitle: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 3 },
-  reqMeta: { color: "#444", fontSize: 12 },
+  reqMeta: { color: "#777", fontSize: 12 },
   reqNote: { color: "#f59e0b", fontSize: 12, marginTop: 4 },
   reqBadge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   reqBadgeText: { fontSize: 12, fontWeight: "800" },
@@ -1013,7 +1013,7 @@ const s = StyleSheet.create({
   ffTopRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 14 },
   ffIconWrap: { width: 46, height: 46, borderRadius: 14, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
   ffTitle: { color: "#fff", fontSize: 17, fontWeight: "900" },
-  ffSub: { color: "#444", fontSize: 12, marginTop: 1 },
+  ffSub: { color: "#777", fontSize: 12, marginTop: 1 },
   ffBadge: { backgroundColor: "rgba(6,182,212,0.1)", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: "rgba(6,182,212,0.25)" },
   ffBadgeText: { color: "#06b6d4", fontSize: 10, fontWeight: "800" },
   ffDateRow: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 8 },
@@ -1022,7 +1022,7 @@ const s = StyleSheet.create({
   ffInPersonText: { color: "#06b6d4", fontSize: 12, fontWeight: "600", flex: 1 },
   ffSignupRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" },
   ffPlayersChip: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#0d0d0d", borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1, borderColor: "#1a1a1a" },
-  ffPlayersText: { color: "#555", fontSize: 12, fontWeight: "600" },
+  ffPlayersText: { color: "#8a8a8a", fontSize: 12, fontWeight: "600" },
   ffStatusChip: { flexDirection: "row", alignItems: "center", gap: 6, borderRadius: 8, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1 },
   ffStatusDot: { width: 6, height: 6, borderRadius: 3 },
   ffStatusChipText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
@@ -1036,7 +1036,7 @@ const s = StyleSheet.create({
   ffResultsDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "rgba(6,182,212,0.15)", marginVertical: 14 },
   ffResultsLabel: { color: "#333", fontSize: 10, fontWeight: "800", letterSpacing: 1.2, marginBottom: 10 },
   ffResultRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 10 },
-  ffResultDate: { color: "#444", fontSize: 12, fontWeight: "700", minWidth: 56 },
+  ffResultDate: { color: "#777", fontSize: 12, fontWeight: "700", minWidth: 56 },
   ffPodium: { flex: 1, gap: 2 },
   ffPodiumEntry: { color: "#fff", fontSize: 13 },
 
@@ -1053,15 +1053,15 @@ const s = StyleSheet.create({
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
   modalTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
-  modalSub: { color: "#555", fontSize: 13, marginTop: 2 },
-  fieldLabel: { color: "#444", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 14 },
+  modalSub: { color: "#8a8a8a", fontSize: 13, marginTop: 2 },
+  fieldLabel: { color: "#777", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 14 },
   input: { backgroundColor: "#0a0a0a", color: "#fff", padding: 15, borderRadius: 14, fontSize: 15, borderWidth: 1, borderColor: "#1e1e1e" },
   textArea: { height: 80, textAlignVertical: "top", paddingTop: 12 },
   chipRow: { gap: 8, paddingVertical: 4 },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 4 },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#2a2a2a" },
   chipActive: { backgroundColor: "rgba(6,182,212,0.12)", borderColor: "#06b6d4" },
-  chipText: { color: "#555", fontWeight: "600", fontSize: 13 },
+  chipText: { color: "#8a8a8a", fontWeight: "600", fontSize: 13 },
   chipTextActive: { color: "#06b6d4", fontWeight: "800" },
   errorRow: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 10, padding: 10, marginTop: 8 },
   errorText: { color: "#ef4444", fontSize: 13, flex: 1 },
@@ -1087,13 +1087,13 @@ const s = StyleSheet.create({
   manageBtnText: { color: "#06b6d4", fontWeight: "800", fontSize: 14 },
 
   // Management modal
-  manageSubLabel: { color: "#444", fontSize: 12, marginBottom: 10, marginTop: 2, lineHeight: 17 },
+  manageSubLabel: { color: "#777", fontSize: 12, marginBottom: 10, marginTop: 2, lineHeight: 17 },
   charCounter: { color: "#333", fontSize: 11, textAlign: "right", marginTop: 5, marginBottom: 4 },
 
   // Join request rows
   joinReqRow: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#0d0d0d", borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a" },
   joinReqAvatar: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#1a1a1a", alignItems: "center", justifyContent: "center" },
-  joinReqAvatarText: { color: "#555", fontSize: 15, fontWeight: "800" },
+  joinReqAvatarText: { color: "#8a8a8a", fontSize: 15, fontWeight: "800" },
   joinReqName: { flex: 1, color: "#fff", fontSize: 14, fontWeight: "700" },
   joinReqActions: { flexDirection: "row", gap: 8 },
   joinAcceptBtn: { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: "rgba(34,197,94,0.25)" },
@@ -1114,7 +1114,7 @@ const s = StyleSheet.create({
   confirmCard: { backgroundColor: "#111", borderRadius: 24, padding: 28, width: "100%", maxWidth: 360, borderWidth: 1, borderColor: "#1e1e1e", alignItems: "center" },
   confirmIconWrap: { width: 60, height: 60, borderRadius: 30, backgroundColor: "rgba(239,68,68,0.08)", alignItems: "center", justifyContent: "center", marginBottom: 16, borderWidth: 1, borderColor: "rgba(239,68,68,0.15)" },
   confirmTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 10 },
-  confirmBody: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 21, marginBottom: 24 },
+  confirmBody: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 21, marginBottom: 24 },
   confirmBtns: { flexDirection: "row", gap: 10, width: "100%" },
   confirmKeep: { flex: 1, backgroundColor: "#1a1a1a", borderRadius: 14, padding: 14, alignItems: "center" },
   confirmKeepText: { color: "#888", fontWeight: "700", fontSize: 14 },
@@ -1126,7 +1126,7 @@ const s = StyleSheet.create({
   ffViewBracketText: { flex: 1, color: "#a855f7", fontSize: 13, fontWeight: "800" },
   ffLiveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#ef4444" },
   ffResultsViewBtn: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "#0d0d0d", borderRadius: 8, borderWidth: 1, borderColor: "#1e1e1e", marginTop: 6 },
-  ffResultsViewBtnText: { color: "#555", fontSize: 11, fontWeight: "700" },
+  ffResultsViewBtnText: { color: "#8a8a8a", fontSize: 11, fontWeight: "700" },
 
   // Bracket viewer modal
   bvHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 16 },
@@ -1135,7 +1135,7 @@ const s = StyleSheet.create({
   bvRoundTabs: { flexDirection: "row", paddingHorizontal: 16, gap: 6, paddingBottom: 4 },
   bvRoundTab: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20, backgroundColor: "#0f0f0f", borderWidth: 1, borderColor: "#1a1a1a" },
   bvRoundTabActive: { backgroundColor: "rgba(168,85,247,0.12)", borderColor: "rgba(168,85,247,0.3)" },
-  bvRoundTabText: { color: "#444", fontSize: 11, fontWeight: "700" },
+  bvRoundTabText: { color: "#777", fontSize: 11, fontWeight: "700" },
   bvRoundDot: { width: 6, height: 6, borderRadius: 3 },
   bvWinnersCard: { backgroundColor: "rgba(168,85,247,0.08)", borderRadius: 16, borderWidth: 1, borderColor: "rgba(168,85,247,0.2)", padding: 18, marginBottom: 20 },
   bvWinnersTitle: { color: "#fff", fontSize: 18, fontWeight: "900", textAlign: "center", marginBottom: 14 },

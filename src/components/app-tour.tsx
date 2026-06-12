@@ -161,7 +161,7 @@ const s = StyleSheet.create({
     right: 20,
   },
   skipText: {
-    color: "#444",
+    color: "#777",
     fontSize: 13,
     fontWeight: "600",
   },
@@ -244,7 +244,7 @@ const s = StyleSheet.create({
     borderColor: "#2a2a2a",
   },
   backBtnText: {
-    color: "#555",
+    color: "#8a8a8a",
     fontWeight: "700",
     fontSize: 14,
   },

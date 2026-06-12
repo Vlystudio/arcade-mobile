@@ -138,7 +138,7 @@ export default function ResetPasswordScreen() {
             <TextInput
               style={styles.input}
               placeholder="New password"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               secureTextEntry={!showPassword}
               autoComplete="new-password"
               value={password}
@@ -154,7 +154,7 @@ export default function ResetPasswordScreen() {
             <TextInput
               style={styles.input}
               placeholder="Confirm new password"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               secureTextEntry={!showConfirm}
               autoComplete="new-password"
               returnKeyType="done"
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   title: { color: "#fff", fontSize: 24, fontWeight: "900", textAlign: "center" },
-  sub:   { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  sub:   { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
 
   inputWrap: {
     flexDirection: "row", alignItems: "center",
@@ -235,11 +235,11 @@ const styles = StyleSheet.create({
     borderColor: "rgba(34,197,94,0.25)", alignItems: "center", justifyContent: "center",
   },
   successTitle: { color: "#22c55e", fontSize: 24, fontWeight: "900" },
-  successSub:   { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  successSub:   { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
   doneBtn: {
     backgroundColor: "#06b6d4", borderRadius: 14,
     paddingHorizontal: 48, paddingVertical: 16, marginTop: 8,
   },
   doneBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
-  waitText: { color: "#555", fontSize: 14, marginTop: 12 },
+  waitText: { color: "#8a8a8a", fontSize: 14, marginTop: 12 },
 });

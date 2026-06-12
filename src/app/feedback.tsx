@@ -142,7 +142,7 @@ export default function FeedbackScreen() {
                 ? "Describe the feature you'd like to see and how it would help…"
                 : "Share your thoughts with us…"
             }
-            placeholderTextColor="#333"
+            placeholderTextColor="#555"
             value={message}
             onChangeText={setMessage}
             multiline
@@ -211,7 +211,7 @@ const s = StyleSheet.create({
     borderRadius: 20, borderWidth: 1, borderColor: "#222",
     backgroundColor: "#0d0d0d",
   },
-  categoryChipText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  categoryChipText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
 
   starsRow: { flexDirection: "row", gap: 8 },
   starBtn: { padding: 4 },
@@ -240,13 +240,13 @@ const s = StyleSheet.create({
   submitBtnLoading: { backgroundColor: "#0a4a55" },
   submitBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
 
-  note: { color: "#444", fontSize: 13, textAlign: "center", marginTop: 16 },
+  note: { color: "#777", fontSize: 13, textAlign: "center", marginTop: 16 },
   noteLink: { color: "#06b6d4", fontWeight: "700" },
 
   successContainer: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 32 },
   successIcon: { marginBottom: 20 },
   successTitle: { color: "#fff", fontSize: 26, fontWeight: "900", marginBottom: 12 },
-  successSub: { color: "#555", fontSize: 15, textAlign: "center", lineHeight: 22, marginBottom: 32 },
+  successSub: { color: "#8a8a8a", fontSize: 15, textAlign: "center", lineHeight: 22, marginBottom: 32 },
   doneBtn: {
     backgroundColor: "#06b6d4", borderRadius: 14,
     paddingVertical: 16, paddingHorizontal: 48,

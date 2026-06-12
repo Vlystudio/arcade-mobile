@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
   content: { padding: 20, paddingBottom: 48 },
 
   sectionLabel: {
-    color: "#444", fontSize: 11, fontWeight: "700",
+    color: "#777", fontSize: 11, fontWeight: "700",
     textTransform: "uppercase", letterSpacing: 1.2,
     marginBottom: 12, marginTop: 8,
   },
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#2a2a2a",
   },
   qtyNum: { color: "#fff", fontSize: 16, fontWeight: "900", minWidth: 32, textAlign: "center" },
-  unitPrice: { color: "#444", fontSize: 12, marginLeft: 8 },
+  unitPrice: { color: "#777", fontSize: 12, marginLeft: 8 },
 
   inputCard: {
     backgroundColor: "#111", borderRadius: 18,
@@ -250,10 +250,10 @@ const styles = StyleSheet.create({
     padding: 18, marginBottom: 20,
   },
   summaryRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
-  summaryLabel: { color: "#555", fontSize: 14 },
+  summaryLabel: { color: "#8a8a8a", fontSize: 14 },
   summaryValue: { color: "#fff", fontSize: 14, fontWeight: "700" },
   summaryValueMuted: { color: "#777", fontSize: 14, fontWeight: "700" },
-  summaryNote: { color: "#555", fontSize: 12, lineHeight: 18, marginTop: 4 },
+  summaryNote: { color: "#8a8a8a", fontSize: 12, lineHeight: 18, marginTop: 4 },
 
   errorBox: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
   },
   placeBtnOff: { backgroundColor: "#141414" },
   placeBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
-  placeBtnTextOff: { color: "#555" },
+  placeBtnTextOff: { color: "#8a8a8a" },
 
   clearBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -288,7 +288,7 @@ const styles = StyleSheet.create({
   // Empty cart
   emptyWrap: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
   emptyTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 8 },
-  emptySub: { color: "#444", fontSize: 14, marginBottom: 28 },
+  emptySub: { color: "#777", fontSize: 14, marginBottom: 28 },
   browseBtn: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: "#06b6d4", borderRadius: 16,

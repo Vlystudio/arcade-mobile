@@ -500,7 +500,7 @@ export default function LeaderboardScreen() {
               <TextInput
                 style={styles.shareFriendSearchInput}
                 placeholder="Search friends…"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={shareFriendSearch}
                 onChangeText={setShareFriendSearch}
                 autoCapitalize="none"
@@ -570,7 +570,7 @@ export default function LeaderboardScreen() {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search games..."
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={gameSearch}
                 onChangeText={setGameSearch}
                 autoCapitalize="none"
@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
 
   pageHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 22 },
   pageTitle: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5, marginBottom: 4 },
-  pageSub: { color: "#555", fontSize: 14 },
+  pageSub: { color: "#8a8a8a", fontSize: 14 },
   podiumIcon: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: "rgba(245,158,11,0.1)", alignItems: "center", justifyContent: "center",
@@ -729,7 +729,7 @@ const styles = StyleSheet.create({
   gameSelectorLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
   gameDot: { width: 10, height: 10, borderRadius: 5 },
   gameSelectorText: { color: "#fff", fontWeight: "700", fontSize: 14 },
-  gameSelectorPlaceholder: { color: "#444", fontWeight: "600", fontSize: 14 },
+  gameSelectorPlaceholder: { color: "#777", fontWeight: "600", fontSize: 14 },
 
   myRankCard: {
     backgroundColor: "rgba(6,182,212,0.06)", borderRadius: 18, padding: 18,
@@ -739,13 +739,13 @@ const styles = StyleSheet.create({
   myRankLabel: { color: "#06b6d4", fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 },
   myRankValue: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -1 },
   myRankDivider: { width: 1, height: 40, backgroundColor: "rgba(6,182,212,0.2)" },
-  myScoreLabel: { color: "#444", fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 },
+  myScoreLabel: { color: "#777", fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 },
   myScoreValue: { color: "#22c55e", fontSize: 24, fontWeight: "900" },
 
   emptyCard: { backgroundColor: "#111", borderRadius: 22, padding: 40, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", gap: 10 },
   emptyIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#161616", borderWidth: 1, borderColor: "#222", alignItems: "center", justifyContent: "center", marginBottom: 4 },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
-  emptySub: { color: "#555", fontSize: 14, textAlign: "center" },
+  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center" },
 
   podium: { flexDirection: "row", gap: 10, marginBottom: 10, alignItems: "flex-end" },
   podiumCard: { flex: 1, backgroundColor: "#111", borderRadius: 20, padding: 14, alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#1e1e1e" },
@@ -758,7 +758,7 @@ const styles = StyleSheet.create({
   podiumAvatarText: { color: "#fff", fontWeight: "900" },
   podiumUsername: { color: "#fff", fontSize: 13, fontWeight: "800", textAlign: "center" },
   podiumScore: { fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
-  podiumGame: { color: "#444", fontSize: 10, textAlign: "center" },
+  podiumGame: { color: "#777", fontSize: 10, textAlign: "center" },
 
   // Rankings list (FlashList items wrap in a card via outer margins)
   listCard: { backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden", marginBottom: 0 },
@@ -767,12 +767,12 @@ const styles = StyleSheet.create({
 
   listRowWrap: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 10, backgroundColor: "#111" },
   listRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
-  listRank: { color: "#3a3a3a", fontSize: 13, fontWeight: "800", width: 32, textAlign: "center" },
+  listRank: { color: "#6b6b6b", fontSize: 13, fontWeight: "800", width: 32, textAlign: "center" },
   listTypeDot: { width: 8, height: 8, borderRadius: 4 },
   listInfo: { flex: 1 },
   listUsername: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  listYou: { color: "#555", fontWeight: "500" },
-  listGame: { color: "#444", fontSize: 11, marginTop: 2 },
+  listYou: { color: "#8a8a8a", fontWeight: "500" },
+  listGame: { color: "#777", fontSize: 11, marginTop: 2 },
   listScore: { color: "#22c55e", fontSize: 17, fontWeight: "900" },
   listShareBtn: {
     width: 32, height: 32, borderRadius: 10,
@@ -809,10 +809,10 @@ const styles = StyleSheet.create({
   gameOptionNameActive: { color: "#fff" },
 
   noResults: { paddingVertical: 24, alignItems: "center" },
-  noResultsText: { color: "#444", fontSize: 14 },
+  noResultsText: { color: "#777", fontSize: 14 },
 
   pickerCancel: { backgroundColor: "#0d0d0d", borderRadius: 16, padding: 16, alignItems: "center" },
-  pickerCancelText: { color: "#555", fontWeight: "700", fontSize: 15 },
+  pickerCancelText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 
   shareBtn: {
     flexDirection: "row", alignItems: "center", gap: 4,
@@ -834,10 +834,10 @@ const styles = StyleSheet.create({
   },
   shareScoreRank: { color: "#06b6d4", fontSize: 28, fontWeight: "900", letterSpacing: -1 },
   shareScoreVal: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  shareScoreGame: { color: "#555", fontSize: 12, marginTop: 2 },
+  shareScoreGame: { color: "#8a8a8a", fontSize: 12, marginTop: 2 },
 
   shareSectionLabel: {
-    color: "#444", fontSize: 11, fontWeight: "700",
+    color: "#777", fontSize: 11, fontWeight: "700",
     textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10,
   },
   shareFriendSearch: {
@@ -875,11 +875,11 @@ const styles = StyleSheet.create({
   },
   shareSentText: { color: "#22c55e", fontSize: 12, fontWeight: "700" },
   shareNoFriends: { alignItems: "center", paddingVertical: 24, gap: 8 },
-  shareNoFriendsText: { color: "#444", fontSize: 13, textAlign: "center" },
+  shareNoFriendsText: { color: "#777", fontSize: 13, textAlign: "center" },
   shareExternalBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     marginTop: 16, backgroundColor: "#0d0d0d", borderRadius: 14,
     paddingVertical: 14, borderWidth: 1, borderColor: "#1e1e1e",
   },
-  shareExternalBtnText: { color: "#555", fontWeight: "700", fontSize: 14 },
+  shareExternalBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 14 },
 });

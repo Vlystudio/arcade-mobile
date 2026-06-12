@@ -181,7 +181,7 @@ export default function MfaSetupScreen() {
             keyboardType="number-pad"
             maxLength={6}
             placeholder="000000"
-            placeholderTextColor="#333"
+            placeholderTextColor="#555"
             textAlign="center"
             autoFocus={Platform.OS !== "web"}
           />
@@ -228,7 +228,7 @@ const styles = StyleSheet.create({
   },
   stepNum: { color: "#06b6d4", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1 },
   stepTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
-  stepSub: { color: "#555", fontSize: 13, lineHeight: 18 },
+  stepSub: { color: "#8a8a8a", fontSize: 13, lineHeight: 18 },
 
   qrWrap: {
     alignSelf: "center", backgroundColor: "#fff",
@@ -243,7 +243,7 @@ const styles = StyleSheet.create({
   openAuthText: { color: "#000", fontWeight: "900", fontSize: 15 },
 
   secretRow: { gap: 6 },
-  secretLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8 },
+  secretLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8 },
   secretBox: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: "#0a0a0a", borderRadius: 10, padding: 12,
@@ -279,12 +279,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(34,197,94,0.25)", alignItems: "center", justifyContent: "center",
   },
   successTitle: { color: "#22c55e", fontSize: 24, fontWeight: "900" },
-  successSub: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  successSub: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
   doneBtn: {
     backgroundColor: "#06b6d4", borderRadius: 14,
     paddingHorizontal: 48, paddingVertical: 16, marginTop: 8,
   },
   doneBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
 
-  loadingText: { color: "#555", fontSize: 14, marginTop: 8 },
+  loadingText: { color: "#8a8a8a", fontSize: 14, marginTop: 8 },
 });

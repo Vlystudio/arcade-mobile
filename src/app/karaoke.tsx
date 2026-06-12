@@ -303,7 +303,7 @@ export default function KaraokeScreen() {
               <TextInput
                 style={s.input}
                 placeholder={user ? "Your display name" : "Your name *"}
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={requesterName}
                 onChangeText={setRequesterName}
                 maxLength={40}
@@ -327,7 +327,7 @@ export default function KaraokeScreen() {
                     <TextInput
                       style={[s.input, { flex: 1, marginBottom: 0 }]}
                       placeholder="Search YouTube..."
-                      placeholderTextColor="#333"
+                      placeholderTextColor="#555"
                       value={searchQuery}
                       onChangeText={setSearchQuery}
                       returnKeyType="search"
@@ -382,7 +382,7 @@ export default function KaraokeScreen() {
                   <TextInput
                     style={s.input}
                     placeholder="https://youtube.com/watch?v=..."
-                    placeholderTextColor="#333"
+                    placeholderTextColor="#555"
                     value={pasteUrl}
                     onChangeText={setPasteUrl}
                     autoCapitalize="none"
@@ -418,7 +418,7 @@ const s = StyleSheet.create({
   backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   headerCenter: { flex: 1 },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  headerSub: { color: "#555", fontSize: 12 },
+  headerSub: { color: "#8a8a8a", fontSize: 12 },
   addBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#a855f7", alignItems: "center", justifyContent: "center" },
 
   content: { padding: 20, paddingBottom: 48 },
@@ -437,18 +437,18 @@ const s = StyleSheet.create({
   emptyNowText: { color: "#333", fontSize: 18, fontWeight: "900", marginTop: 12 },
   emptyNowSub: { color: "#2a2a2a", fontSize: 13, marginTop: 4 },
 
-  sectionLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
+  sectionLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
 
   emptyQueue: { backgroundColor: "#111", borderRadius: 16, padding: 24, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e" },
-  emptyQueueText: { color: "#444", fontSize: 14 },
+  emptyQueueText: { color: "#777", fontSize: 14 },
 
   queueItem: { flexDirection: "row", alignItems: "center", backgroundColor: "#111", borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e", gap: 10 },
-  queuePos: { color: "#555", fontSize: 13, fontWeight: "900", minWidth: 20, textAlign: "center" },
+  queuePos: { color: "#8a8a8a", fontSize: 13, fontWeight: "900", minWidth: 20, textAlign: "center" },
   queueThumb: { width: 52, height: 52, borderRadius: 8 },
   thumbPlaceholder: { backgroundColor: "#1a1a1a", alignItems: "center", justifyContent: "center" },
   queueInfo: { flex: 1 },
   queueTitle: { color: "#fff", fontSize: 14, fontWeight: "700", marginBottom: 3 },
-  queueMeta: { color: "#555", fontSize: 12 },
+  queueMeta: { color: "#8a8a8a", fontSize: 12 },
   removeBtn: { padding: 4 },
 
   displayBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 28, borderWidth: 1, borderColor: "rgba(168,85,247,0.3)", borderRadius: 14, paddingVertical: 14, backgroundColor: "rgba(168,85,247,0.06)" },
@@ -466,7 +466,7 @@ const s = StyleSheet.create({
   tabs: { flexDirection: "row", gap: 8, marginBottom: 14 },
   tabBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 12, backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#1e1e1e" },
   tabBtnActive: { backgroundColor: "#a855f7", borderColor: "#a855f7" },
-  tabText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  tabText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
   tabTextActive: { color: "#000" },
 
   searchRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
@@ -477,7 +477,7 @@ const s = StyleSheet.create({
   resultThumb: { width: 56, height: 40, borderRadius: 6 },
   resultInfo: { flex: 1 },
   resultTitle: { color: "#fff", fontSize: 13, fontWeight: "700", marginBottom: 2 },
-  resultChannel: { color: "#555", fontSize: 11 },
+  resultChannel: { color: "#8a8a8a", fontSize: 11 },
   addToQueueBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#a855f7", alignItems: "center", justifyContent: "center" },
 
   submitBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#a855f7", borderRadius: 14, paddingVertical: 14, marginTop: 4 },

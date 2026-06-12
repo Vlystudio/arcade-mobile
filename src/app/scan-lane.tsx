@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
 
   panel: { backgroundColor: "#000", padding: 24, paddingBottom: 12 },
   panelTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
-  panelSub: { color: "#555", fontSize: 14, marginBottom: 16 },
+  panelSub: { color: "#8a8a8a", fontSize: 14, marginBottom: 16 },
 
   statusRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
   statusText: { color: "#888", fontSize: 14 },
@@ -637,7 +637,7 @@ const styles = StyleSheet.create({
   rescanText: { color: "#fff", fontWeight: "700" },
 
   testSection: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", paddingTop: 16 },
-  testLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 },
+  testLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 },
   testGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   testBtn: {
     backgroundColor: "#111", borderRadius: 10,
@@ -646,7 +646,7 @@ const styles = StyleSheet.create({
   },
   testBtnText: { color: "#888", fontWeight: "700", fontSize: 13 },
   manualBox: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", paddingTop: 14, marginTop: 4 },
-  manualLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 },
+  manualLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 },
   manualInput: { backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#222", borderRadius: 12, color: "#fff", fontSize: 14, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 10 },
   manualBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "#06b6d4", borderRadius: 12, paddingVertical: 13 },
   manualBtnOff: { opacity: 0.45 },
@@ -655,7 +655,7 @@ const styles = StyleSheet.create({
   permCard: { backgroundColor: "#111", borderRadius: 24, padding: 28, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", width: "100%" },
   permIcon: { width: 64, height: 64, borderRadius: 18, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 16 },
   permTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 8, textAlign: "center" },
-  permSub: { color: "#555", fontSize: 14, textAlign: "center", marginBottom: 24, lineHeight: 20 },
+  permSub: { color: "#8a8a8a", fontSize: 14, textAlign: "center", marginBottom: 24, lineHeight: 20 },
   permBtn: { backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 32, paddingVertical: 14 },
   permBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
 
@@ -673,7 +673,7 @@ const styles = StyleSheet.create({
   },
   successCheckedIn: { color: "#22c55e", fontSize: 15, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 },
   successLane: { color: "#fff", fontSize: 40, fontWeight: "900", marginBottom: 4 },
-  successGame: { color: "#555", fontSize: 16 },
+  successGame: { color: "#8a8a8a", fontSize: 16 },
 
   successActions: { gap: 12 },
   submitScoreBtn: {
@@ -686,7 +686,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#111", borderRadius: 18, paddingVertical: 16,
     alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e",
   },
-  notNowText: { color: "#555", fontWeight: "700", fontSize: 15 },
+  notNowText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 
   confirmOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.82)", alignItems: "center", justifyContent: "center", padding: 24 },
   confirmCard: { width: "100%", backgroundColor: "#111", borderRadius: 24, padding: 24, borderWidth: 1, borderColor: "#1f2937" },

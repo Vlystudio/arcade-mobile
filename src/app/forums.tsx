@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import Head from "expo-router/head";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -17,6 +18,7 @@ import {
 import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
+import { ListSkeleton } from "../components/skeleton";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
@@ -178,11 +180,12 @@ export default function ForumsScreen() {
   }
 
   if (authLoading || loading) {
-    return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
+    return <ListSkeleton rows={4} />;
   }
 
   return (
     <View style={styles.root}>
+      <Head><title>Forums · ArcadeTracker</title></Head>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <View style={styles.pageWrap}>
           {/* Header */}
@@ -325,7 +328,7 @@ export default function ForumsScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="e.g. Skee-Ball Tips & Tricks"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={title}
                 onChangeText={(t) => { setTitle(t); setSubmitError(null); }}
                 maxLength={80}
@@ -335,7 +338,7 @@ export default function ForumsScreen() {
               <TextInput
                 style={[styles.input, styles.inputMulti]}
                 placeholder="What will this board be about?"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={description}
                 onChangeText={setDescription}
                 multiline
@@ -434,7 +437,7 @@ const styles = StyleSheet.create({
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40, gap: 12 },
   emptyIcon: { width: 72, height: 72, borderRadius: 36, backgroundColor: "#141414", borderWidth: 1, borderColor: "#222", alignItems: "center", justifyContent: "center" },
   emptyTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
-  emptySub: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
   emptyBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 20, paddingVertical: 12 },
   emptyBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
 
@@ -443,7 +446,7 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: "row", alignItems: "center", gap: 9, marginBottom: 9, paddingHorizontal: 2 },
   sectionStripe: { width: 3.5, height: 15, borderRadius: 2 },
   sectionTitle: { color: "#e8e8e8", fontSize: 14.5, fontWeight: "800", letterSpacing: -0.2, flex: 1 },
-  sectionCount: { color: "#3a3a3a", fontSize: 11.5, fontWeight: "600" },
+  sectionCount: { color: "#6b6b6b", fontSize: 11.5, fontWeight: "600" },
 
   // ── Board rows ──
   boardCard: {
@@ -467,7 +470,7 @@ const styles = StyleSheet.create({
   boardByline: { color: "#383838", fontSize: 11, marginTop: 1 },
   boardStats: { alignItems: "flex-end", minWidth: 64, gap: 0 },
   boardStatNum: { color: "#e8e8e8", fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
-  boardStatLabel: { color: "#444", fontSize: 10.5, fontWeight: "600", marginTop: -1 },
+  boardStatLabel: { color: "#777", fontSize: 10.5, fontWeight: "600", marginTop: -1 },
   boardActivity: { color: "#06b6d4", fontSize: 10.5, fontWeight: "600", marginTop: 4, opacity: 0.75 },
 
   // ── Modal ──
@@ -489,7 +492,7 @@ const styles = StyleSheet.create({
     padding: 10, marginBottom: 16,
     borderWidth: 1, borderColor: "rgba(245,158,11,0.2)",
   },
-  fieldLabel: { color: "#555", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 },
+  fieldLabel: { color: "#8a8a8a", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 },
   input: {
     backgroundColor: "#0d0d0d", borderRadius: 14,
     borderWidth: 1, borderColor: "#222",
@@ -504,7 +507,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#222",
   },
   gameTypeChipActive: { backgroundColor: "rgba(6,182,212,0.12)", borderColor: "#06b6d4" },
-  gameTypeChipText: { color: "#555", fontSize: 13, fontWeight: "600" },
+  gameTypeChipText: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
   gameTypeChipTextActive: { color: "#06b6d4", fontWeight: "700" },
   errorBox: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 10, padding: 10, marginBottom: 12, borderWidth: 1, borderColor: "rgba(239,68,68,0.2)" },
   errorText: { color: "#ef4444", fontSize: 13, flex: 1 },

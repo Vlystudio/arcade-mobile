@@ -349,7 +349,7 @@ export default function FriendsScreen() {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search by username…"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 autoCapitalize="none"
                 value={searchText}
                 onChangeText={t => { setSearchText(t); searchUsers(t); }}
@@ -418,14 +418,14 @@ const styles = StyleSheet.create({
   tabs: { flexDirection: "row", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   tab: { flex: 1, paddingVertical: 14, alignItems: "center" },
   tabActive: { borderBottomWidth: 2, borderBottomColor: "#06b6d4" },
-  tabText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  tabText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
   tabTextActive: { color: "#06b6d4" },
 
   listContent: { paddingHorizontal: 18, paddingTop: 8, paddingBottom: 40 },
   emptyWrap: { flex: 1 },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40, paddingTop: 80, gap: 12 },
   emptyTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
-  emptySub: { color: "#555", fontSize: 14, textAlign: "center" },
+  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center" },
   emptyBtn: { backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 24, paddingVertical: 12 },
   emptyBtnText: { color: "#000", fontWeight: "900", fontSize: 15 },
 
@@ -442,7 +442,7 @@ const styles = StyleSheet.create({
   dotOff: { backgroundColor: "#3a3a3a" },
   info: { flex: 1 },
   name: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  sub:  { color: "#555", fontSize: 12, marginTop: 1 },
+  sub:  { color: "#8a8a8a", fontSize: 12, marginTop: 1 },
 
   iconBtn: {
     width: 36, height: 36, borderRadius: 18,
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 8,
   },
   addBtnText: { color: "#000", fontWeight: "800", fontSize: 13 },
-  noResults: { color: "#444", textAlign: "center", paddingVertical: 20, fontSize: 14 },
+  noResults: { color: "#777", textAlign: "center", paddingVertical: 20, fontSize: 14 },
   hint: { alignItems: "center", gap: 10, paddingTop: 60 },
-  hintText: { color: "#444", fontSize: 14 },
+  hintText: { color: "#777", fontSize: 14 },
 });

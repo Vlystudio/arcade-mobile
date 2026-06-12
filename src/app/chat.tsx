@@ -308,7 +308,7 @@ export default function ChatScreen() {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search friends…"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 autoFocus
                 autoCapitalize="none"
                 value={filterText}
@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
   emptyWrap: { flex: 1 },
   empty: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 40, paddingTop: 80, gap: 10 },
   emptyTitle: { color: "#fff", fontSize: 18, fontWeight: "800" },
-  emptySub: { color: "#555", fontSize: 14, textAlign: "center" },
+  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center" },
   emptyBtn: { marginTop: 8, backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 24, paddingVertical: 12 },
   emptyBtnText: { color: "#000", fontWeight: "900", fontSize: 15 },
 
@@ -501,10 +501,10 @@ const styles = StyleSheet.create({
   convBody: { flex: 1 },
   convName: { color: "#ccc", fontSize: 15, fontWeight: "700", marginBottom: 2 },
   convNameUnread: { color: "#fff", fontWeight: "900" },
-  convLast: { color: "#444", fontSize: 13 },
+  convLast: { color: "#777", fontSize: 13 },
   convLastUnread: { color: "#888", fontWeight: "600" },
   convMeta: { alignItems: "flex-end", gap: 5 },
-  convTime: { color: "#444", fontSize: 12 },
+  convTime: { color: "#777", fontSize: 12 },
   unreadDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: "#06b6d4" },
 
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
@@ -538,8 +538,8 @@ const styles = StyleSheet.create({
   },
   statusDotOnline: { backgroundColor: "#22c55e" },
   resultUsername: { color: "#fff", fontSize: 15, fontWeight: "700" },
-  resultStatus: { color: "#555", fontSize: 12, marginTop: 1 },
+  resultStatus: { color: "#8a8a8a", fontSize: 12, marginTop: 1 },
   noFriendsWrap: { alignItems: "center", gap: 8, paddingVertical: 28 },
-  noResults: { color: "#444", textAlign: "center", fontSize: 14 },
+  noResults: { color: "#777", textAlign: "center", fontSize: 14 },
   addFriendsLink: { color: "#06b6d4", fontSize: 14, fontWeight: "700" },
 });

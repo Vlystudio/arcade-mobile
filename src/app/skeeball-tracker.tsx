@@ -1073,26 +1073,26 @@ const s = StyleSheet.create({
   iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
 
   bigTitle: { color: "#fff", fontSize: 26, fontWeight: "900", textAlign: "center", marginBottom: 8 },
-  bigSub: { color: "#555", fontSize: 14, textAlign: "center" },
+  bigSub: { color: "#8a8a8a", fontSize: 14, textAlign: "center" },
 
-  sectionLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
-  spectatorNote: { color: "#555", fontSize: 14, textAlign: "center", marginBottom: 24 },
+  sectionLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
+  spectatorNote: { color: "#8a8a8a", fontSize: 14, textAlign: "center", marginBottom: 24 },
 
   trophyWrap: { width: 96, height: 96, borderRadius: 48, backgroundColor: "rgba(245,158,11,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 24, borderWidth: 1, borderColor: "rgba(245,158,11,0.25)" },
   placementBadge: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#111", borderRadius: 16, paddingHorizontal: 20, paddingVertical: 14, borderWidth: 1, marginTop: 4, marginBottom: 4 },
   placementEmoji: { fontSize: 32 },
   placementLabel: { fontSize: 20, fontWeight: "900" },
-  placementPts: { color: "#555", fontSize: 13, fontWeight: "600", marginTop: 2 },
+  placementPts: { color: "#8a8a8a", fontSize: 13, fontWeight: "600", marginTop: 2 },
   waitWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 24 },
 
   resultCard: { width: "100%", backgroundColor: "#111", borderRadius: 20, padding: 20, marginTop: 24, borderWidth: 1, borderColor: "#1e1e1e" },
   resultRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   resultName: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  resultBalls: { color: "#444", fontSize: 12, marginTop: 2 },
+  resultBalls: { color: "#777", fontSize: 12, marginTop: 2 },
   resultTotal: { color: "#06b6d4", fontSize: 22, fontWeight: "900" },
   resultDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#2a2a2a", marginVertical: 12 },
   resultTotalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  resultTotalLabel: { color: "#555", fontSize: 14, fontWeight: "700" },
+  resultTotalLabel: { color: "#8a8a8a", fontSize: 14, fontWeight: "700" },
   resultTotalValue: { color: "#22c55e", fontSize: 28, fontWeight: "900" },
 
   doneBtn: { backgroundColor: "#06b6d4", borderRadius: 18, paddingHorizontal: 32, paddingVertical: 16, marginTop: 32 },
@@ -1101,7 +1101,7 @@ const s = StyleSheet.create({
   laneChip: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(6,182,212,0.1)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, alignSelf: "flex-start", marginBottom: 20, borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
   laneChipText: { color: "#06b6d4", fontWeight: "800", fontSize: 14 },
   scoreTitle: { color: "#fff", fontSize: 22, fontWeight: "900", marginBottom: 6 },
-  scoreSub: { color: "#555", fontSize: 13, marginBottom: 24 },
+  scoreSub: { color: "#8a8a8a", fontSize: 13, marginBottom: 24 },
 
   orderCard: {
     backgroundColor: "rgba(6,182,212,0.04)", borderRadius: 16, padding: 14, marginBottom: 14,
@@ -1109,7 +1109,7 @@ const s = StyleSheet.create({
   },
   orderHeader: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 4 },
   orderTitle: { color: "#fff", fontSize: 14, fontWeight: "800", flex: 1 },
-  orderHint: { color: "#555", fontSize: 11.5, lineHeight: 16, marginBottom: 10 },
+  orderHint: { color: "#8a8a8a", fontSize: 11.5, lineHeight: 16, marginBottom: 10 },
   orderRow: {
     flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 7,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(6,182,212,0.12)",
@@ -1137,11 +1137,11 @@ const s = StyleSheet.create({
   playerSectionTotal: { color: "#06b6d4", fontSize: 16, fontWeight: "900" },
 
   ballRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a", gap: 12 },
-  ballLabel: { color: "#555", fontSize: 14, fontWeight: "700", width: 48 },
+  ballLabel: { color: "#8a8a8a", fontSize: 14, fontWeight: "700", width: 48 },
   ballInput: { flex: 1, color: "#fff", fontSize: 28, fontWeight: "900", textAlign: "center" },
   ballUnit: { color: "#333", fontSize: 13, fontWeight: "700", width: 28, textAlign: "right" },
   totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 12, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#1a1a1a" },
-  totalLabel: { color: "#555", fontSize: 14 },
+  totalLabel: { color: "#8a8a8a", fontSize: 14 },
   totalValue: { color: "#06b6d4", fontSize: 22, fontWeight: "900" },
 
   submitBtn: { backgroundColor: "#06b6d4", borderRadius: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 18, marginBottom: 12 },
@@ -1164,13 +1164,13 @@ const s = StyleSheet.create({
   laneBtnSel: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
   laneBtnTaken: { backgroundColor: "#0d0d0d", borderColor: "#1e1e1e" },
   laneBtnNum: { color: "#fff", fontSize: 22, fontWeight: "900" },
-  laneBtnStatus: { color: "#444", fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
-  laneTeamName: { color: "#555", fontSize: 10, textAlign: "center", paddingHorizontal: 2 },
+  laneBtnStatus: { color: "#777", fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  laneTeamName: { color: "#8a8a8a", fontSize: 10, textAlign: "center", paddingHorizontal: 2 },
 
   progressRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   progressCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e", borderBottomWidth: 0 },
   progressName: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  progressSub: { color: "#444", fontSize: 12, marginTop: 1 },
+  progressSub: { color: "#777", fontSize: 12, marginTop: 1 },
   youChip: { backgroundColor: "rgba(6,182,212,0.12)", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   youChipText: { color: "#06b6d4", fontSize: 10, fontWeight: "900" },
   ballDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#1e1e1e", borderWidth: 1, borderColor: "#2a2a2a" },
@@ -1179,7 +1179,7 @@ const s = StyleSheet.create({
   kickBtn: { position: "absolute", top: 4, right: 4, padding: 2 },
 
   // Ring-tap scoring
-  ringHint: { color: "#555", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 12 },
+  ringHint: { color: "#8a8a8a", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 12 },
   ringGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
   ringBtn: {
     width: "30%", paddingVertical: 18, borderRadius: 14, backgroundColor: "#111",
@@ -1194,12 +1194,12 @@ const s = StyleSheet.create({
   chip: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1 },
   chipText: { fontSize: 14, fontWeight: "900" },
   undoBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 6, paddingHorizontal: 10 },
-  undoText: { color: "#555", fontSize: 12 },
+  undoText: { color: "#8a8a8a", fontSize: 12 },
 
   completeRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 4 },
   completeText: { color: "#22c55e", fontSize: 14, fontWeight: "800" },
   playerSectionDim: { opacity: 0.5 },
-  upNextText: { color: "#444", fontSize: 12, fontStyle: "italic", paddingTop: 4 },
+  upNextText: { color: "#777", fontSize: 12, fontStyle: "italic", paddingTop: 4 },
 
   warningOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", alignItems: "center", justifyContent: "center", padding: 32 },
   warningCard: { width: "100%", backgroundColor: "#111", borderRadius: 24, padding: 28, alignItems: "center", borderWidth: 1.5, borderColor: "rgba(239,68,68,0.4)" },

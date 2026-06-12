@@ -1,18 +1,76 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import Head from "expo-router/head";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Animated,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+
+const CONFETTI_COLORS = ["#06b6d4", "#f59e0b", "#22c55e", "#a855f7", "#ef4444", "#fff"];
+
+/** Lightweight confetti burst — pure Animated views, fires once per mount. */
+function ConfettiBurst() {
+  const { width, height } = useWindowDimensions();
+  const pieces = useRef(
+    Array.from({ length: 28 }, (_, i) => ({
+      x: Math.random() * width,
+      drift: (Math.random() - 0.5) * 120,
+      size: 6 + Math.random() * 7,
+      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+      delay: Math.random() * 500,
+      anim: new Animated.Value(0),
+      spin: Math.random() > 0.5 ? "360deg" : "-360deg",
+    })),
+  ).current;
+
+  useEffect(() => {
+    pieces.forEach((p) => {
+      Animated.timing(p.anim, {
+        toValue: 1,
+        duration: 2200 + Math.random() * 800,
+        delay: p.delay,
+        useNativeDriver: true,
+      }).start();
+    });
+  }, []);
+
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {pieces.map((p, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            position: "absolute",
+            left: p.x,
+            top: -20,
+            width: p.size,
+            height: p.size * 1.6,
+            borderRadius: 2,
+            backgroundColor: p.color,
+            opacity: p.anim.interpolate({ inputRange: [0, 0.8, 1], outputRange: [1, 1, 0] }),
+            transform: [
+              { translateY: p.anim.interpolate({ inputRange: [0, 1], outputRange: [0, height + 40] }) },
+              { translateX: p.anim.interpolate({ inputRange: [0, 1], outputRange: [0, p.drift] }) },
+              { rotate: p.anim.interpolate({ inputRange: [0, 1], outputRange: ["0deg", p.spin] }) },
+            ],
+          }}
+        />
+      ))}
+    </View>
+  );
+}
 
 const TOTAL_BALLS = 9;
 
@@ -131,6 +189,43 @@ export default function SkeeballLiveScreen() {
     return () => { channelsRef.current.forEach((c) => c.unsubscribe()); };
   }, [user]);
 
+  // TV mode (web): keep the screen awake while the dashboard is up
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    let lock: any = null;
+    const acquire = async () => {
+      try { lock = await (navigator as any).wakeLock?.request?.("screen"); } catch {}
+    };
+    acquire();
+    const onVis = () => { if (document.visibilityState === "visible") acquire(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      try { lock?.release?.(); } catch {}
+    };
+  }, []);
+
+  function toggleFullscreen() {
+    if (Platform.OS !== "web") return;
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen();
+    } catch {}
+  }
+
+  // Confetti when the round finishes while we're watching
+  const [celebrate, setCelebrate] = useState(false);
+  const wasDoneRef = useRef(false);
+  const roundDone = sessions.length > 0 && sessions.every((sess) => sess.status === "completed");
+  useEffect(() => {
+    if (roundDone && !wasDoneRef.current && sessions.length > 0) {
+      setCelebrate(true);
+      const t = setTimeout(() => setCelebrate(false), 3500);
+      return () => clearTimeout(t);
+    }
+    wasDoneRef.current = roundDone;
+  }, [roundDone]);
+
   if (authLoading || loading) {
     return <View style={s.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
   }
@@ -147,6 +242,7 @@ export default function SkeeballLiveScreen() {
 
   return (
     <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+      <Head><title>League Night Live · ArcadeTracker</title></Head>
       <View style={s.header}>
         <Pressable style={s.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace("/leagues" as any)}>
           <Ionicons name="chevron-back" size={22} color="#fff" />
@@ -161,6 +257,11 @@ export default function SkeeballLiveScreen() {
             {allDone ? " · round complete" : ""}
           </Text>
         </View>
+        {Platform.OS === "web" && (
+          <Pressable style={s.backBtn} onPress={toggleFullscreen} hitSlop={6}>
+            <Ionicons name="expand-outline" size={20} color="#555" />
+          </Pressable>
+        )}
       </View>
 
       <ScrollView
@@ -217,6 +318,7 @@ export default function SkeeballLiveScreen() {
           </>
         )}
       </ScrollView>
+      {celebrate && <ConfettiBurst />}
     </SafeAreaView>
   );
 }
@@ -233,7 +335,7 @@ const s = StyleSheet.create({
   },
   backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  headerSub: { color: "#444", fontSize: 12, marginTop: 1 },
+  headerSub: { color: "#777", fontSize: 12, marginTop: 1 },
   liveBadge: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: "rgba(239,68,68,0.12)", borderRadius: 8,
@@ -244,13 +346,13 @@ const s = StyleSheet.create({
   liveBadgeText: { color: "#ef4444", fontSize: 10, fontWeight: "900" },
 
   sectionLabel: {
-    color: "#3a3a3a", fontSize: 10, fontWeight: "800",
+    color: "#6b6b6b", fontSize: 10, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1.4, marginBottom: 12,
   },
 
   empty: { alignItems: "center", gap: 12, paddingVertical: 80, paddingHorizontal: 32 },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
-  emptySub: { color: "#555", fontSize: 13.5, textAlign: "center", lineHeight: 19 },
+  emptySub: { color: "#8a8a8a", fontSize: 13.5, textAlign: "center", lineHeight: 19 },
 
   teamCard: {
     backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 10,
@@ -258,12 +360,12 @@ const s = StyleSheet.create({
   },
   teamCardActive: { borderColor: "rgba(6,182,212,0.3)" },
   teamRow: { flexDirection: "row", alignItems: "center", gap: 12 },
-  placeNum: { width: 36, fontSize: 18, fontWeight: "900", color: "#555", textAlign: "center" },
+  placeNum: { width: 36, fontSize: 18, fontWeight: "900", color: "#8a8a8a", textAlign: "center" },
   teamName: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  teamMeta: { color: "#555", fontSize: 11.5, marginTop: 2 },
+  teamMeta: { color: "#8a8a8a", fontSize: 11.5, marginTop: 2 },
   teamTotal: { color: "#06b6d4", fontSize: 24, fontWeight: "900", letterSpacing: -0.5 },
   progressTrack: { height: 5, borderRadius: 3, backgroundColor: "#1a1a1a", overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: 3 },
 
-  note: { color: "#3a3a3a", fontSize: 11.5, textAlign: "center", lineHeight: 17, marginTop: 10, paddingHorizontal: 12 },
+  note: { color: "#6b6b6b", fontSize: 11.5, textAlign: "center", lineHeight: 17, marginTop: 10, paddingHorizontal: 12 },
 });

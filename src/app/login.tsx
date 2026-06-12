@@ -225,7 +225,8 @@ export default function LoginScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Email or username"
-                placeholderTextColor="#333"
+                textContentType="username"
+                placeholderTextColor="#555"
                 autoCapitalize="none"
                 keyboardType="default"
                 autoComplete="username"
@@ -240,7 +241,8 @@ export default function LoginScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Password"
-                placeholderTextColor="#333"
+                textContentType="password"
+                placeholderTextColor="#555"
                 secureTextEntry={!showPassword}
                 autoComplete="current-password"
                 returnKeyType="done"
@@ -402,7 +404,9 @@ export default function LoginScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Email address"
-                    placeholderTextColor="#333"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    placeholderTextColor="#555"
                     autoCapitalize="none"
                     keyboardType="email-address"
                     value={forgotEmail}
@@ -463,7 +467,9 @@ export default function LoginScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Email address"
-                    placeholderTextColor="#333"
+                    autoComplete="email"
+                    textContentType="emailAddress"
+                    placeholderTextColor="#555"
                     autoCapitalize="none"
                     keyboardType="email-address"
                     value={resetEmail}
@@ -516,7 +522,7 @@ const styles = StyleSheet.create({
   },
   logoMarkText: { color: "#000", fontSize: 22, fontWeight: "900", letterSpacing: -1 },
   appName:  { color: "#fff", fontSize: 26, fontWeight: "900", letterSpacing: -0.5, marginBottom: 6 },
-  tagline:  { color: "#444", fontSize: 14 },
+  tagline:  { color: "#777", fontSize: 14 },
 
   form: { backgroundColor: "#111", borderRadius: 24, padding: 24, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24 },
   formTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 20 },
@@ -542,7 +548,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   checkboxActive: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
-  rememberLabel: { color: "#555", fontSize: 13, fontWeight: "600" },
+  rememberLabel: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
   forgotLinks: { gap: 6 },
   forgotLink: { color: "#06b6d4", fontSize: 12, fontWeight: "700", textAlign: "right" },
 
@@ -555,14 +561,14 @@ const styles = StyleSheet.create({
   submitBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
 
   footer: { flexDirection: "row", justifyContent: "center", alignItems: "center" },
-  footerText: { color: "#555", fontSize: 14 },
+  footerText: { color: "#8a8a8a", fontSize: 14 },
   footerLink: { color: "#06b6d4", fontSize: 14, fontWeight: "800" },
 
   demoBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center",
     gap: 6, marginTop: 20, paddingVertical: 10,
   },
-  demoBtnText: { color: "#555", fontSize: 13 },
+  demoBtnText: { color: "#8a8a8a", fontSize: 13 },
 
   errorBox: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -594,7 +600,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(6,182,212,0.2)", alignItems: "center", justifyContent: "center",
   },
   sheetTitle: { color: "#fff", fontSize: 20, fontWeight: "900", textAlign: "center" },
-  sheetSub:   { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  sheetSub:   { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
 
   // Full-screen ToS modal
   tosModalRoot: { flex: 1, backgroundColor: "#000" },
@@ -609,7 +615,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(6,182,212,0.2)", alignItems: "center", justifyContent: "center",
   },
   tosModalTitle:   { color: "#fff", fontSize: 15, fontWeight: "800" },
-  tosModalVersion: { color: "#444", fontSize: 11, marginTop: 2 },
+  tosModalVersion: { color: "#777", fontSize: 11, marginTop: 2 },
 
   tosScrollHint: {
     flexDirection: "row", alignItems: "center", gap: 6,
@@ -656,14 +662,14 @@ const styles = StyleSheet.create({
   sheetBtnText: { color: "#000", fontWeight: "900", fontSize: 15 },
 
   sheetCancel: { backgroundColor: "#0d0d0d", borderRadius: 14, padding: 14, alignItems: "center" },
-  sheetCancelText: { color: "#555", fontWeight: "700", fontSize: 15 },
+  sheetCancelText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 
   resultBox: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: "rgba(34,197,94,0.08)", borderRadius: 14,
     padding: 16, borderWidth: 1, borderColor: "rgba(34,197,94,0.2)",
   },
-  resultLabel: { color: "#555", fontSize: 13 },
+  resultLabel: { color: "#8a8a8a", fontSize: 13 },
   resultValue: { color: "#22c55e", fontSize: 18, fontWeight: "900", marginTop: 2 },
 
   noticeBanner: {
@@ -673,5 +679,5 @@ const styles = StyleSheet.create({
     borderRadius: 16, padding: 14, marginBottom: 24,
   },
   noticeTitle: { color: "#06b6d4", fontSize: 13, fontWeight: "800", marginBottom: 3 },
-  noticeBody: { color: "#555", fontSize: 13, lineHeight: 19 },
+  noticeBody: { color: "#8a8a8a", fontSize: 13, lineHeight: 19 },
 });

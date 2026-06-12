@@ -431,7 +431,7 @@ const styles = StyleSheet.create({
 
   pageHeader: { marginBottom: 20 },
   pageTitle: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5 },
-  pageSub: { color: "#555", fontSize: 14, marginTop: 2 },
+  pageSub: { color: "#8a8a8a", fontSize: 14, marginTop: 2 },
 
   summaryStrip: {
     flexDirection: "row", backgroundColor: "#111",
@@ -440,7 +440,7 @@ const styles = StyleSheet.create({
   },
   summaryItem: { flex: 1, alignItems: "center" },
   summaryValue: { color: "#fff", fontSize: 22, fontWeight: "900", letterSpacing: -0.5 },
-  summaryLabel: { color: "#444", fontSize: 11, fontWeight: "600", marginTop: 2 },
+  summaryLabel: { color: "#777", fontSize: 11, fontWeight: "600", marginTop: 2 },
   summaryDivider: { width: StyleSheet.hairlineWidth, backgroundColor: "#222" },
 
   poolCard: {
@@ -467,7 +467,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginBottom: 4,
   },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
-  emptySub: { color: "#555", fontSize: 14, textAlign: "center" },
+  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center" },
 
   section: { marginBottom: 24 },
   sectionLabel: {
@@ -508,7 +508,7 @@ const styles = StyleSheet.create({
   groupIconWrap: { width: 50, height: 50, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   groupInfo: { flex: 1 },
   groupTitle: { color: "#fff", fontSize: 17, fontWeight: "900", marginBottom: 3 },
-  groupCount: { color: "#555", fontSize: 12 },
+  groupCount: { color: "#8a8a8a", fontSize: 12 },
   groupArrow: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
 
   // Other games
@@ -520,7 +520,7 @@ const styles = StyleSheet.create({
   otherIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   otherInfo: { flex: 1 },
   otherName: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 2 },
-  otherMeta: { color: "#555", fontSize: 12 },
+  otherMeta: { color: "#8a8a8a", fontSize: 12 },
   otherBtn: {
     borderRadius: 12, borderWidth: 1,
     paddingHorizontal: 12, paddingVertical: 7,
@@ -543,8 +543,8 @@ const styles = StyleSheet.create({
   },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", letterSpacing: -0.3, marginBottom: 2 },
-  modalSub: { color: "#555", fontSize: 13, marginBottom: 20 },
-  emptyText: { color: "#444", fontSize: 14, textAlign: "center", paddingVertical: 20 },
+  modalSub: { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
+  emptyText: { color: "#777", fontSize: 14, textAlign: "center", paddingVertical: 20 },
 
   // Lane grid (inside lane modal)
   lanesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },

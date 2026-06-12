@@ -67,7 +67,7 @@ const s = StyleSheet.create({
   root:   { flex: 1, backgroundColor: "#000" },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 28, gap: 16 },
 
-  loadText: { color: "#555", fontSize: 14, marginTop: 8 },
+  loadText: { color: "#8a8a8a", fontSize: 14, marginTop: 8 },
 
   errorIcon: {
     width: 88, height: 88, borderRadius: 44,
@@ -75,7 +75,7 @@ const s = StyleSheet.create({
     borderColor: "rgba(239,68,68,0.25)", alignItems: "center", justifyContent: "center",
   },
   errorTitle: { color: "#ef4444", fontSize: 22, fontWeight: "900" },
-  errorSub:   { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  errorSub:   { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
   btn: {
     backgroundColor: "#06b6d4", borderRadius: 14,
     paddingHorizontal: 48, paddingVertical: 16, marginTop: 8,

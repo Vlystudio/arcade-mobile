@@ -219,7 +219,7 @@ const s = StyleSheet.create({
   },
   headerTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
   content: { paddingHorizontal: 22, paddingTop: 20 },
-  updated: { color: "#444", fontSize: 12, marginBottom: 24 },
+  updated: { color: "#777", fontSize: 12, marginBottom: 24 },
   section: { marginBottom: 28 },
   sectionTitle: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 10 },
   sectionBody: { color: "#888", fontSize: 14, lineHeight: 22 },

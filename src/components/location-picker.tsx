@@ -56,7 +56,7 @@ export function LocationPicker({ compact = false }: Props) {
 const styles = StyleSheet.create({
   container: { marginBottom: 8 },
   header: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 12 },
-  headerText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  headerText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
 
   cards: { flexDirection: "row", gap: 10 },
   card: {

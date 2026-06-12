@@ -31,6 +31,7 @@ import {
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { API_BASE } from "../../lib/api-base";
+import { showToast } from "../components/toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1131,6 +1132,7 @@ export default function AdminScreen() {
     if (inserts.length) {
       await supabase.from("team_schedule").insert(inserts);
       notifyScheduleSaved(); // fire-and-forget push to scheduled teams
+      showToast("Schedule saved — teams notified");
     }
     setSavingSchedule(false);
   }
@@ -2202,7 +2204,7 @@ export default function AdminScreen() {
                 <TextInput
                   style={styles.schedWeekInput}
                   placeholder="Week label (e.g. Week 1, June 9…)"
-                  placeholderTextColor="#333"
+                  placeholderTextColor="#555"
                   value={weekLabel}
                   onChangeText={setWeekLabel}
                 />
@@ -2226,12 +2228,13 @@ export default function AdminScreen() {
                 )}
               </View>
 
-              {/* Slot sections */}
+              {/* Slot sections (side-by-side columns on desktop web) */}
+              <View style={Platform.OS === "web" ? styles.schedColumnsWeb : undefined}>
               {SCHED_SLOTS.map((slot) => {
                 const assignedIds = schedule[slot] ?? [];
                 const assigned = assignedIds.map((id) => schedTeams.find((t) => t.id === id)).filter(Boolean) as SchedulerTeam[];
                 return (
-                  <View key={slot} style={styles.schedSlotSection}>
+                  <View key={slot} style={[styles.schedSlotSection, Platform.OS === "web" && { flex: 1 }]}>
                     <View style={styles.schedSlotHeader}>
                       <Text style={styles.schedSlotTime}>{slot}</Text>
                       <View style={styles.schedSlotCount}>
@@ -2272,6 +2275,7 @@ export default function AdminScreen() {
                   </View>
                 );
               })}
+              </View>
 
               {/* Unassigned teams */}
               {(() => {
@@ -2725,7 +2729,7 @@ export default function AdminScreen() {
                 <TextInput
                   style={styles.suppReplyInput}
                   placeholder="Reply…"
-                  placeholderTextColor="#333"
+                  placeholderTextColor="#555"
                   value={supportReply}
                   onChangeText={setSupportReply}
                   multiline
@@ -2802,7 +2806,7 @@ export default function AdminScreen() {
                   architect: { color: "#a855f7" },
                   owner:     { color: "#f59e0b" },
                   admin:     { color: "#3b82f6" },
-                  user:      { color: "#444" },
+                  user:      { color: "#777" },
                 };
                 const color = cfg[u.role]?.color ?? "#444";
                 const availableRoles = userRole === "architect"
@@ -3132,16 +3136,16 @@ export default function AdminScreen() {
                     style={styles.triviaFormInput}
                     value={gForm.title}
                     onChangeText={v => setGForm(f => ({ ...f, title: v }))}
-                    placeholderTextColor="#333"
+                    placeholderTextColor="#555"
                   />
                   <View style={styles.triviaFormRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.triviaFormLabel}>Max Players</Text>
-                      <TextInput style={styles.triviaFormInput} keyboardType="number-pad" value={gForm.maxParticipants} onChangeText={v => setGForm(f => ({ ...f, maxParticipants: v }))} placeholderTextColor="#333" />
+                      <TextInput style={styles.triviaFormInput} keyboardType="number-pad" value={gForm.maxParticipants} onChangeText={v => setGForm(f => ({ ...f, maxParticipants: v }))} placeholderTextColor="#555" />
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.triviaFormLabel}>Min Team Size</Text>
-                      <TextInput style={styles.triviaFormInput} keyboardType="number-pad" value={gForm.minTeamSize} onChangeText={v => setGForm(f => ({ ...f, minTeamSize: v }))} placeholderTextColor="#333" />
+                      <TextInput style={styles.triviaFormInput} keyboardType="number-pad" value={gForm.minTeamSize} onChangeText={v => setGForm(f => ({ ...f, minTeamSize: v }))} placeholderTextColor="#555" />
                     </View>
                   </View>
                   <View style={styles.triviaToggleRow}>
@@ -3365,7 +3369,7 @@ export default function AdminScreen() {
                   style={[styles.triviaFormInput, { minHeight: 60, textAlignVertical: "top" }]}
                   multiline
                   placeholder="Enter question text..."
-                  placeholderTextColor="#333"
+                  placeholderTextColor="#555"
                   value={qForm.question}
                   onChangeText={v => setQForm(f => ({ ...f, question: v }))}
                 />
@@ -3398,13 +3402,13 @@ export default function AdminScreen() {
                         <TextInput
                           style={[styles.triviaFormInput, { flex: 1, marginBottom: 0 }]}
                           placeholder={`Option ${["A","B","C","D"][i]}${i < 2 ? " (required)" : " (optional)"}`}
-                          placeholderTextColor="#333"
+                          placeholderTextColor="#555"
                           value={qForm[key]}
                           onChangeText={v => setQForm(f => ({ ...f, [key]: v }))}
                         />
                       </View>
                     ))}
-                    <Text style={[styles.triviaFormLabel, { fontSize: 11, color: "#444" }]}>Tap a letter to mark it as correct answer</Text>
+                    <Text style={[styles.triviaFormLabel, { fontSize: 11, color: "#777" }]}>Tap a letter to mark it as correct answer</Text>
                   </>
                 )}
                 {qForm.type === "text" && (
@@ -3413,7 +3417,7 @@ export default function AdminScreen() {
                     <TextInput
                       style={styles.triviaFormInput}
                       placeholder="Expected answer (for auto-grading)"
-                      placeholderTextColor="#333"
+                      placeholderTextColor="#555"
                       value={qForm.correct}
                       onChangeText={v => setQForm(f => ({ ...f, correct: v }))}
                     />
@@ -3422,11 +3426,11 @@ export default function AdminScreen() {
                 <View style={styles.triviaFormRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.triviaFormLabel}>Points</Text>
-                    <TextInput style={styles.triviaFormInput} keyboardType="number-pad" value={qForm.points} onChangeText={v => setQForm(f => ({ ...f, points: v }))} placeholderTextColor="#333" />
+                    <TextInput style={styles.triviaFormInput} keyboardType="number-pad" value={qForm.points} onChangeText={v => setQForm(f => ({ ...f, points: v }))} placeholderTextColor="#555" />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.triviaFormLabel}>Category</Text>
-                    <TextInput style={styles.triviaFormInput} placeholder="e.g. History" placeholderTextColor="#333" value={qForm.category} onChangeText={v => setQForm(f => ({ ...f, category: v }))} />
+                    <TextInput style={styles.triviaFormInput} placeholder="e.g. History" placeholderTextColor="#555" value={qForm.category} onChangeText={v => setQForm(f => ({ ...f, category: v }))} />
                   </View>
                 </View>
                 <View style={{ flexDirection: "row", gap: 8 }}>
@@ -3697,7 +3701,7 @@ export default function AdminScreen() {
             <TextInput
               style={[styles.editTournInput, { width: "100%", marginBottom: 16 }]}
               placeholder='Season name (e.g. "Summer 2026")'
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={newSeasonName}
               onChangeText={setNewSeasonName}
               maxLength={60}
@@ -3736,7 +3740,7 @@ export default function AdminScreen() {
             <TextInput
               style={[styles.editTournInput, { marginBottom: 12 }]}
               placeholder="e.g. 2 or -1"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={skeeAdjLp}
               onChangeText={setSkeeAdjLp}
               keyboardType="numbers-and-punctuation"
@@ -3746,7 +3750,7 @@ export default function AdminScreen() {
             <TextInput
               style={[styles.editTournInput, { marginBottom: 12 }]}
               placeholder="e.g. 50 or -30"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={skeeAdjScore}
               onChangeText={setSkeeAdjScore}
               keyboardType="numbers-and-punctuation"
@@ -3756,7 +3760,7 @@ export default function AdminScreen() {
             <TextInput
               style={[styles.editTournInput, { marginBottom: 16 }]}
               placeholder="Reason for adjustment..."
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={skeeAdjNote}
               onChangeText={setSkeeAdjNote}
               maxLength={200}
@@ -3827,7 +3831,7 @@ export default function AdminScreen() {
                   <TextInput
                     style={styles.resultInput}
                     placeholder="username"
-                    placeholderTextColor="#333"
+                    placeholderTextColor="#555"
                     value={entry.username}
                     onChangeText={(v) => setResultEntries((prev) => prev.map((e, j) => j === i ? { ...e, username: v } : e))}
                     autoCapitalize="none"
@@ -3882,7 +3886,7 @@ export default function AdminScreen() {
             <TextInput
               style={[styles.confirmInput, { marginBottom: 20 }]}
               placeholder="Optional note to requester..."
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={denyNote}
               onChangeText={setDenyNote}
               maxLength={200}
@@ -3924,7 +3928,7 @@ export default function AdminScreen() {
             <TextInput
               style={styles.editTournInput}
               placeholder={editTournTarget?.title ?? "Title"}
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={editTournForm.title}
               onChangeText={v => setEditTournForm(f => ({ ...f, title: v }))}
             />
@@ -3933,7 +3937,7 @@ export default function AdminScreen() {
             <TextInput
               style={styles.editTournInput}
               placeholder="e.g. pinball"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={editTournForm.game_type}
               onChangeText={v => setEditTournForm(f => ({ ...f, game_type: v }))}
             />
@@ -3942,7 +3946,7 @@ export default function AdminScreen() {
             <TextInput
               style={styles.editTournInput}
               placeholder="2025-08-15"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={editTournForm.proposed_date}
               onChangeText={v => setEditTournForm(f => ({ ...f, proposed_date: v }))}
             />
@@ -3951,7 +3955,7 @@ export default function AdminScreen() {
             <TextInput
               style={styles.editTournInput}
               placeholder="20"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               keyboardType="number-pad"
               value={editTournForm.max_players}
               onChangeText={v => setEditTournForm(f => ({ ...f, max_players: v }))}
@@ -3962,7 +3966,7 @@ export default function AdminScreen() {
               <TextInput
                 style={styles.editTournInput}
                 placeholder="7:30 PM"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={editTournForm.signup_time}
                 onChangeText={v => setEditTournForm(f => ({ ...f, signup_time: v }))}
               />
@@ -3970,7 +3974,7 @@ export default function AdminScreen() {
               <TextInput
                 style={styles.editTournInput}
                 placeholder="8:00 PM"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={editTournForm.start_time}
                 onChangeText={v => setEditTournForm(f => ({ ...f, start_time: v }))}
               />
@@ -4071,8 +4075,8 @@ export default function AdminScreen() {
               <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
                 {(() => {
                   const round = (bracketData?.rounds as BracketRound[] | null)?.find(r => r.round_number === bracketRoundTab);
-                  if (!round) return <Text style={{ color: "#444", textAlign: "center", marginTop: 40 }}>Round not yet started</Text>;
-                  if (!round.groups) return <Text style={{ color: "#444", textAlign: "center", marginTop: 40 }}>No groups yet</Text>;
+                  if (!round) return <Text style={{ color: "#777", textAlign: "center", marginTop: 40 }}>Round not yet started</Text>;
+                  if (!round.groups) return <Text style={{ color: "#777", textAlign: "center", marginTop: 40 }}>No groups yet</Text>;
                   return round.groups.map(g => {
                     const currentGame = (g.games ?? []).find(gm => gm.status === "pending") ?? (g.games ?? []).slice(-1)[0];
                     const activePlayers = (g.slots ?? []).filter(s => s.status === "active");
@@ -4199,7 +4203,7 @@ export default function AdminScreen() {
                 <TextInput
                   style={styles.scoreEntryInput}
                   placeholder="0"
-                  placeholderTextColor="#333"
+                  placeholderTextColor="#555"
                   keyboardType="number-pad"
                   value={gameScores[String(p.seed)] ?? ""}
                   onChangeText={v => setGameScores(prev => ({ ...prev, [String(p.seed)]: v }))}
@@ -4245,7 +4249,7 @@ export default function AdminScreen() {
                   {w.final_rank === 1 ? "🥇" : w.final_rank === 2 ? "🥈" : w.final_rank === 3 ? "🥉" : "4️⃣"}
                 </Text>
                 <Text style={{ color: "#fff", fontSize: 17, fontWeight: "700", flex: 1 }}>{w.username}</Text>
-                <Text style={{ color: "#555", fontSize: 13 }}>#{w.final_rank}</Text>
+                <Text style={{ color: "#8a8a8a", fontSize: 13 }}>#{w.final_rank}</Text>
               </View>
             ))}
             <Pressable style={[styles.editTournSaveBtn, { marginTop: 20, width: "100%" }]} onPress={() => setBracketWinners(null)}>
@@ -4296,7 +4300,7 @@ export default function AdminScreen() {
             <TextInput
               style={[styles.confirmInput, { marginBottom: 12, minHeight: 100 }]}
               placeholder={"Team Alpha\nTeam Bravo\nTeam Charlie"}
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               value={createTeamNames}
               onChangeText={setCreateTeamNames}
               multiline
@@ -4334,7 +4338,7 @@ export default function AdminScreen() {
                 <Ionicons name="close" size={22} color="#555" />
               </Pressable>
             </View>
-            <Text style={{ color: "#555", fontSize: 13, marginBottom: 16 }}>
+            <Text style={{ color: "#8a8a8a", fontSize: 13, marginBottom: 16 }}>
               Captain: {manageTeamTarget?.captain_username}
             </Text>
 
@@ -4347,11 +4351,11 @@ export default function AdminScreen() {
             ) : (
               <ScrollView showsVerticalScrollIndicator={false}>
                 {/* Members */}
-                <Text style={{ color: "#444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
+                <Text style={{ color: "#777", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
                   Members ({manageTeamMembers.length})
                 </Text>
                 {manageTeamMembers.length === 0 ? (
-                  <Text style={{ color: "#444", fontSize: 14, marginBottom: 16 }}>No members yet.</Text>
+                  <Text style={{ color: "#777", fontSize: 14, marginBottom: 16 }}>No members yet.</Text>
                 ) : (
                   manageTeamMembers.map((m) => (
                     <View key={m.user_id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
@@ -4385,13 +4389,13 @@ export default function AdminScreen() {
                 )}
 
                 {/* Add member */}
-                <Text style={{ color: "#444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 8 }}>
+                <Text style={{ color: "#777", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 8 }}>
                   Add Member
                 </Text>
                 <TextInput
                   style={[styles.confirmInput, { minHeight: 0, marginBottom: 8 }]}
                   placeholder="Search users by username..."
-                  placeholderTextColor="#333"
+                  placeholderTextColor="#555"
                   value={addMemberQuery}
                   onChangeText={setAddMemberQuery}
                   autoCapitalize="none"
@@ -4403,7 +4407,7 @@ export default function AdminScreen() {
                     .filter((u) => !memberIds.has(u.id) && u.username?.toLowerCase().includes(q))
                     .slice(0, 5);
                   if (matches.length === 0) {
-                    return <Text style={{ color: "#444", fontSize: 13, marginBottom: 16 }}>No matching users.</Text>;
+                    return <Text style={{ color: "#777", fontSize: 13, marginBottom: 16 }}>No matching users.</Text>;
                   }
                   return matches.map((u) => (
                     <View key={u.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
@@ -4423,11 +4427,11 @@ export default function AdminScreen() {
                 })()}
 
                 {/* Join requests */}
-                <Text style={{ color: "#444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 8 }}>
+                <Text style={{ color: "#777", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginTop: 16, marginBottom: 8 }}>
                   Pending Join Requests ({manageTeamRequests.length})
                 </Text>
                 {manageTeamRequests.length === 0 ? (
-                  <Text style={{ color: "#444", fontSize: 14 }}>No pending requests.</Text>
+                  <Text style={{ color: "#777", fontSize: 14 }}>No pending requests.</Text>
                 ) : (
                   manageTeamRequests.map((r) => (
                     <View key={r.request_id} style={{ backgroundColor: "#0d0d0d", borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
@@ -4436,7 +4440,7 @@ export default function AdminScreen() {
                         <Text style={{ flex: 1, color: "#ccc", fontSize: 14, fontWeight: "700", marginLeft: 8 }} numberOfLines={1}>{r.username}</Text>
                       </View>
                       {r.message && (
-                        <Text style={{ color: "#555", fontSize: 12, marginTop: 4, marginLeft: 22 }} numberOfLines={2}>"{r.message}"</Text>
+                        <Text style={{ color: "#8a8a8a", fontSize: 12, marginTop: 4, marginLeft: 22 }} numberOfLines={2}>"{r.message}"</Text>
                       )}
                       <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
                         <Pressable
@@ -4517,7 +4521,7 @@ export default function AdminScreen() {
                 <Ionicons name="close" size={22} color="#555" />
               </Pressable>
             </View>
-            <Text style={{ color: "#555", fontSize: 13, marginBottom: 16 }} numberOfLines={1}>
+            <Text style={{ color: "#8a8a8a", fontSize: 13, marginBottom: 16 }} numberOfLines={1}>
               {playerListTarget?.title}
             </Text>
 
@@ -4528,7 +4532,7 @@ export default function AdminScreen() {
             {playerListLoading ? (
               <ActivityIndicator color="#06b6d4" style={{ marginVertical: 24 }} />
             ) : playerList.length === 0 ? (
-              <Text style={{ color: "#444", fontSize: 14, textAlign: "center", paddingVertical: 24 }}>No players registered yet.</Text>
+              <Text style={{ color: "#777", fontSize: 14, textAlign: "center", paddingVertical: 24 }}>No players registered yet.</Text>
             ) : (
               <ScrollView showsVerticalScrollIndicator={false}>
                 {playerList.map(p => (
@@ -4577,7 +4581,7 @@ export default function AdminScreen() {
                   <Ionicons name="close" size={22} color="#555" />
                 </Pressable>
               </View>
-              <Text style={{ color: "#555", fontSize: 13, marginBottom: 20 }}>Players without accounts can join by name only.</Text>
+              <Text style={{ color: "#8a8a8a", fontSize: 13, marginBottom: 20 }}>Players without accounts can join by name only.</Text>
 
               {/* Current guest list */}
               {guestListLoading ? (
@@ -4601,7 +4605,7 @@ export default function AdminScreen() {
                 <TextInput
                   style={[styles.textInput, { flex: 1, backgroundColor: "#0a0a0a" }]}
                   placeholder="Guest name"
-                  placeholderTextColor="#333"
+                  placeholderTextColor="#555"
                   value={guestName}
                   onChangeText={setGuestName}
                   maxLength={40}
@@ -4864,7 +4868,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  headerSub:   { color: "#444", fontSize: 12, marginTop: 1 },
+  headerSub:   { color: "#777", fontSize: 12, marginTop: 1 },
   countBadge:  { minWidth: 28, height: 28, borderRadius: 14, backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
   countBadgeText: { color: "#000", fontWeight: "900", fontSize: 14 },
 
@@ -4888,7 +4892,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2, borderBottomColor: "transparent",
   },
   mainTabItemActive: { borderBottomColor: "#f59e0b" },
-  mainTabLabel:      { color: "#444", fontSize: 13, fontWeight: "700" },
+  mainTabLabel:      { color: "#777", fontSize: 13, fontWeight: "700" },
   mainTabLabelActive:{ color: "#f59e0b" },
 
   // Sub-tabs (Pending / Approved / Denied)
@@ -4902,7 +4906,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2, borderBottomColor: "transparent",
   },
   subTabItemActive: { borderBottomColor: "#06b6d4" },
-  subTabLabel:      { color: "#444", fontSize: 12, fontWeight: "700" },
+  subTabLabel:      { color: "#777", fontSize: 12, fontWeight: "700" },
   subTabLabelActive:{ color: "#06b6d4" },
 
   content: { padding: 16, paddingBottom: 40 },
@@ -4910,7 +4914,7 @@ const styles = StyleSheet.create({
   // Section headings inside stats/health
   sectionHeader: { marginTop: 8, marginBottom: 12 },
   sectionTitle:  { color: "#fff", fontSize: 16, fontWeight: "900" },
-  sectionSub:    { color: "#444", fontSize: 12, marginTop: 2 },
+  sectionSub:    { color: "#777", fontSize: 12, marginTop: 2 },
 
   // Generic card
   card: {
@@ -4924,8 +4928,8 @@ const styles = StyleSheet.create({
   statCard:     { flex: 1, padding: 16, alignItems: "center", gap: 4 },
   statCardWide: { flex: undefined, width: "100%", flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20 },
   statValue:    { fontSize: 28, fontWeight: "900" },
-  statLabel:    { color: "#555", fontSize: 11, fontWeight: "700", textAlign: "center" },
-  cardLabel:    { color: "#555", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 },
+  statLabel:    { color: "#8a8a8a", fontSize: 11, fontWeight: "700", textAlign: "center" },
+  cardLabel:    { color: "#8a8a8a", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 },
   cardBigValue: { color: "#fff", fontSize: 40, fontWeight: "900" },
   cardSubLabel: { color: "#333", fontSize: 12, marginTop: 4 },
 
@@ -4942,20 +4946,20 @@ const styles = StyleSheet.create({
   playerRow:  { flexDirection: "row", alignItems: "center", gap: 12, padding: 14 },
   playerRank: { color: "#333", fontSize: 13, fontWeight: "900", minWidth: 24, textAlign: "center" },
   playerName: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  playerSub:  { color: "#444", fontSize: 12, marginTop: 1 },
+  playerSub:  { color: "#777", fontSize: 12, marginTop: 1 },
 
   // Health big stat
   bigPct:      { fontSize: 56, fontWeight: "900", letterSpacing: -2 },
   bigPctLabel: { color: "#fff", fontSize: 16, fontWeight: "800", marginTop: 4 },
-  bigPctSub:   { color: "#444", fontSize: 12, marginTop: 4, textAlign: "center" },
+  bigPctSub:   { color: "#777", fontSize: 12, marginTop: 4, textAlign: "center" },
   healthHintRow: { flexDirection: "row", alignItems: "flex-start", gap: 8 },
-  healthHint:  { color: "#444", fontSize: 12, lineHeight: 18, flex: 1 },
+  healthHint:  { color: "#777", fontSize: 12, lineHeight: 18, flex: 1 },
 
   // Empty & error
   emptyState: { alignItems: "center", paddingTop: 80, gap: 12 },
   emptyIcon:  { width: 88, height: 88, borderRadius: 44, borderWidth: 1, alignItems: "center", justifyContent: "center", marginBottom: 4 },
   emptyTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
-  emptySub:   { color: "#444", fontSize: 14 },
+  emptySub:   { color: "#777", fontSize: 14 },
   inlineError:     { backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: "rgba(239,68,68,0.2)" },
   inlineErrorText: { color: "#ef4444", fontSize: 13 },
 
@@ -4964,7 +4968,7 @@ const styles = StyleSheet.create({
   statusBannerText: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.5 },
   cardUser:     { flexDirection: "row", alignItems: "center", gap: 12, padding: 16 },
   cardUsername: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  cardGame:     { color: "#555", fontSize: 12, marginTop: 2 },
+  cardGame:     { color: "#8a8a8a", fontSize: 12, marginTop: 2 },
   cardScore:    { color: "#06b6d4", fontSize: 22, fontWeight: "900" },
   photoWrap:    { marginHorizontal: 16, marginBottom: 14, borderRadius: 14, overflow: "hidden" },
   photoThumb:   { width: "100%", height: 180 },
@@ -4989,7 +4993,7 @@ const styles = StyleSheet.create({
   confirmSheet:    { backgroundColor: "#111", borderRadius: 28, padding: 28, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e" },
   confirmIconWrap: { width: 72, height: 72, borderRadius: 36, borderWidth: 1, alignItems: "center", justifyContent: "center", marginBottom: 16 },
   confirmTitle:    { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 8, textAlign: "center" },
-  confirmBody:     { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20, marginBottom: 24 },
+  confirmBody:     { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20, marginBottom: 24 },
   confirmBtns:     { flexDirection: "row", gap: 10, width: "100%" },
   confirmCancel:   { flex: 1, backgroundColor: "#1a1a1a", borderRadius: 14, padding: 15, alignItems: "center" },
   confirmCancelText:  { color: "#888", fontWeight: "700" },
@@ -4999,14 +5003,14 @@ const styles = StyleSheet.create({
   // Admin teams list
   teamsCountRow:       { marginBottom: 12 },
   teamsHeaderRow:      { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
-  teamsCountText:      { color: "#444", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1 },
+  teamsCountText:      { color: "#777", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1 },
   createTeamBtn:       { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(6,182,212,0.08)", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
   createTeamBtnText:   { color: "#06b6d4", fontSize: 12, fontWeight: "800" },
   adminTeamCard:       { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "#1e1e1e" },
   adminTeamAvatar:     { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.15)" },
   adminTeamAvatarText: { color: "#06b6d4", fontSize: 13, fontWeight: "900" },
   adminTeamName:       { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 3 },
-  adminTeamMeta:       { color: "#555", fontSize: 12 },
+  adminTeamMeta:       { color: "#8a8a8a", fontSize: 12 },
   adminTeamDate:       { color: "#333", fontSize: 11, marginTop: 2 },
   manageTeamBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
   deleteTeamBtn:       { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(239,68,68,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(239,68,68,0.2)" },
@@ -5015,7 +5019,7 @@ const styles = StyleSheet.create({
   subTabRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
   subTab: { flex: 1, paddingVertical: 9, borderRadius: 12, backgroundColor: "#111", borderWidth: 1, borderColor: "#1e1e1e", alignItems: "center" },
   subTabActive: { backgroundColor: "rgba(6,182,212,0.12)", borderColor: "#06b6d4" },
-  subTabText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  subTabText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
   subTabTextActive: { color: "#06b6d4" },
 
   // Assign team modal
@@ -5039,7 +5043,7 @@ const styles = StyleSheet.create({
   },
   tournCardTop:       { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 8 },
   tournTitle:         { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 2 },
-  tournMeta:          { color: "#555", fontSize: 12 },
+  tournMeta:          { color: "#8a8a8a", fontSize: 12 },
   tournDesc:          { color: "#666", fontSize: 13, lineHeight: 18, marginBottom: 10 },
   tournGameChip: {
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
@@ -5082,26 +5086,26 @@ const styles = StyleSheet.create({
   manageTournTitle: { color: "#fff", fontSize: 14, fontWeight: "800", flex: 1 },
   manageTournStatus: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1 },
   manageTournStatusText: { fontSize: 10, fontWeight: "800" },
-  manageTournDate: { color: "#555", fontSize: 12 },
+  manageTournDate: { color: "#8a8a8a", fontSize: 12 },
   manageTournActions: { flexDirection: "row", gap: 6, alignItems: "center" },
   manageTournBtn: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10, backgroundColor: "rgba(6,182,212,0.1)", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
   manageTournBtnText: { color: "#06b6d4", fontSize: 12, fontWeight: "700" },
   manageTournResultsBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 10, backgroundColor: "rgba(245,158,11,0.1)", borderWidth: 1, borderColor: "rgba(245,158,11,0.2)" },
   manageTournResultsText: { color: "#f59e0b", fontSize: 12, fontWeight: "700" },
   manageTournCompletedTag: { paddingHorizontal: 8, paddingVertical: 5, borderRadius: 8, backgroundColor: "#1a1a1a" },
-  manageTournCompletedText: { color: "#444", fontSize: 11, fontWeight: "700" },
+  manageTournCompletedText: { color: "#777", fontSize: 11, fontWeight: "700" },
 
   // First Friday QR section
   ffQrSection: { marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1e1e1e", paddingTop: 12 },
   ffQrHeaderRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
-  ffQrLabel: { color: "#555", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, flex: 1 },
-  ffQrCount: { color: "#444", fontSize: 12, fontWeight: "600" },
+  ffQrLabel: { color: "#8a8a8a", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, flex: 1 },
+  ffQrCount: { color: "#777", fontSize: 12, fontWeight: "600" },
   ffQrStatusChip: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1 },
   ffQrDot: { width: 6, height: 6, borderRadius: 3 },
   ffQrStatusText: { fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
   ffQrImageWrap: { alignItems: "center", marginBottom: 12 },
   ffQrImage: { width: 180, height: 180, borderRadius: 12 },
-  ffQrHint: { color: "#444", fontSize: 11, marginTop: 6 },
+  ffQrHint: { color: "#777", fontSize: 11, marginTop: 6 },
   ffQrBtnRow: { flexDirection: "row", gap: 8 },
   ffGenerateBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, backgroundColor: "#06b6d4", borderRadius: 12, paddingVertical: 10 },
   ffGenerateBtnText: { color: "#000", fontWeight: "800", fontSize: 13 },
@@ -5114,7 +5118,7 @@ const styles = StyleSheet.create({
   modalHandle: { width: 36, height: 4, backgroundColor: "#2a2a2a", borderRadius: 2, alignSelf: "center", marginBottom: 16 },
   resultsSheet: { backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 0, borderTopWidth: 1, borderColor: "#1e1e1e", maxHeight: "85%" },
   resultsTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
-  resultsSub:   { color: "#555", fontSize: 13, marginBottom: 20 },
+  resultsSub:   { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
   resultRow:    { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
   resultPlaceLabel: { color: "#888", fontSize: 15, fontWeight: "700", minWidth: 52 },
   resultInput:  { flex: 1, backgroundColor: "#0a0a0a", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: "#fff", fontSize: 14, borderWidth: 1, borderColor: "#222" },
@@ -5143,7 +5147,7 @@ const styles = StyleSheet.create({
     marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
   },
   userCardName: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 2 },
-  userCardEmail: { color: "#555", fontSize: 11, marginBottom: 4 },
+  userCardEmail: { color: "#8a8a8a", fontSize: 11, marginBottom: 4 },
   userRolePill: {
     flexDirection: "row", alignItems: "center", gap: 4,
     borderRadius: 8, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 3,
@@ -5175,8 +5179,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#06b6d4", borderRadius: 14, paddingVertical: 13, paddingHorizontal: 20,
   },
   schedSaveBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
-  schedNoTeams: { color: "#444", fontSize: 13, textAlign: "center", marginTop: 12 },
+  schedNoTeams: { color: "#777", fontSize: 13, textAlign: "center", marginTop: 12 },
 
+  schedColumnsWeb: { flexDirection: "row", gap: 12, alignItems: "flex-start" },
   schedSlotSection: {
     backgroundColor: "#0d0d0d", borderRadius: 18, padding: 16,
     marginBottom: 14, borderWidth: 1, borderColor: "#1a1a1a",
@@ -5206,11 +5211,11 @@ const styles = StyleSheet.create({
   },
   schedPrefChipMatch: { backgroundColor: "rgba(6,182,212,0.12)", borderColor: "rgba(6,182,212,0.4)" },
   schedPrefChip2Match: { backgroundColor: "rgba(99,102,241,0.12)", borderColor: "rgba(99,102,241,0.4)" },
-  schedPrefChipText: { color: "#555", fontSize: 10, fontWeight: "700" },
+  schedPrefChipText: { color: "#8a8a8a", fontSize: 10, fontWeight: "700" },
   schedPrefChipTextMatch: { color: "#06b6d4" },
   schedPrefChip2MatchText: { color: "#6366f1" },
   schedTeamRight: { flexDirection: "row", alignItems: "center", gap: 10 },
-  schedTeamAvg: { color: "#444", fontSize: 12, fontWeight: "700" },
+  schedTeamAvg: { color: "#777", fontSize: 12, fontWeight: "700" },
 
   modalSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
@@ -5218,7 +5223,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderColor: "#1e1e1e",
   },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
-  modalSub:   { color: "#555", fontSize: 13, marginBottom: 20 },
+  modalSub:   { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
 
   // Reassign modal (reuses modalBg / modalSheet / modalHandle / modalTitle / modalSub)
   schedReassignRow: {
@@ -5228,7 +5233,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   schedReassignTime: { color: "#fff", fontSize: 16, fontWeight: "800", flex: 1 },
-  schedReassignCount: { color: "#444", fontSize: 13 },
+  schedReassignCount: { color: "#777", fontSize: 13 },
   schedRemoveBtn: {
     marginTop: 16, backgroundColor: "rgba(239,68,68,0.1)", borderRadius: 14,
     paddingVertical: 14, alignItems: "center",
@@ -5259,7 +5264,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(6,182,212,0.2)", alignItems: "center", justifyContent: "center",
   },
   suppTicketUser: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 2 },
-  suppTicketTime: { color: "#444", fontSize: 12 },
+  suppTicketTime: { color: "#777", fontSize: 12 },
 
   suppConvHeader: {
     flexDirection: "row", alignItems: "center", gap: 12,
@@ -5271,7 +5276,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#111", alignItems: "center", justifyContent: "center",
   },
   suppConvUser: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  suppConvSub:  { color: "#444", fontSize: 11, marginTop: 1 },
+  suppConvSub:  { color: "#777", fontSize: 11, marginTop: 1 },
   suppResolveBtn: {
     backgroundColor: "rgba(34,197,94,0.12)", borderRadius: 12,
     paddingHorizontal: 12, paddingVertical: 7,
@@ -5291,7 +5296,7 @@ const styles = StyleSheet.create({
   suppBubbleTextUser:  { color: "#e0e0e0" },
   suppBubbleTextAdmin: { color: "#000" },
   suppBubbleTime: { fontSize: 10, marginTop: 4 },
-  suppTimeUser:  { color: "#444" },
+  suppTimeUser:  { color: "#777" },
   suppTimeAdmin: { color: "rgba(0,0,0,0.45)", textAlign: "right" },
 
   suppReplyRow: {
@@ -5325,7 +5330,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderColor: "#1e1e1e",
   },
   editTournTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
-  editTournSub:   { color: "#555", fontSize: 13, marginBottom: 20 },
+  editTournSub:   { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
   textInput: { backgroundColor: "#111", borderRadius: 12, borderWidth: 1, borderColor: "#1e1e1e", color: "#fff", fontSize: 15, paddingHorizontal: 14, paddingVertical: 12 },
   editTournLabel: { color: "#888", fontSize: 12, fontWeight: "700", marginBottom: 6, marginTop: 12 },
   editTournInput: {
@@ -5459,7 +5464,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderColor: "#1e1e1e",
   },
   scoreEntryTitle: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 4 },
-  scoreEntryHint:  { color: "#555", fontSize: 12, marginBottom: 16 },
+  scoreEntryHint:  { color: "#8a8a8a", fontSize: 12, marginBottom: 16 },
   scoreEntryRow: {
     flexDirection: "row", alignItems: "center",
     marginBottom: 10, gap: 10,
@@ -5472,13 +5477,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 9,
     textAlign: "center",
   },
-  scoreEntryPts: { color: "#444", fontSize: 12, width: 24 },
+  scoreEntryPts: { color: "#777", fontSize: 12, width: 24 },
 
   // ── Karaoke ──────────────────────────────────────────────────────────────
   karaokeToolbar: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
-  karaokeQueueCount: { color: "#555", fontSize: 13, fontWeight: "700" },
+  karaokeQueueCount: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
   karaokeHistoryBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#1e1e1e" },
-  karaokeHistoryBtnText: { color: "#555", fontSize: 12, fontWeight: "700" },
+  karaokeHistoryBtnText: { color: "#8a8a8a", fontSize: 12, fontWeight: "700" },
 
   karaokeNowCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(168,85,247,0.3)", marginBottom: 20 },
   karaokeNowBadge: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#a855f7", borderRadius: 7, paddingHorizontal: 8, paddingVertical: 3, alignSelf: "flex-start", marginBottom: 12 },
@@ -5487,7 +5492,7 @@ const styles = StyleSheet.create({
   karaokeNowThumb: { width: 68, height: 50, borderRadius: 8 },
   karaokeThumbPlaceholder: { backgroundColor: "#1a1a1a", alignItems: "center", justifyContent: "center" },
   karaokeNowTitle: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 3 },
-  karaokeNowChannel: { color: "#555", fontSize: 12, marginBottom: 2 },
+  karaokeNowChannel: { color: "#8a8a8a", fontSize: 12, marginBottom: 2 },
   karaokeNowRequester: { color: "#a855f7", fontSize: 12, fontWeight: "700", marginBottom: 6 },
   karaokeYtLink: { flexDirection: "row", alignItems: "center", gap: 4 },
   karaokeYtLinkText: { color: "#ef4444", fontSize: 11, fontWeight: "700" },
@@ -5495,28 +5500,28 @@ const styles = StyleSheet.create({
   karaokeSkipBtnText: { color: "#fff", fontSize: 12, fontWeight: "900" },
 
   karaokeQueueItem: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#111", borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e" },
-  karaokeQueuePos: { color: "#555", fontSize: 12, fontWeight: "900", minWidth: 18, textAlign: "center" },
+  karaokeQueuePos: { color: "#8a8a8a", fontSize: 12, fontWeight: "900", minWidth: 18, textAlign: "center" },
   karaokeQueueThumb: { width: 48, height: 34, borderRadius: 6 },
   karaokeQueueInfo: { flex: 1 },
   karaokeQueueTitle: { color: "#fff", fontSize: 13, fontWeight: "700", marginBottom: 2 },
-  karaokeQueueMeta: { color: "#555", fontSize: 11, marginBottom: 4 },
+  karaokeQueueMeta: { color: "#8a8a8a", fontSize: 11, marginBottom: 4 },
   karaokeRemoveBtn: { padding: 2 },
 
   karaokeHistoryToggle: { flexDirection: "row", alignItems: "center", gap: 6, paddingVertical: 14, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", marginTop: 8 },
-  karaokeHistoryToggleText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  karaokeHistoryToggleText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
 
   // ── Trivia ───────────────────────────────────────────────────────────────────
   triviaTabRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
   triviaTabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12, paddingVertical: 10, borderWidth: 1, borderColor: "#1e1e1e", backgroundColor: "#0d0d0d" },
   triviaTabBtnActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.07)" },
-  triviaTabBtnText: { color: "#555", fontWeight: "800", fontSize: 13 },
+  triviaTabBtnText: { color: "#8a8a8a", fontWeight: "800", fontSize: 13 },
 
   triviaCreateBtn: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 16, borderWidth: 1, borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.06)", marginBottom: 12 },
   triviaCreateBtnText: { color: "#06b6d4", fontWeight: "800", fontSize: 14 },
 
   triviaFormCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: "#1e1e1e" },
   triviaFormTitle: { color: "#fff", fontSize: 15, fontWeight: "900", marginBottom: 12 },
-  triviaFormLabel: { color: "#555", fontSize: 12, fontWeight: "700", marginBottom: 5, marginTop: 10 },
+  triviaFormLabel: { color: "#8a8a8a", fontSize: 12, fontWeight: "700", marginBottom: 5, marginTop: 10 },
   triviaFormInput: { backgroundColor: "#0a0a0a", borderRadius: 10, borderWidth: 1, borderColor: "#1e1e1e", color: "#fff", fontSize: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 2 },
   triviaFormRow: { flexDirection: "row", gap: 10 },
 
@@ -5529,30 +5534,30 @@ const styles = StyleSheet.create({
   triviaTypeRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
   triviaTypeBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", backgroundColor: "#0d0d0d" },
   triviaTypeBtnActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.07)" },
-  triviaTypeBtnText: { color: "#555", fontWeight: "700", fontSize: 13 },
+  triviaTypeBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 13 },
 
   triviaOptRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
   triviaOptLetter: { width: 32, height: 32, borderRadius: 16, backgroundColor: "#1a1a1a", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#2a2a2a" },
   triviaOptLetterCorrect: { backgroundColor: "#22c55e", borderColor: "#22c55e" },
-  triviaOptLetterText: { color: "#555", fontWeight: "900", fontSize: 13 },
+  triviaOptLetterText: { color: "#8a8a8a", fontWeight: "900", fontSize: 13 },
 
   triviaQPickRow: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#0a0a0a", borderRadius: 10, padding: 10, marginBottom: 6, borderWidth: 1, borderColor: "#1a1a1a" },
   triviaQPickRowSelected: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.05)" },
   triviaCheckbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1, borderColor: "#2a2a2a", alignItems: "center", justifyContent: "center" },
   triviaCheckboxChecked: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
   triviaQPickText: { flex: 1, color: "#888", fontSize: 12 },
-  triviaQPickType: { color: "#444", fontSize: 10, fontWeight: "700" },
+  triviaQPickType: { color: "#777", fontSize: 10, fontWeight: "700" },
 
   triviaSaveBtn: { backgroundColor: "#06b6d4", borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 12 },
   triviaSaveBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
   triviaDiscardBtn: { borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 12, borderWidth: 1, borderColor: "#1e1e1e", paddingHorizontal: 16 },
-  triviaDiscardBtnText: { color: "#555", fontWeight: "700", fontSize: 14 },
-  triviaEmpty: { color: "#444", fontSize: 13, textAlign: "center", paddingVertical: 16 },
+  triviaDiscardBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 14 },
+  triviaEmpty: { color: "#777", fontSize: 13, textAlign: "center", paddingVertical: 16 },
 
   triviaGameCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#1e1e1e" },
   triviaGameCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 },
   triviaGameTitle: { color: "#fff", fontSize: 15, fontWeight: "900" },
-  triviaGameMeta: { color: "#555", fontSize: 12, marginTop: 3 },
+  triviaGameMeta: { color: "#8a8a8a", fontSize: 12, marginTop: 3 },
   triviaStatusBadge: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4 },
   triviaStatusText: { fontSize: 10, fontWeight: "900", letterSpacing: 0.5 },
   triviaQrRow: { marginBottom: 10 },
@@ -5568,7 +5573,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#0a0a0a", borderRadius: 12,
     borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 10, overflow: "hidden",
   },
-  triviaPlayersEmpty: { color: "#444", fontSize: 12, textAlign: "center", paddingVertical: 14 },
+  triviaPlayersEmpty: { color: "#777", fontSize: 12, textAlign: "center", paddingVertical: 14 },
   triviaPlayerRow: {
     flexDirection: "row", alignItems: "center", gap: 10,
     paddingHorizontal: 12, paddingVertical: 10,
@@ -5581,7 +5586,7 @@ const styles = StyleSheet.create({
   },
   triviaPlayerAvatarText: { color: "#fff", fontSize: 13, fontWeight: "800" },
   triviaPlayerName: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  triviaPlayerMeta: { color: "#555", fontSize: 11, marginTop: 1 },
+  triviaPlayerMeta: { color: "#8a8a8a", fontSize: 11, marginTop: 1 },
   triviaKickBtn: {
     width: 32, height: 32, borderRadius: 9,
     backgroundColor: "rgba(239,68,68,0.08)", borderWidth: 1, borderColor: "rgba(239,68,68,0.2)",
@@ -5596,22 +5601,22 @@ const styles = StyleSheet.create({
   triviaQCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   triviaQCategory: { color: "#a855f7", fontSize: 10, fontWeight: "800", marginBottom: 3 },
   triviaQText: { color: "#fff", fontSize: 13, fontWeight: "700", lineHeight: 19, marginBottom: 4 },
-  triviaQMeta: { color: "#444", fontSize: 11 },
+  triviaQMeta: { color: "#777", fontSize: 11 },
   triviaQActions: { flexDirection: "row", gap: 14, paddingTop: 2 },
   triviaQOpts: { flexDirection: "row", flexWrap: "wrap", gap: 5, marginTop: 10 },
   triviaQOpt: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#1a1a1a" },
   triviaQOptCorrect: { borderColor: "rgba(34,197,94,0.4)", backgroundColor: "rgba(34,197,94,0.07)" },
-  triviaQOptText: { color: "#555", fontSize: 11, fontWeight: "700" },
+  triviaQOptText: { color: "#8a8a8a", fontSize: 11, fontWeight: "700" },
 
   // ── Skeeball Admin ───────────────────────────────────────────────────────────
-  skeeAdminSubtitle: { color: "#555", fontSize: 13, lineHeight: 19, marginBottom: 16 },
+  skeeAdminSubtitle: { color: "#8a8a8a", fontSize: 13, lineHeight: 19, marginBottom: 16 },
   skeeWeekCard: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: "rgba(6,182,212,0.05)", borderRadius: 16, padding: 14, marginBottom: 10,
     borderWidth: 1, borderColor: "rgba(6,182,212,0.18)",
   },
   skeeWeekLabel: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 2 },
-  skeeWeekHint: { color: "#555", fontSize: 11.5, lineHeight: 16 },
+  skeeWeekHint: { color: "#8a8a8a", fontSize: 11.5, lineHeight: 16 },
   skeeWeekInput: {
     width: 48, textAlign: "center",
     backgroundColor: "#0a0a0a", borderRadius: 12, borderWidth: 1, borderColor: "#222",
@@ -5639,7 +5644,7 @@ const styles = StyleSheet.create({
   skeeAdminCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e" },
   skeeAdminCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   skeeAdminTeamName: { color: "#fff", fontSize: 15, fontWeight: "900", marginBottom: 3 },
-  skeeAdminMeta: { color: "#555", fontSize: 12, marginBottom: 2 },
+  skeeAdminMeta: { color: "#8a8a8a", fontSize: 12, marginBottom: 2 },
   skeeEditBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 11, borderWidth: 1, borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.07)" },
   skeeEditBtnText: { color: "#06b6d4", fontSize: 12, fontWeight: "800" },
 });

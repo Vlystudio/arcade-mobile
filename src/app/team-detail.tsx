@@ -1519,7 +1519,7 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: "#000",
   },
   teamTitle: { color: "#fff", fontSize: 28, fontWeight: "900", letterSpacing: -0.4, marginBottom: 5 },
-  teamSub: { color: "#555", fontSize: 13 },
+  teamSub: { color: "#8a8a8a", fontSize: 13 },
   trackActions: { flexDirection: "row", gap: 10, marginTop: 16, flexWrap: "wrap", justifyContent: "center" },
   trackBtn: {
     flexDirection: "row", alignItems: "center", gap: 7,
@@ -1538,10 +1538,10 @@ const styles = StyleSheet.create({
     marginHorizontal: 20, marginBottom: 32,
   },
   seasonPillLabel: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  seasonPillRange: { color: "#444", fontSize: 11, marginTop: 1 },
+  seasonPillRange: { color: "#777", fontSize: 11, marginTop: 1 },
 
   sectionLabel: {
-    color: "#444", fontSize: 11, fontWeight: "700",
+    color: "#777", fontSize: 11, fontWeight: "700",
     textTransform: "uppercase", letterSpacing: 1.2,
     marginBottom: 12, paddingHorizontal: 20,
   },
@@ -1557,8 +1557,8 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e",
   },
   statValue: { fontSize: 32, fontWeight: "900", letterSpacing: -0.5 },
-  statSub: { color: "#444", fontSize: 11, fontWeight: "600", marginTop: -2 },
-  statLabel: { color: "#555", fontSize: 12, fontWeight: "600", marginTop: 4 },
+  statSub: { color: "#777", fontSize: 11, fontWeight: "600", marginTop: -2 },
+  statLabel: { color: "#8a8a8a", fontSize: 12, fontWeight: "600", marginTop: 4 },
 
   emptyCard: {
     backgroundColor: "#0d0d0d", borderRadius: 18,
@@ -1566,7 +1566,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20, marginBottom: 28,
     borderWidth: 1, borderColor: "#1a1a1a",
   },
-  emptyCardText: { color: "#444", fontSize: 14, textAlign: "center" },
+  emptyCardText: { color: "#777", fontSize: 14, textAlign: "center" },
 
   playerCard: {
     backgroundColor: "#111", borderRadius: 18, padding: 16,
@@ -1588,7 +1588,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 5, paddingVertical: 2,
   },
   capBadgeText: { color: "#f59e0b", fontSize: 9, fontWeight: "900", letterSpacing: 0.5 },
-  playerMeta: { color: "#555", fontSize: 12 },
+  playerMeta: { color: "#8a8a8a", fontSize: 12 },
   playerMetaDim: { color: "#333", fontSize: 12, fontStyle: "italic" },
 
   playerRight: { flexDirection: "row", gap: 16, paddingLeft: 8 },
@@ -1599,13 +1599,14 @@ const styles = StyleSheet.create({
   // Modal
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   modalSheet: {
+    width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40,
     borderTopWidth: 1, borderColor: "#1e1e1e",
   },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
-  modalSub: { color: "#555", fontSize: 13, marginBottom: 20 },
+  modalSub: { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
   seasonRow: {
     flexDirection: "row", alignItems: "center",
     paddingVertical: 16,
@@ -1636,10 +1637,10 @@ const styles = StyleSheet.create({
     alignItems: "center", borderWidth: 1, borderColor: "#191919",
   },
   leagueSummaryValue: { color: "#06b6d4", fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
-  leagueSummaryLabel: { color: "#444", fontSize: 9.5, fontWeight: "700", marginTop: 2 },
+  leagueSummaryLabel: { color: "#777", fontSize: 9.5, fontWeight: "700", marginTop: 2 },
   leagueChartHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
   leagueSubLabel: {
-    color: "#3a3a3a", fontSize: 10, fontWeight: "800",
+    color: "#6b6b6b", fontSize: 10, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1.2,
   },
   leagueMemberRow: {
@@ -1648,10 +1649,10 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
   },
   leagueMemberName: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  leagueMemberMeta: { color: "#444", fontSize: 11, marginTop: 1 },
+  leagueMemberMeta: { color: "#777", fontSize: 11, marginTop: 1 },
   leagueMemberNums: { alignItems: "flex-end" },
   leagueMemberAvg: { color: "#06b6d4", fontSize: 16, fontWeight: "900" },
-  leagueMemberAvgLabel: { color: "#3a3a3a", fontSize: 10 },
+  leagueMemberAvgLabel: { color: "#6b6b6b", fontSize: 10 },
   leagueMemberDetail: {
     backgroundColor: "#0c0c0c", borderRadius: 12, padding: 12, marginVertical: 8,
     borderWidth: 1, borderColor: "#191919",
@@ -1688,7 +1689,7 @@ const styles = StyleSheet.create({
   suggestChipName: { flex: 1, color: "#fff", fontSize: 12, fontWeight: "800" },
   tipRow: { flexDirection: "row", alignItems: "flex-start", gap: 7, marginTop: 6 },
   tipText: { flex: 1, color: "#999", fontSize: 12.5, lineHeight: 18 },
-  coachHint: { color: "#444", fontSize: 12.5, marginTop: 8 },
+  coachHint: { color: "#777", fontSize: 12.5, marginTop: 8 },
   coachDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#1e1e1e", marginVertical: 12 },
   opponentSelect: {
     flexDirection: "row", alignItems: "center", gap: 8,
@@ -1744,7 +1745,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(34,197,94,0.1)", alignItems: "center", justifyContent: "center",
   },
   upcomingTitle: { color: "#22c55e", fontSize: 14, fontWeight: "800" },
-  upcomingSub: { color: "#555", fontSize: 11.5, marginTop: 1 },
+  upcomingSub: { color: "#8a8a8a", fontSize: 11.5, marginTop: 1 },
   histRow: {
     flexDirection: "row", alignItems: "flex-start", gap: 12, paddingVertical: 9,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
@@ -1753,11 +1754,12 @@ const styles = StyleSheet.create({
   histWeek: { color: "#fff", fontSize: 13, fontWeight: "800" },
   histSlot: { color: "#06b6d4", fontSize: 10.5, fontWeight: "700", marginTop: 2 },
   histResult: { color: "#ccc", fontSize: 13, fontWeight: "700" },
-  histOpponents: { color: "#555", fontSize: 11.5, marginTop: 2, lineHeight: 16 },
+  histOpponents: { color: "#8a8a8a", fontSize: 11.5, marginTop: 2, lineHeight: 16 },
 
   photoPickerBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   photoPickerDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   photoPickerSheet: {
+    width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
     borderTopWidth: 1, borderColor: "#1e1e1e", gap: 10,
@@ -1776,7 +1778,7 @@ const styles = StyleSheet.create({
   },
   photoPickerLibraryText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   photoPickerCancel: { backgroundColor: "#0d0d0d", borderRadius: 16, padding: 16, alignItems: "center", marginTop: 4 },
-  photoPickerCancelText: { color: "#555", fontWeight: "700", fontSize: 15 },
+  photoPickerCancelText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 
   // Slot preferences
   slotPrefRow: {
@@ -1785,14 +1787,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 9,
     borderWidth: 1, borderColor: "#1a1a1a",
   },
-  slotPrefText: { color: "#555", fontSize: 13, fontWeight: "600", flex: 1 },
+  slotPrefText: { color: "#8a8a8a", fontSize: 13, fontWeight: "600", flex: 1 },
   slotEditBtn: {
     width: 28, height: 28, borderRadius: 8, backgroundColor: "rgba(6,182,212,0.1)",
     alignItems: "center", justifyContent: "center",
   },
 
   // Slot modal
-  slotModalLabel: { color: "#555", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, marginTop: 6 },
+  slotModalLabel: { color: "#8a8a8a", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, marginTop: 6 },
   slotModalRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
   slotChip: {
     flex: 1, paddingVertical: 11, borderRadius: 12,
@@ -1801,7 +1803,7 @@ const styles = StyleSheet.create({
   },
   slotChipActive: { backgroundColor: "rgba(6,182,212,0.15)", borderColor: "#06b6d4" },
   slotChipActive2: { backgroundColor: "rgba(99,102,241,0.15)", borderColor: "#6366f1" },
-  slotChipText: { color: "#555", fontSize: 13, fontWeight: "700" },
+  slotChipText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
   slotChipTextActive: { color: "#06b6d4" },
   slotChipTextActive2: { color: "#6366f1" },
   slotSaveBtn: {
@@ -1816,7 +1818,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20, marginBottom: 12,
   },
   annSectionLabel: {
-    color: "#444", fontSize: 11, fontWeight: "700",
+    color: "#777", fontSize: 11, fontWeight: "700",
     textTransform: "uppercase", letterSpacing: 1.2,
   },
   announceAddBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
@@ -1843,7 +1845,7 @@ const styles = StyleSheet.create({
   // Banned gate screen
   bannedGate: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
   bannedGateTitle: { color: "#fff", fontSize: 22, fontWeight: "900", marginBottom: 8 },
-  bannedGateSub: { color: "#555", fontSize: 15, textAlign: "center", lineHeight: 22 },
+  bannedGateSub: { color: "#8a8a8a", fontSize: 15, textAlign: "center", lineHeight: 22 },
   bannedGateBtn: {
     marginTop: 32, backgroundColor: "#1a1a1a", borderRadius: 16,
     paddingHorizontal: 24, paddingVertical: 14,
@@ -1885,17 +1887,17 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(245,158,11,0.2)", marginBottom: 10,
   },
   kickActionText: { color: "#f59e0b", fontSize: 15, fontWeight: "800" },
-  kickActionSub: { color: "#555", fontSize: 12, marginTop: 2 },
+  kickActionSub: { color: "#8a8a8a", fontSize: 12, marginTop: 2 },
   banActionBtn: {
     flexDirection: "row", alignItems: "center", gap: 14,
     backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 16, padding: 16,
     borderWidth: 1, borderColor: "rgba(239,68,68,0.2)", marginBottom: 10,
   },
   banActionText: { color: "#ef4444", fontSize: 15, fontWeight: "800" },
-  banActionSub: { color: "#555", fontSize: 12, marginTop: 2 },
+  banActionSub: { color: "#8a8a8a", fontSize: 12, marginTop: 2 },
   memberActionCancel: {
     backgroundColor: "#0d0d0d", borderRadius: 16, paddingVertical: 15,
     alignItems: "center", marginTop: 4,
   },
-  memberActionCancelText: { color: "#555", fontWeight: "700", fontSize: 15 },
+  memberActionCancelText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 });

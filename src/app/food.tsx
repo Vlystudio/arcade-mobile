@@ -211,7 +211,7 @@ export default function FoodScreen() {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search menu…"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 value={searchText}
                 onChangeText={setSearchText}
                 returnKeyType="search"
@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
 
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 },
   pageTitle: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5, marginBottom: 2 },
-  pageSub: { color: "#555", fontSize: 14 },
+  pageSub: { color: "#8a8a8a", fontSize: 14 },
   cartBtn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: "#111", alignItems: "center", justifyContent: "center",
@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginBottom: 8,
   },
   gateTitle: { color: "#fff", fontSize: 22, fontWeight: "900", letterSpacing: -0.3, marginBottom: 4 },
-  gateSub: { color: "#555", fontSize: 14, lineHeight: 20, marginBottom: 20 },
+  gateSub: { color: "#8a8a8a", fontSize: 14, lineHeight: 20, marginBottom: 20 },
 
   // Location banner
   locBanner: {
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, marginBottom: 16,
   },
   locBannerName: { fontSize: 13, fontWeight: "800" },
-  locBannerChange: { color: "#555", fontSize: 12, fontWeight: "600" },
+  locBannerChange: { color: "#8a8a8a", fontSize: 12, fontWeight: "600" },
 
   // Location switcher modal
   locModalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" },
@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   },
   locModalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 24 },
   locModalTitle: { color: "#fff", fontSize: 18, fontWeight: "900", letterSpacing: -0.3, marginBottom: 4 },
-  locModalSub: { color: "#555", fontSize: 13, marginBottom: 20 },
+  locModalSub: { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
   locModalDoneBtn: {
     backgroundColor: "#1a1a1a", borderRadius: 16, paddingVertical: 16,
     alignItems: "center", marginTop: 8, borderWidth: 1, borderColor: "#222",
@@ -495,7 +495,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 8,
     borderWidth: 1, borderColor: "#1e1e1e",
   },
-  pillText: { color: "#555", fontSize: 13, fontWeight: "600" },
+  pillText: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
 
   catLabelRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12, marginTop: 8 },
   catLabelDot: { width: 6, height: 6, borderRadius: 3 },
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
   },
   cardBody: { flex: 1 },
   cardName: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 3 },
-  cardDesc: { color: "#555", fontSize: 13, lineHeight: 18, marginBottom: 6 },
+  cardDesc: { color: "#8a8a8a", fontSize: 13, lineHeight: 18, marginBottom: 6 },
   cardPrice: { color: "#06b6d4", fontSize: 15, fontWeight: "900" },
   addBtn: {
     width: 38, height: 38, borderRadius: 19,
@@ -523,7 +523,7 @@ const styles = StyleSheet.create({
 
   emptyState: { alignItems: "center", paddingTop: 60, paddingBottom: 40 },
   emptyTitle: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 8 },
-  emptySub: { color: "#444", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  emptySub: { color: "#777", fontSize: 14, textAlign: "center", lineHeight: 20 },
 
   // Item detail sheet
   sheetBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" },
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
   sheetPrice: { color: "#06b6d4", fontSize: 24, fontWeight: "900" },
   sheetDesc: { color: "#888", fontSize: 14, lineHeight: 21, marginBottom: 20 },
   sheetSectionLabel: {
-    color: "#444", fontSize: 11, fontWeight: "800",
+    color: "#777", fontSize: 11, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1, marginBottom: 10,
   },
   ingredientsList: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 24 },

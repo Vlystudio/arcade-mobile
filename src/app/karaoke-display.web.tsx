@@ -341,7 +341,7 @@ const s = StyleSheet.create({
     zIndex: 10,
   },
   overlayTitle: { color: "#fff", fontSize: 36, fontWeight: "900", marginBottom: 12 },
-  overlaySub: { color: "#555", fontSize: 18, textAlign: "center", marginBottom: 32 },
+  overlaySub: { color: "#8a8a8a", fontSize: 18, textAlign: "center", marginBottom: 32 },
   startBtn: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#a855f7", borderRadius: 18, paddingVertical: 18, paddingHorizontal: 40 },
   startBtnText: { color: "#000", fontWeight: "900", fontSize: 20 },
 
@@ -371,7 +371,7 @@ const s = StyleSheet.create({
   // ── Sidebar ──────────────────────────────────────────────
   sidebar: { width: 280, backgroundColor: "#080808", borderLeftWidth: 1, borderLeftColor: "#111", padding: 20 },
   backBtn: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 16 },
-  backBtnText: { color: "#555", fontSize: 13, fontWeight: "600" },
+  backBtnText: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
   sidebarHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 16 },
   sidebarTitle: { color: "#fff", fontSize: 16, fontWeight: "900", flex: 1 },
   skipBtn: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(239,68,68,0.12)", borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(239,68,68,0.25)" },
@@ -387,9 +387,9 @@ const s = StyleSheet.create({
   thumbPlaceholder: { backgroundColor: "#111", alignItems: "center", justifyContent: "center" },
   sidebarInfo: { flex: 1 },
   sidebarSongTitle: { color: "#ccc", fontSize: 13, fontWeight: "700" },
-  sidebarBy: { color: "#444", fontSize: 11, marginTop: 2 },
+  sidebarBy: { color: "#777", fontSize: 11, marginTop: 2 },
 
-  moreText: { color: "#444", fontSize: 12, textAlign: "center", paddingVertical: 8 },
+  moreText: { color: "#777", fontSize: 12, textAlign: "center", paddingVertical: 8 },
 
   sidebarFooter: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: "auto" as any, paddingTop: 16, borderTopWidth: 1, borderTopColor: "#111" },
   sidebarFooterText: { color: "#2a2a2a", fontSize: 11 },

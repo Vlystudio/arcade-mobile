@@ -672,7 +672,7 @@ export default function FeedScreen() {
                 <TextInput
                   style={styles.cmtInput}
                   placeholder="Add a comment…"
-                  placeholderTextColor="#333"
+                  placeholderTextColor="#555"
                   value={newComment}
                   onChangeText={setNewComment}
                   maxLength={280}
@@ -766,7 +766,7 @@ export default function FeedScreen() {
               <TextInput
                 style={styles.postInput}
                 placeholder="What's on your mind?"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 multiline
                 value={editContent}
                 onChangeText={(t) => { setEditContent(t); setEditError(null); }}
@@ -845,7 +845,7 @@ export default function FeedScreen() {
               <TextInput
                 style={[styles.postInput, styles.reportDetailsInput]}
                 placeholder="Additional details (optional)"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 multiline
                 value={reportDetails}
                 onChangeText={setReportDetails}
@@ -909,7 +909,7 @@ export default function FeedScreen() {
               <TextInput
                 style={styles.postInput}
                 placeholder="What's on your mind?"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 multiline
                 value={postContent}
                 onChangeText={(t) => { setPostContent(t); setPostError(null); }}
@@ -1143,7 +1143,7 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 1, borderColor: "#222",
     backgroundColor: "#111",
   },
-  locationPromptText: { color: "#444", fontSize: 11, fontWeight: "600" },
+  locationPromptText: { color: "#777", fontSize: 11, fontWeight: "600" },
   iconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   iconBtnCyan: {
     width: 34, height: 34, borderRadius: 17,
@@ -1170,7 +1170,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#222",
   },
   composePlaceholder: { flex: 1 },
-  composePlaceholderText: { color: "#3a3a3a", fontSize: 14, fontWeight: "500" },
+  composePlaceholderText: { color: "#6b6b6b", fontSize: 14, fontWeight: "500" },
   composeScoreBtn: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: "rgba(245,158,11,0.1)",
@@ -1186,7 +1186,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginBottom: 4,
   },
   emptyTitle: { color: "#fff", fontSize: 18, fontWeight: "800", textAlign: "center" },
-  emptySub: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
   emptyBtn: {
     marginTop: 4, flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 22, paddingVertical: 12,
@@ -1210,7 +1210,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 2,
   },
   officialTagText: { color: "#06b6d4", fontSize: 10, fontWeight: "800" },
-  postTime: { color: "#444", fontSize: 12, marginTop: 2 },
+  postTime: { color: "#777", fontSize: 12, marginTop: 2 },
 
   // Score block inside post
   scoreBlock: {
@@ -1242,7 +1242,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#161616", alignItems: "center", justifyContent: "center",
   },
   likeIconWrapActive: { backgroundColor: "rgba(239,68,68,0.12)" },
-  likeCount: { color: "#555", fontSize: 13, fontWeight: "600" },
+  likeCount: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
   likeCountActive: { color: "#ef4444" },
 
   // Create post modal
@@ -1257,7 +1257,7 @@ const styles = StyleSheet.create({
   modalTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
   postAuthorRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   postAuthorName: { color: "#fff", fontWeight: "800", fontSize: 15 },
-  postAudienceLabel: { color: "#444", fontSize: 11, marginTop: 2 },
+  postAudienceLabel: { color: "#777", fontSize: 11, marginTop: 2 },
   modalCloseBtn: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: "#1e1e1e", alignItems: "center", justifyContent: "center",
@@ -1269,7 +1269,7 @@ const styles = StyleSheet.create({
     paddingBottom: 14, marginBottom: 12,
   },
   modalFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
-  charCount: { color: "#3a3a3a", fontSize: 12 },
+  charCount: { color: "#6b6b6b", fontSize: 12 },
   postBtn: {
     backgroundColor: "#06b6d4", borderRadius: 14,
     paddingHorizontal: 28, paddingVertical: 13,
@@ -1348,7 +1348,7 @@ const styles = StyleSheet.create({
   },
   postDestBtnActive: { backgroundColor: "#1e1e1e" },
   postDestBtnArcade: { backgroundColor: "rgba(6,182,212,0.1)" },
-  postDestText: { color: "#444", fontSize: 13, fontWeight: "600" },
+  postDestText: { color: "#777", fontSize: 13, fontWeight: "600" },
   postDestTextActive: { color: "#fff", fontWeight: "700" },
   postDestTextArcade: { color: "#06b6d4", fontWeight: "700" },
 
@@ -1375,11 +1375,11 @@ const styles = StyleSheet.create({
   menuItemText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   menuItemDestructive: { color: "#ef4444" },
   menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#222", marginHorizontal: 16 },
-  menuCancelText: { color: "#555", fontSize: 16, fontWeight: "600" },
+  menuCancelText: { color: "#8a8a8a", fontSize: 16, fontWeight: "600" },
 
   // Comments
   cmtEmpty: { alignItems: "center", justifyContent: "center", paddingVertical: 36, gap: 10 },
-  cmtEmptyText: { color: "#444", fontSize: 14 },
+  cmtEmptyText: { color: "#777", fontSize: 14 },
   cmtRow: { flexDirection: "row", gap: 10, paddingHorizontal: 4, marginBottom: 14, alignItems: "flex-start" },
   cmtBubble: { flex: 1, backgroundColor: "#161616", borderRadius: 14, padding: 10, borderWidth: 1, borderColor: "#1e1e1e" },
   cmtAuthor: { color: "#06b6d4", fontSize: 12, fontWeight: "800", marginBottom: 3 },
@@ -1389,7 +1389,7 @@ const styles = StyleSheet.create({
   cmtSendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center" },
 
   // Share
-  shareSubtitle: { color: "#555", fontSize: 12, marginTop: 2 },
+  shareSubtitle: { color: "#8a8a8a", fontSize: 12, marginTop: 2 },
   shareConvRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   shareConvName: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
 });

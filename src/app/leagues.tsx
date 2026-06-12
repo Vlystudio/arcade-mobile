@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
+import Head from "expo-router/head";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,6 +14,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
+import { ListSkeleton } from "../components/skeleton";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { Avatar } from "../components/avatar";
@@ -173,8 +176,52 @@ export default function LeaguesScreen() {
     }
   }, [user, myTeamId]);
 
+  /** Web: open a clean black-on-white standings + schedule sheet and print it. */
+  async function printSchedule() {
+    if (Platform.OS !== "web") return;
+    const monday = new Date();
+    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+    const weekOf = monday.toISOString().slice(0, 10);
+    const { data: slots } = await supabase
+      .from("team_schedule")
+      .select("slot_time, teams(name)")
+      .eq("week_of", weekOf)
+      .order("slot_time");
+
+    const seasonName = skeeSeasons.find((sn) => sn.id === skeeSeasonId)?.name ?? "Skee-Ball League";
+    const slotRows = (slots ?? []).map((r: any) => {
+      const name = (Array.isArray(r.teams) ? r.teams[0]?.name : r.teams?.name) ?? "Unknown";
+      return `<tr><td>${r.slot_time}</td><td>${name}</td></tr>`;
+    }).join("");
+    const standingRows = skeeStandings.map((t, i) =>
+      `<tr><td>${i + 1}</td><td>${t.team_name}</td><td>${t.matches_played}</td><td>${t.avg_score ?? "—"}</td><td><b>${t.total_points}</b></td></tr>`
+    ).join("");
+
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<!doctype html><html><head><title>${seasonName} — Schedule & Standings</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #111; margin: 32px; }
+  h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 14px; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 1px; }
+  .sub { color: #666; font-size: 12px; margin-bottom: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+  th { background: #f2f2f2; }
+</style></head><body>
+<h1>${seasonName}</h1>
+<div class="sub">Week of ${new Date(weekOf).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
+<h2>This Week's Schedule</h2>
+<table><tr><th>Time</th><th>Team</th></tr>${slotRows || '<tr><td colspan="2">No schedule saved yet</td></tr>'}</table>
+<h2>Standings</h2>
+<table><tr><th>#</th><th>Team</th><th>GP</th><th>AVG</th><th>PTS</th></tr>${standingRows || '<tr><td colspan="5">No games yet</td></tr>'}</table>
+</body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 250);
+  }
+
   if (authLoading || loading) {
-    return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
+    return <ListSkeleton rows={5} />;
   }
 
   const displaySeason = seasons.find((s) => s.id === selectedSeasonId) ?? activeSeason;
@@ -186,6 +233,7 @@ export default function LeaguesScreen() {
 
   return (
     <View style={styles.root}>
+      <Head><title>Leagues · ArcadeTracker</title></Head>
       <SafeAreaView style={styles.safe} edges={["top"]}>
         <ScrollView
           contentContainerStyle={styles.content}
@@ -273,6 +321,12 @@ export default function LeaguesScreen() {
                   <Text style={styles.liveCardTitle}>League Night Live</Text>
                   <Text style={styles.liveCardSub}>Watch all lanes update in real time</Text>
                 </View>
+                {Platform.OS === "web" && (
+                  <Pressable style={styles.printBtn} onPress={(e) => { e.stopPropagation(); printSchedule(); }} hitSlop={6}>
+                    <Ionicons name="print-outline" size={15} color="#888" />
+                    <Text style={styles.printBtnText}>Print</Text>
+                  </Pressable>
+                )}
                 <Ionicons name="chevron-forward" size={16} color="#444" />
               </Pressable>
 
@@ -338,7 +392,7 @@ export default function LeaguesScreen() {
                             <Text style={styles.teamNameCell} numberOfLines={1}>{s.team_name}</Text>
                             {s.isMyTeam && <View style={styles.youBadge}><Text style={styles.youBadgeText}>YOU</Text></View>}
                           </View>
-                          <Text style={[styles.tableCell, styles.numCol, { color: "#555" }]}>{s.matches_played}</Text>
+                          <Text style={[styles.tableCell, styles.numCol, { color: "#8a8a8a" }]}>{s.matches_played}</Text>
                           <Text style={[styles.tableCell, styles.numCol, { color: "#888", fontWeight: "800" }]}>{s.avg_score ?? "—"}</Text>
                           <Text style={[styles.tableCell, { width: 52, textAlign: "center", fontSize: 11 }]}>
                             {s.gold > 0 ? `${s.gold}🥇 ` : ""}{s.silver > 0 ? `${s.silver}🥈 ` : ""}{s.bronze > 0 ? `${s.bronze}🥉` : ""}
@@ -560,11 +614,11 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 },
 
   pageTitle: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5, marginBottom: 4 },
-  pageSub: { color: "#555", fontSize: 14, marginBottom: 24 },
+  pageSub: { color: "#8a8a8a", fontSize: 14, marginBottom: 24 },
 
   emptyCard: { backgroundColor: "#0d0d0d", borderRadius: 20, padding: 40, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a" },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800", marginBottom: 6 },
-  emptySub: { color: "#555", fontSize: 14, textAlign: "center" },
+  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center" },
 
   pillScroll: { marginBottom: 20 },
   pillContent: { gap: 8, paddingRight: 20 },
@@ -574,7 +628,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e",
   },
   pillActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.08)" },
-  pillText: { color: "#555", fontWeight: "600", fontSize: 13 },
+  pillText: { color: "#8a8a8a", fontWeight: "600", fontSize: 13 },
   pillTextActive: { color: "#06b6d4", fontWeight: "800" },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#22c55e" },
 
@@ -584,20 +638,20 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24,
   },
   seasonName: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 4 },
-  seasonDates: { color: "#555", fontSize: 13 },
+  seasonDates: { color: "#8a8a8a", fontSize: 13 },
   badge: { borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5 },
   badgeText: { fontSize: 12, fontWeight: "800" },
 
-  sectionLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
+  sectionLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
 
   emptyInline: { paddingVertical: 16 },
-  emptyInlineText: { color: "#444", fontSize: 14 },
+  emptyInlineText: { color: "#777", fontSize: 14 },
 
   table: { backgroundColor: "#111", borderRadius: 16, borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden", marginBottom: 28 },
   tableHead: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#0a0a0a" },
   tableRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 13, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1e1e1e" },
   tableRowMe: { backgroundColor: "rgba(6,182,212,0.05)" },
-  tableCell: { color: "#555", fontSize: 13, fontWeight: "600" },
+  tableCell: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
   rankCol: { width: 28 },
   nameCol: { flex: 1 },
   numCol: { width: 36, textAlign: "center" },
@@ -615,12 +669,12 @@ const styles = StyleSheet.create({
   matchTeam: { color: "#fff", fontSize: 14, fontWeight: "700" },
   matchVs: { color: "#333", fontSize: 11 },
   matchScore: { color: "#22c55e", fontWeight: "900", fontSize: 16 },
-  matchDate: { color: "#555", fontSize: 13 },
+  matchDate: { color: "#8a8a8a", fontSize: 13 },
 
   tabRow: { flexDirection: "row", gap: 8, marginBottom: 24 },
   tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 14, backgroundColor: "#111", borderWidth: 1, borderColor: "#1e1e1e", alignItems: "center" },
   tabBtnActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.08)" },
-  tabText: { color: "#555", fontWeight: "700", fontSize: 13 },
+  tabText: { color: "#8a8a8a", fontWeight: "700", fontSize: 13 },
   tabTextActive: { color: "#06b6d4", fontWeight: "900" },
 
   leaguePointsKey: { backgroundColor: "#0d0d0d", borderRadius: 14, padding: 16, marginBottom: 28, borderWidth: 1, borderColor: "#1a1a1a" },
@@ -640,7 +694,14 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(239,68,68,0.08)", alignItems: "center", justifyContent: "center",
   },
   liveCardTitle: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  liveCardSub: { color: "#555", fontSize: 11.5, marginTop: 1 },
+  liveCardSub: { color: "#8a8a8a", fontSize: 11.5, marginTop: 1 },
+  printBtn: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#1a1a1a", borderRadius: 9,
+    paddingHorizontal: 10, paddingVertical: 6, marginRight: 4,
+    borderWidth: 1, borderColor: "#2a2a2a",
+  },
+  printBtnText: { color: "#888", fontSize: 12, fontWeight: "700" },
 
   potwCard: {
     backgroundColor: "rgba(245,158,11,0.04)", borderRadius: 16, padding: 14, marginBottom: 12,
@@ -663,7 +724,7 @@ const styles = StyleSheet.create({
   raceTitle: { color: "#a855f7", fontSize: 10.5, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8 },
   raceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   raceTeam: { flex: 1, color: "#ccc", fontSize: 13, fontWeight: "700" },
-  raceMax: { color: "#444", fontSize: 11.5, fontWeight: "600" },
+  raceMax: { color: "#777", fontSize: 11.5, fontWeight: "600" },
   raceTag: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
   raceTagText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.4 },
 
@@ -680,10 +741,10 @@ const styles = StyleSheet.create({
   tapHint: { color: "#333", fontSize: 11, textAlign: "center", paddingVertical: 9, fontStyle: "italic" },
 
   skeeMatchCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: "#1e1e1e" },
-  skeeMatchDate: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 },
+  skeeMatchDate: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 },
   skeeMatchRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a" },
   skeeMatchEmoji: { fontSize: 20, width: 28 },
   skeeMatchTeam: { flex: 1, color: "#fff", fontSize: 14, fontWeight: "800" },
-  skeeMatchGameScore: { color: "#555", fontSize: 13, fontWeight: "600" },
+  skeeMatchGameScore: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
   skeeMatchLeaguePts: { fontSize: 13, fontWeight: "900", width: 48, textAlign: "right" },
 });

@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   backBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
   headerCenter: { flex: 1, alignItems: "center" },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  headerSub: { color: "#444", fontSize: 12, marginTop: 2 },
+  headerSub: { color: "#777", fontSize: 12, marginTop: 2 },
 
   listContainer: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 40 },
   emptyContainer: { flex: 1, paddingHorizontal: 18 },
@@ -191,7 +191,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginBottom: 4,
   },
   emptyTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
-  emptySub: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
 
   // Podium (top 3)
   podium: { flexDirection: "row", gap: 10, marginBottom: 24 },
@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   podiumRank: { fontSize: 11, fontWeight: "900", letterSpacing: 0.5 },
   podiumName: { color: "#fff", fontSize: 12, fontWeight: "800", textAlign: "center" },
   podiumScore: { fontSize: 18, fontWeight: "900", letterSpacing: -0.5 },
-  podiumDate: { color: "#444", fontSize: 10 },
+  podiumDate: { color: "#777", fontSize: 10 },
 
   // Rows 4–100
   row: {

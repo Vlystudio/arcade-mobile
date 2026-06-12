@@ -77,7 +77,7 @@ const s = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 36, gap: 16 },
   iconCircle: { width: 88, height: 88, borderRadius: 44, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   title: { color: "#fff", fontSize: 22, fontWeight: "900", textAlign: "center" },
-  body: { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  body: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
   btn: { marginTop: 8, backgroundColor: "#06b6d4", borderRadius: 16, paddingVertical: 14, paddingHorizontal: 32 },
   btnText: { color: "#000", fontWeight: "900", fontSize: 15 },
   loadingText: { color: "#888", fontSize: 14, marginTop: 8 },

@@ -232,7 +232,7 @@ export default function SkeeballCompareScreen() {
               <TextInput
                 style={s.searchInput}
                 placeholder="Search by username…"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 autoFocus
                 autoCapitalize="none"
                 value={search}
@@ -328,7 +328,7 @@ const s = StyleSheet.create({
   },
   backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   headerTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
-  headerSub: { color: "#444", fontSize: 12, marginTop: 1 },
+  headerSub: { color: "#777", fontSize: 12, marginTop: 1 },
 
   slotsRow: { flexDirection: "row", alignItems: "stretch", gap: 10, marginBottom: 16 },
   slot: {
@@ -337,13 +337,13 @@ const s = StyleSheet.create({
     borderWidth: 1.5, borderColor: "#1e1e1e",
   },
   slotName: { fontSize: 14, fontWeight: "800" },
-  slotChange: { color: "#444", fontSize: 11, fontWeight: "600" },
+  slotChange: { color: "#777", fontSize: 11, fontWeight: "600" },
   slotAdd: {
     width: 46, height: 46, borderRadius: 23,
     backgroundColor: "#1a1a1a", alignItems: "center", justifyContent: "center",
     borderWidth: 1, borderColor: "#2a2a2a", borderStyle: "dashed",
   },
-  slotPlaceholder: { color: "#555", fontSize: 13, fontWeight: "600", marginTop: 4 },
+  slotPlaceholder: { color: "#8a8a8a", fontSize: 13, fontWeight: "600", marginTop: 4 },
   vsWrap: { justifyContent: "center" },
   vsText: { color: "#333", fontSize: 14, fontWeight: "900" },
 
@@ -354,7 +354,7 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e",
   },
   scopeChipActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.08)" },
-  scopeChipText: { color: "#555", fontSize: 12.5, fontWeight: "600" },
+  scopeChipText: { color: "#8a8a8a", fontSize: 12.5, fontWeight: "600" },
   scopeChipTextActive: { color: "#06b6d4", fontWeight: "800" },
   liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: "#22c55e" },
 
@@ -363,10 +363,10 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: "#1a1a1a", marginTop: 12,
   },
   emptyTitle: { color: "#fff", fontSize: 16, fontWeight: "800" },
-  emptySub: { color: "#555", fontSize: 13, textAlign: "center", lineHeight: 19 },
+  emptySub: { color: "#8a8a8a", fontSize: 13, textAlign: "center", lineHeight: 19 },
 
   sectionLabel: {
-    color: "#3a3a3a", fontSize: 10, fontWeight: "800",
+    color: "#6b6b6b", fontSize: 10, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 10, marginTop: 6,
   },
 
@@ -379,7 +379,7 @@ const s = StyleSheet.create({
   compareRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   compareVal: { flex: 1, fontSize: 17, fontWeight: "900" },
   compareValWin: { fontSize: 19 },
-  compareLabel: { flex: 1.4, color: "#444", fontSize: 11.5, fontWeight: "700", textAlign: "center", textTransform: "uppercase", letterSpacing: 0.6 },
+  compareLabel: { flex: 1.4, color: "#777", fontSize: 11.5, fontWeight: "700", textAlign: "center", textTransform: "uppercase", letterSpacing: 0.6 },
 
   trendRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
   trendCol: {
@@ -387,7 +387,7 @@ const s = StyleSheet.create({
     alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e",
   },
   trendName: { fontSize: 13, fontWeight: "800" },
-  trendNone: { color: "#3a3a3a", fontSize: 11 },
+  trendNone: { color: "#6b6b6b", fontSize: 11 },
 
   legendRow: { flexDirection: "row", gap: 16, marginBottom: 2 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
@@ -401,6 +401,7 @@ const s = StyleSheet.create({
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   modalDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   modalSheet: {
+    width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32,
     borderTopWidth: 1, borderColor: "#1e1e1e",
@@ -415,7 +416,7 @@ const s = StyleSheet.create({
   },
   searchInput: { flex: 1, color: "#fff", fontSize: 15 },
   suggestLabel: {
-    color: "#3a3a3a", fontSize: 10, fontWeight: "800",
+    color: "#6b6b6b", fontSize: 10, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1.2, marginVertical: 8,
   },
   resultRow: {
@@ -423,5 +424,5 @@ const s = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
   },
   resultName: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
-  noResults: { color: "#444", textAlign: "center", paddingVertical: 24, fontSize: 14 },
+  noResults: { color: "#777", textAlign: "center", paddingVertical: 24, fontSize: 14 },
 });

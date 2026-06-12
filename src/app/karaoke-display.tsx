@@ -30,7 +30,7 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#080808" },
   container: { flex: 1, alignItems: "center", justifyContent: "center", padding: 40 },
   title: { color: "#fff", fontSize: 22, fontWeight: "900", marginTop: 20, marginBottom: 14 },
-  body: { color: "#555", fontSize: 15, lineHeight: 24, textAlign: "center", marginBottom: 36 },
+  body: { color: "#8a8a8a", fontSize: 15, lineHeight: 24, textAlign: "center", marginBottom: 36 },
   backBtn: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "#a855f7", borderRadius: 14, paddingVertical: 14, paddingHorizontal: 24 },
   backBtnText: { color: "#fff", fontWeight: "900", fontSize: 15 },
 });

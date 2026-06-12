@@ -278,7 +278,7 @@ export default function SupportChatScreen() {
           <TextInput
             style={s.input}
             placeholder="Type a message…"
-            placeholderTextColor="#333"
+            placeholderTextColor="#555"
             value={text}
             onChangeText={setText}
             multiline
@@ -332,7 +332,7 @@ const s = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginBottom: 14,
   },
   welcomeTitle: { color: "#fff", fontSize: 18, fontWeight: "800", marginBottom: 8 },
-  welcomeSub: { color: "#555", fontSize: 13, textAlign: "center", lineHeight: 20 },
+  welcomeSub: { color: "#8a8a8a", fontSize: 13, textAlign: "center", lineHeight: 20 },
 
   dateSep: { alignItems: "center", marginVertical: 12 },
   dateSepText: { color: "#333", fontSize: 11, fontWeight: "700" },
@@ -360,7 +360,7 @@ const s = StyleSheet.create({
 
   bubbleTime: { fontSize: 10, marginTop: 4 },
   bubbleTimeMe: { color: "rgba(0,0,0,0.5)", textAlign: "right" },
-  bubbleTimeThem: { color: "#444" },
+  bubbleTimeThem: { color: "#777" },
 
   emptyState: { alignItems: "center", paddingTop: 40, gap: 10 },
   emptyText: { color: "#333", fontSize: 14 },

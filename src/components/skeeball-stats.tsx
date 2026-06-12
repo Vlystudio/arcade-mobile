@@ -305,10 +305,10 @@ const s = StyleSheet.create({
     alignItems: "center", borderWidth: 1, borderColor: "#191919",
   },
   summaryValue: { color: "#06b6d4", fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
-  summaryLabel: { color: "#444", fontSize: 9.5, fontWeight: "700", marginTop: 2, textAlign: "center" },
+  summaryLabel: { color: "#777", fontSize: 9.5, fontWeight: "700", marginTop: 2, textAlign: "center" },
 
   subLabel: {
-    color: "#3a3a3a", fontSize: 10, fontWeight: "800",
+    color: "#6b6b6b", fontSize: 10, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1.2, marginTop: 2,
   },
 
@@ -318,8 +318,8 @@ const s = StyleSheet.create({
   barWrap: { flex: 1, maxWidth: 26, alignItems: "center", justifyContent: "flex-end" },
   bar: { width: "100%", borderTopLeftRadius: 4, borderTopRightRadius: 4, minWidth: 8 },
   barValue: { fontSize: 9, fontWeight: "800", marginBottom: 2 },
-  chartLabel: { color: "#444", fontSize: 9, fontWeight: "600", marginTop: 4 },
-  chartEmpty: { color: "#444", fontSize: 12.5, paddingVertical: 8 },
+  chartLabel: { color: "#777", fontSize: 9, fontWeight: "600", marginTop: 4 },
+  chartEmpty: { color: "#777", fontSize: 12.5, paddingVertical: 8 },
 
   chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   insightChip: {
@@ -333,12 +333,12 @@ const s = StyleSheet.create({
   },
   badgeText: { fontSize: 11, fontWeight: "800" },
   laneLabel: { width: 30, fontSize: 12, fontWeight: "900", textAlign: "right", color: "#666" },
-  recordsLine: { color: "#555", fontSize: 11.5, lineHeight: 16 },
+  recordsLine: { color: "#8a8a8a", fontSize: 11.5, lineHeight: 16 },
 
   ringRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   ringLabel: { width: 30, fontSize: 12, fontWeight: "900", textAlign: "right" },
   ringTrack: { flex: 1, height: 8, borderRadius: 4, backgroundColor: "#1a1a1a", overflow: "hidden" },
   ringFill: { height: "100%", borderRadius: 4 },
   ringPct: { width: 36, color: "#888", fontSize: 11.5, fontWeight: "800", textAlign: "right" },
-  ringCount: { width: 38, color: "#3a3a3a", fontSize: 10.5 },
+  ringCount: { width: 38, color: "#6b6b6b", fontSize: 10.5 },
 });

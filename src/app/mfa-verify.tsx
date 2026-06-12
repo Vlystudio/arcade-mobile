@@ -94,7 +94,7 @@ export default function MfaVerifyScreen() {
           keyboardType="number-pad"
           maxLength={6}
           placeholder="000000"
-          placeholderTextColor="#333"
+          placeholderTextColor="#555"
           textAlign="center"
           autoFocus={Platform.OS !== "web"}
         />
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   },
 
   title: { color: "#fff", fontSize: 22, fontWeight: "900", textAlign: "center" },
-  sub:   { color: "#555", fontSize: 14, textAlign: "center", lineHeight: 20, maxWidth: 280 },
+  sub:   { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20, maxWidth: 280 },
 
   codeInput: {
     width: "100%",

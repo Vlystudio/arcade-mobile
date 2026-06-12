@@ -351,7 +351,7 @@ export default function PoolScreen() {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search username…"
-                placeholderTextColor="#333"
+                placeholderTextColor="#555"
                 autoCapitalize="none"
                 value={opponentSearch}
                 onChangeText={(t) => { setOpponentSearch(t); searchOpponents(t); }}
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
   pageHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 24 },
   backBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   pageTitle: { color: "#fff", fontSize: 26, fontWeight: "900", letterSpacing: -0.4 },
-  pageSub: { color: "#555", fontSize: 13 },
+  pageSub: { color: "#8a8a8a", fontSize: 13 },
   locationBadge: {
     flexDirection: "row", alignItems: "center", gap: 5,
     backgroundColor: "rgba(168,85,247,0.12)", borderRadius: 12,
@@ -471,9 +471,9 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: "row", gap: 10, marginBottom: 24 },
   statPill: { flex: 1, borderRadius: 14, padding: 14, alignItems: "center", borderWidth: 1 },
   statValue: { fontSize: 22, fontWeight: "900" },
-  statLabel: { color: "#555", fontSize: 11, fontWeight: "700", textTransform: "uppercase", marginTop: 2 },
+  statLabel: { color: "#8a8a8a", fontSize: 11, fontWeight: "700", textTransform: "uppercase", marginTop: 2 },
 
-  sectionLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 14 },
+  sectionLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 14 },
 
   tablesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 32 },
   tableCard: {
@@ -499,7 +499,7 @@ const styles = StyleSheet.create({
   tableName: { color: "#888", fontSize: 12, fontWeight: "600" },
   tableStatus: { color: "#22c55e", fontSize: 12, fontWeight: "800" },
   tableStatusOccupied: { color: "#ef4444" },
-  tablePlayers: { color: "#444", fontSize: 11, numberOfLines: 1 } as any,
+  tablePlayers: { color: "#777", fontSize: 11, numberOfLines: 1 } as any,
   claimBtn: {
     backgroundColor: "#a855f7", borderRadius: 10,
     paddingVertical: 9, alignItems: "center", marginTop: 4,
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
 
   emptyCard: { backgroundColor: "#0d0d0d", borderRadius: 18, padding: 28, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a" },
   emptyText: { color: "#fff", fontSize: 16, fontWeight: "800", marginBottom: 4 },
-  emptySub: { color: "#444", fontSize: 13 },
+  emptySub: { color: "#777", fontSize: 13 },
 
   recentCard: {
     backgroundColor: "#111", borderRadius: 16, padding: 14,
@@ -525,7 +525,7 @@ const styles = StyleSheet.create({
   recentGameTypeBadge: { backgroundColor: "rgba(168,85,247,0.12)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   recentGameTypeText: { color: "#a855f7", fontSize: 11, fontWeight: "800", textTransform: "uppercase" },
   recentPlayers: { color: "#fff", fontSize: 14, fontWeight: "700" },
-  recentMeta: { color: "#444", fontSize: 12, marginTop: 1 },
+  recentMeta: { color: "#777", fontSize: 12, marginTop: 1 },
   winnerTag: { flexDirection: "row", alignItems: "center", gap: 4 },
   winnerText: { color: "#f59e0b", fontSize: 12, fontWeight: "800" },
 
@@ -538,8 +538,8 @@ const styles = StyleSheet.create({
   },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 2 },
-  modalSub: { color: "#555", fontSize: 14, marginBottom: 20 },
-  fieldLabel: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 },
+  modalSub: { color: "#8a8a8a", fontSize: 14, marginBottom: 20 },
+  fieldLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 },
 
   gameTypeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 },
   gameTypeCard: { width: "47%", backgroundColor: "#0d0d0d", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#1e1e1e" },

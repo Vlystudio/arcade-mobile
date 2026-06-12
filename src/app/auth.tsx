@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
   },
   logoMarkText: { color: "#000", fontSize: 28, fontWeight: "900", letterSpacing: -1 },
   appName: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5, marginBottom: 8 },
-  tagline: { color: "#444", fontSize: 15 },
+  tagline: { color: "#777", fontSize: 15 },
 
   actions: { gap: 12 },
   loginBtn: {
@@ -112,5 +112,5 @@ const styles = StyleSheet.create({
     borderRadius: 16, padding: 14, marginBottom: 20,
   },
   noticeTitle: { color: "#06b6d4", fontSize: 13, fontWeight: "800", marginBottom: 3 },
-  noticeBody: { color: "#555", fontSize: 13, lineHeight: 19 },
+  noticeBody: { color: "#8a8a8a", fontSize: 13, lineHeight: 19 },
 });

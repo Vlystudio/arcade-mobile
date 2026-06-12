@@ -138,7 +138,7 @@ export default function DeleteAccountScreen() {
             <TextInput
               style={s.input}
               placeholder="Password"
-              placeholderTextColor="#333"
+              placeholderTextColor="#555"
               secureTextEntry
               value={password}
               onChangeText={(v) => { setPassword(v); setError(null); }}
@@ -206,10 +206,10 @@ const s = StyleSheet.create({
     backgroundColor: "#111", borderRadius: 14, paddingVertical: 15,
     alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12,
   },
-  cancelBtnText: { color: "#555", fontWeight: "700", fontSize: 15 },
+  cancelBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 
   passwordLabel: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 8 },
-  passwordSub: { color: "#555", fontSize: 14, lineHeight: 21, marginBottom: 20 },
+  passwordSub: { color: "#8a8a8a", fontSize: 14, lineHeight: 21, marginBottom: 20 },
   input: {
     backgroundColor: "#0a0a0a", color: "#fff", padding: 16,
     borderRadius: 14, fontSize: 16, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 10,
@@ -234,7 +234,7 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: "rgba(34,197,94,0.2)", marginBottom: 20,
   },
   doneTitle: { color: "#fff", fontSize: 24, fontWeight: "900", marginBottom: 12 },
-  doneSub: { color: "#555", fontSize: 14, lineHeight: 22, textAlign: "center", marginBottom: 32 },
+  doneSub: { color: "#8a8a8a", fontSize: 14, lineHeight: 22, textAlign: "center", marginBottom: 32 },
   doneBtn: {
     backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 32, paddingVertical: 15,
   },
