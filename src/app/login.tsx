@@ -1,6 +1,7 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -69,10 +70,33 @@ export default function LoginScreen() {
   const [resetSent, setResetSent]                     = useState(false);
   const [forgotPasswordError, setForgotPasswordError] = useState<string | null>(null);
 
+  // Restore the saved login + checkbox state when "Remember me" was used before
+  useEffect(() => {
+    Promise.all([
+      AsyncStorage.getItem("@arcade:rememberMe"),
+      AsyncStorage.getItem("@arcade:rememberedLogin"),
+    ]).then(([remembered, savedLogin]) => {
+      if (remembered === "1") {
+        setRememberMeLocal(true);
+        if (savedLogin) setEmail(savedLogin);
+      }
+    }).catch(() => {});
+  }, []);
+
   function toggleRememberMe() {
     const next = !rememberMe;
     setRememberMeLocal(next);
     setRememberMe(next);
+  }
+
+  // Persist (or clear) the login identifier after a successful sign-in.
+  // Only the email/username is stored — never the password.
+  function persistRememberedLogin(identifier: string) {
+    if (rememberMe) {
+      AsyncStorage.setItem("@arcade:rememberedLogin", identifier).catch(() => {});
+    } else {
+      AsyncStorage.removeItem("@arcade:rememberedLogin").catch(() => {});
+    }
   }
 
   async function handleLogin() {
@@ -101,6 +125,8 @@ export default function LoginScreen() {
       setLoading(false);
       return;
     }
+
+    persistRememberedLogin(identifier);
 
     // Check if user has accepted the current ToS version
     const userId = authData.user?.id;

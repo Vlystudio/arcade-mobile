@@ -14,49 +14,85 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 
+type VerifiedFactor = { id: string; type: "totp" | "phone"; phone?: string };
+
 export default function MfaVerifyScreen() {
-  const [factorId, setFactorId]     = useState<string | null>(null);
+  const [factors, setFactors]       = useState<VerifiedFactor[]>([]);
+  const [active, setActive]         = useState<VerifiedFactor | null>(null);
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [code, setCode]             = useState("");
   const [loading, setLoading]       = useState(true);
   const [verifying, setVerifying]   = useState(false);
+  const [sendingSms, setSendingSms] = useState(false);
   const [error, setError]           = useState<string | null>(null);
 
   useEffect(() => { setup(); }, []);
 
   async function setup() {
     const { data } = await supabase.auth.mfa.listFactors();
-    const totp = data?.totp?.find((f) => f.status === "verified");
-    if (!totp) {
+    const verified: VerifiedFactor[] = [
+      ...(data?.totp ?? [])
+        .filter((f) => f.status === "verified")
+        .map((f) => ({ id: f.id, type: "totp" as const })),
+    ...(((data as any)?.phone ?? []) as any[])
+        .filter((f) => f.status === "verified")
+        .map((f) => ({ id: f.id, type: "phone" as const, phone: f.phone })),
+    ];
+    if (verified.length === 0) {
       router.replace("/");
       return;
     }
-    const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId: totp.id });
-    if (cErr || !challenge) {
-      const msg = "Could not start verification. Please try again.";
-      reportError("MfaVerify.setup", cErr?.message ?? msg);
-      setError(msg);
-      setLoading(false);
-      return;
-    }
-    setFactorId(totp.id);
-    setChallengeId(challenge.id);
+    setFactors(verified);
+    // Prefer TOTP (works offline); fall back to SMS
+    const preferred = verified.find((f) => f.type === "totp") ?? verified[0];
+    await startChallenge(preferred);
     setLoading(false);
   }
 
+  async function startChallenge(factor: VerifiedFactor) {
+    setActive(factor);
+    setCode("");
+    setError(null);
+    setChallengeId(null);
+    // For phone factors the challenge call sends the SMS
+    const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId: factor.id });
+    if (cErr || !challenge) {
+      const msg = "Could not start verification. Please try again.";
+      reportError("MfaVerify.startChallenge", cErr?.message ?? msg);
+      setError(cErr?.message ?? msg);
+      return;
+    }
+    setChallengeId(challenge.id);
+  }
+
+  async function resendSms() {
+    if (!active || active.type !== "phone" || sendingSms) return;
+    setSendingSms(true);
+    await startChallenge(active);
+    setSendingSms(false);
+  }
+
   async function handleVerify() {
-    if (!factorId || !challengeId || code.length !== 6) return;
+    if (!active || !challengeId || code.length !== 6) return;
     setVerifying(true);
     setError(null);
 
-    const { error: vErr } = await supabase.auth.mfa.verify({ factorId, challengeId, code });
+    const { error: vErr } = await supabase.auth.mfa.verify({
+      factorId: active.id,
+      challengeId,
+      code,
+    });
     setVerifying(false);
 
     if (vErr) {
       setError("Incorrect code — try again.");
       setCode("");
-      const { data: newChallenge } = await supabase.auth.mfa.challenge({ factorId });
-      if (newChallenge) setChallengeId(newChallenge.id);
+      // TOTP challenges are reusable enough to refresh silently; for SMS
+      // keep the same challenge so we don't burn texts on typos.
+      if (active.type === "totp") {
+        const { data: newChallenge } = await supabase.auth.mfa.challenge({ factorId: active.id });
+        if (newChallenge) setChallengeId(newChallenge.id);
+      }
     } else {
       router.replace("/");
     }
@@ -72,15 +108,23 @@ export default function MfaVerifyScreen() {
     );
   }
 
+  const otherFactor = factors.find((f) => f.id !== active?.id);
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.container}>
         <View style={styles.iconWrap}>
-          <Ionicons name="shield-outline" size={40} color="#06b6d4" />
+          <Ionicons
+            name={active?.type === "phone" ? "chatbubble-ellipses-outline" : "shield-outline"}
+            size={40}
+            color="#06b6d4"
+          />
         </View>
         <Text style={styles.title}>Two-Factor Authentication</Text>
         <Text style={styles.sub}>
-          Enter the 6-digit code from your authenticator app to continue.
+          {active?.type === "phone"
+            ? `Enter the 6-digit code we texted to ${active.phone ?? "your phone"}.`
+            : "Enter the 6-digit code from your authenticator app to continue."}
         </Text>
 
         <TextInput
@@ -98,6 +142,14 @@ export default function MfaVerifyScreen() {
           textAlign="center"
           autoFocus={Platform.OS !== "web"}
         />
+
+        {active?.type === "phone" && (
+          <Pressable style={styles.linkBtn} onPress={resendSms} disabled={sendingSms}>
+            {sendingSms
+              ? <ActivityIndicator size="small" color="#06b6d4" />
+              : <Text style={styles.linkText}>Didn't get a text? Resend code</Text>}
+          </Pressable>
+        )}
 
         {error && (
           <View style={styles.errorBox}>
@@ -119,6 +171,16 @@ export default function MfaVerifyScreen() {
               </>
           }
         </Pressable>
+
+        {otherFactor && (
+          <Pressable style={styles.linkBtn} onPress={() => startChallenge(otherFactor)}>
+            <Text style={styles.linkText}>
+              {otherFactor.type === "phone"
+                ? `Text a code to ${otherFactor.phone ?? "my phone"} instead`
+                : "Use my authenticator app instead"}
+            </Text>
+          </Pressable>
+        )}
 
         <Pressable
           style={styles.signOutLink}
@@ -154,6 +216,9 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#1e1e1e",
     marginTop: 8,
   },
+
+  linkBtn: { paddingVertical: 4, minHeight: 24, justifyContent: "center" },
+  linkText: { color: "#06b6d4", fontSize: 13, fontWeight: "700", textAlign: "center" },
 
   errorBox: {
     width: "100%",

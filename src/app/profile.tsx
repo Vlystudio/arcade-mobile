@@ -133,6 +133,7 @@ export default function ProfileScreen() {
   // MFA
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaFactorType, setMfaFactorType] = useState<string | null>(null);
   const [disablingMfa, setDisablingMfa] = useState(false);
 
   // Privacy & status
@@ -359,9 +360,11 @@ export default function ProfileScreen() {
 
   async function loadMfaStatus() {
     const { data } = await supabase.auth.mfa.listFactors();
-    const verified = data?.totp?.find((f: any) => f.status === "verified");
+    // Either factor type counts: authenticator app (totp) or text message (phone)
+    const verified = (data?.all ?? []).find((f: any) => f.status === "verified");
     setMfaEnabled(!!verified);
     setMfaFactorId(verified?.id ?? null);
+    setMfaFactorType(verified ? (verified.factor_type as string) : null);
   }
 
   async function handleDisableMfa() {
@@ -381,6 +384,7 @@ export default function ProfileScreen() {
             sendSecurityAlert("mfa_removed");
             setMfaEnabled(false);
             setMfaFactorId(null);
+            setMfaFactorType(null);
           },
         },
       ]
@@ -820,7 +824,7 @@ export default function ProfileScreen() {
                   iconColor={mfaEnabled ? "#22c55e" : "#ef4444"}
                   iconBg={mfaEnabled ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)"}
                   label="Two-Factor Authentication"
-                  sub={mfaEnabled ? "Enabled" : "Not enabled"}
+                  sub={mfaEnabled ? (mfaFactorType === "phone" ? "Enabled — text message" : "Enabled — authenticator app") : "Not enabled"}
                   loading={disablingMfa}
                   onPress={() => {
                     if (mfaEnabled) { handleDisableMfa(); }

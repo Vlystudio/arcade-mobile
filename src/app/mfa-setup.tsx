@@ -1,13 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
-import { Image } from "expo-image";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Clipboard,
   Linking,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -18,35 +18,62 @@ import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { sendSecurityAlert } from "../../lib/security-notify";
 
+type Method = "totp" | "phone";
+
+/** Normalizes a US-style phone entry into E.164 (+1XXXXXXXXXX). */
+function toE164(input: string): string | null {
+  const digits = input.replace(/\D/g, "");
+  if (input.trim().startsWith("+")) {
+    return digits.length >= 8 && digits.length <= 15 ? `+${digits}` : null;
+  }
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return null;
+}
+
 export default function MfaSetupScreen() {
+  const [method, setMethod] = useState<Method | null>(null);
+
   const [factorId, setFactorId] = useState<string | null>(null);
-  const [qrCode, setQrCode]     = useState<string | null>(null);
-  const [secret, setSecret]     = useState<string | null>(null);
-  const [uri, setUri]           = useState<string | null>(null);
   const [code, setCode]         = useState("");
-  const [loading, setLoading]   = useState(true);
+  const [loading, setLoading]   = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [error, setError]       = useState<string | null>(null);
-  const [copied, setCopied]     = useState(false);
   const [done, setDone]         = useState(false);
 
-  useEffect(() => { enroll(); }, []);
+  // TOTP-specific
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [secret, setSecret] = useState<string | null>(null);
+  const [uri, setUri]       = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
-  async function enroll() {
-    setLoading(true);
-    // Un-enroll any stale unverified factor first
+  // Phone-specific
+  const [phoneInput, setPhoneInput]   = useState("");
+  const [phoneE164, setPhoneE164]     = useState<string | null>(null);
+  const [challengeId, setChallengeId] = useState<string | null>(null);
+  const [sendingSms, setSendingSms]   = useState(false);
+
+  async function cleanStaleFactors() {
     const { data: existing } = await supabase.auth.mfa.listFactors();
-    for (const f of existing?.totp ?? []) {
+    for (const f of existing?.all ?? []) {
       if ((f.status as string) === "unverified") {
         await supabase.auth.mfa.unenroll({ factorId: f.id });
       }
     }
+  }
+
+  // ── TOTP flow ─────────────────────────────────────────────────────────────
+  async function startTotp() {
+    setMethod("totp");
+    setError(null);
+    setLoading(true);
+    await cleanStaleFactors();
 
     const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", issuer: "ArcadeTracker" });
     setLoading(false);
     if (error || !data) {
       const msg = error?.message ?? "Could not start 2FA setup.";
-      reportError("MfaSetup.enroll", msg);
+      reportError("MfaSetup.enrollTotp", msg);
       setError(msg);
       return;
     }
@@ -56,30 +83,87 @@ export default function MfaSetupScreen() {
     setUri(data.totp.uri);
   }
 
+  // ── Phone / SMS flow ──────────────────────────────────────────────────────
+  async function startPhone() {
+    setError(null);
+    const e164 = toE164(phoneInput);
+    if (!e164) {
+      setError("Enter a valid phone number, e.g. (555) 123-4567.");
+      return;
+    }
+    setLoading(true);
+    await cleanStaleFactors();
+
+    const { data, error } = await supabase.auth.mfa.enroll({
+      factorType: "phone",
+      phone: e164,
+      friendlyName: `SMS ${e164.slice(-4)}`,
+    });
+    if (error || !data) {
+      setLoading(false);
+      const msg = error?.message ?? "Could not start SMS 2FA setup.";
+      reportError("MfaSetup.enrollPhone", msg);
+      setError(
+        /not enabled|disabled|unsupported/i.test(msg)
+          ? "Text-message 2FA isn't available yet — use an authenticator app instead."
+          : msg
+      );
+      return;
+    }
+
+    // Challenge immediately — this sends the SMS code
+    const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId: data.id });
+    setLoading(false);
+    if (cErr || !challenge) {
+      const msg = cErr?.message ?? "Could not send the text message.";
+      reportError("MfaSetup.challengePhone", msg);
+      setError(msg);
+      return;
+    }
+    setFactorId(data.id);
+    setChallengeId(challenge.id);
+    setPhoneE164(e164);
+  }
+
+  async function resendSms() {
+    if (!factorId || sendingSms) return;
+    setSendingSms(true);
+    setError(null);
+    const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId });
+    setSendingSms(false);
+    if (cErr || !challenge) {
+      setError(cErr?.message ?? "Could not resend the code.");
+    } else {
+      setChallengeId(challenge.id);
+    }
+  }
+
+  // ── Shared verify ─────────────────────────────────────────────────────────
   async function handleVerify() {
     if (!factorId || code.length !== 6) return;
     setVerifying(true);
     setError(null);
 
-    const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId });
-    if (cErr || !challenge) {
-      const msg = cErr?.message ?? "Challenge failed.";
-      reportError("MfaSetup.handleVerify", msg);
-      setError(msg);
-      setVerifying(false);
-      return;
+    let chId = challengeId;
+    if (!chId) {
+      const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId });
+      if (cErr || !challenge) {
+        const msg = cErr?.message ?? "Challenge failed.";
+        reportError("MfaSetup.handleVerify", msg);
+        setError(msg);
+        setVerifying(false);
+        return;
+      }
+      chId = challenge.id;
     }
 
-    const { error: vErr } = await supabase.auth.mfa.verify({
-      factorId,
-      challengeId: challenge.id,
-      code,
-    });
+    const { error: vErr } = await supabase.auth.mfa.verify({ factorId, challengeId: chId, code });
     setVerifying(false);
 
     if (vErr) {
       setError("Incorrect code — try again.");
       setCode("");
+      if (method === "totp") setChallengeId(null);
     } else {
       sendSecurityAlert("mfa_added");
       setDone(true);
@@ -103,7 +187,9 @@ export default function MfaSetupScreen() {
           </View>
           <Text style={styles.successTitle}>2FA Enabled</Text>
           <Text style={styles.successSub}>
-            Your account is now protected with two-factor authentication.
+            {method === "phone"
+              ? `Codes will be texted to ${phoneE164} when you sign in.`
+              : "Your account is now protected with two-factor authentication."}
           </Text>
           <Pressable style={styles.doneBtn} onPress={() => router.back()}>
             <Text style={styles.doneBtnText}>Done</Text>
@@ -119,95 +205,199 @@ export default function MfaSetupScreen() {
       <SafeAreaView style={styles.safe}>
         <View style={styles.center}>
           <ActivityIndicator color="#06b6d4" size="large" />
-          <Text style={styles.loadingText}>Preparing setup…</Text>
+          <Text style={styles.loadingText}>
+            {method === "phone" ? "Sending code…" : "Preparing setup…"}
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  const verifyCard = (sub: string) => (
+    <View style={styles.stepCard}>
+      <Text style={styles.stepNum}>Step 2</Text>
+      <Text style={styles.stepTitle}>Enter the 6-digit code</Text>
+      <Text style={styles.stepSub}>{sub}</Text>
+
+      <TextInput
+        style={styles.codeInput}
+        value={code}
+        onChangeText={(t) => {
+          const d = t.replace(/\D/g, "").slice(0, 6);
+          setCode(d);
+          if (d.length === 6) setTimeout(() => handleVerify(), 0);
+        }}
+        keyboardType="number-pad"
+        maxLength={6}
+        placeholder="000000"
+        placeholderTextColor="#555"
+        textAlign="center"
+        autoFocus={Platform.OS !== "web"}
+      />
+
+      {method === "phone" && (
+        <Pressable style={styles.resendBtn} onPress={resendSms} disabled={sendingSms}>
+          {sendingSms
+            ? <ActivityIndicator size="small" color="#06b6d4" />
+            : <Text style={styles.resendText}>Didn't get a text? Resend code</Text>}
+        </Pressable>
+      )}
+
+      {error && (
+        <View style={styles.errorBox}>
+          <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
+
+      <Pressable
+        style={[styles.verifyBtn, (verifying || code.length !== 6) && styles.verifyBtnDisabled]}
+        onPress={handleVerify}
+        disabled={verifying || code.length !== 6}
+      >
+        {verifying
+          ? <ActivityIndicator color="#000" size="small" />
+          : <>
+              <Ionicons name="shield-checkmark-outline" size={18} color="#000" />
+              <Text style={styles.verifyBtnText}>Enable 2FA</Text>
+            </>
+        }
+      </Pressable>
+    </View>
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable
+          onPress={() => {
+            if (method && !factorId) { setMethod(null); setError(null); }
+            else router.back();
+          }}
+          style={styles.backBtn}
+        >
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </Pressable>
         <Text style={styles.headerTitle}>Two-Factor Authentication</Text>
       </View>
 
-      <View style={styles.content}>
-        <View style={styles.stepCard}>
-          <Text style={styles.stepNum}>Step 1</Text>
-          <Text style={styles.stepTitle}>Scan with Microsoft Authenticator</Text>
-          <Text style={styles.stepSub}>
-            Open Microsoft Authenticator → tap + → scan this QR code.
-          </Text>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        {/* ── Method chooser ── */}
+        {method === null && (
+          <>
+            <Text style={styles.chooseTitle}>How do you want to get your codes?</Text>
 
-          {/* QR code — native <img> on web, secret key on native */}
-          {Platform.OS === "web" && qrCode ? (
-            <View style={styles.qrWrap}>
-              {/* @ts-ignore */}
-              <img src={qrCode} style={{ width: 200, height: 200, display: "block" }} alt="2FA QR code" />
-            </View>
-          ) : (
-            <Pressable style={styles.openAuthBtn} onPress={() => uri && Linking.openURL(uri)}>
-              <Ionicons name="lock-open-outline" size={18} color="#000" />
-              <Text style={styles.openAuthText}>Open in Authenticator App</Text>
+            <Pressable style={styles.methodCard} onPress={startTotp}>
+              <View style={[styles.methodIcon, { backgroundColor: "rgba(6,182,212,0.1)", borderColor: "rgba(6,182,212,0.25)" }]}>
+                <Ionicons name="qr-code-outline" size={22} color="#06b6d4" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.methodTitle}>Authenticator app</Text>
+                <Text style={styles.methodSub}>
+                  Use Microsoft Authenticator, Google Authenticator, or any TOTP app. Works offline — recommended.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#444" />
             </Pressable>
-          )}
 
-          {/* Manual secret */}
-          <View style={styles.secretRow}>
-            <Text style={styles.secretLabel}>Manual code</Text>
-            <Pressable style={styles.secretBox} onPress={handleCopySecret}>
-              <Text style={styles.secretCode}>{secret}</Text>
-              <Ionicons name={copied ? "checkmark" : "copy-outline"} size={14} color={copied ? "#22c55e" : "#555"} />
+            <Pressable style={styles.methodCard} onPress={() => { setMethod("phone"); setError(null); }}>
+              <View style={[styles.methodIcon, { backgroundColor: "rgba(168,85,247,0.1)", borderColor: "rgba(168,85,247,0.25)" }]}>
+                <Ionicons name="chatbubble-ellipses-outline" size={22} color="#a855f7" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.methodTitle}>Text message (SMS)</Text>
+                <Text style={styles.methodSub}>
+                  Get a 6-digit code texted to your phone each time you sign in.
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#444" />
+            </Pressable>
+          </>
+        )}
+
+        {/* ── TOTP setup ── */}
+        {method === "totp" && factorId && (
+          <>
+            <View style={styles.stepCard}>
+              <Text style={styles.stepNum}>Step 1</Text>
+              <Text style={styles.stepTitle}>Scan with your authenticator app</Text>
+              <Text style={styles.stepSub}>
+                Open your authenticator app → tap + → scan this QR code.
+              </Text>
+
+              {Platform.OS === "web" && qrCode ? (
+                <View style={styles.qrWrap}>
+                  {/* @ts-ignore */}
+                  <img src={qrCode} style={{ width: 200, height: 200, display: "block" }} alt="2FA QR code" />
+                </View>
+              ) : (
+                <Pressable style={styles.openAuthBtn} onPress={() => uri && Linking.openURL(uri)}>
+                  <Ionicons name="lock-open-outline" size={18} color="#000" />
+                  <Text style={styles.openAuthText}>Open in Authenticator App</Text>
+                </Pressable>
+              )}
+
+              <View style={styles.secretRow}>
+                <Text style={styles.secretLabel}>Manual code</Text>
+                <Pressable style={styles.secretBox} onPress={handleCopySecret}>
+                  <Text style={styles.secretCode}>{secret}</Text>
+                  <Ionicons name={copied ? "checkmark" : "copy-outline"} size={14} color={copied ? "#22c55e" : "#555"} />
+                </Pressable>
+              </View>
+            </View>
+
+            {verifyCard("Type the code shown in your authenticator app to confirm setup.")}
+          </>
+        )}
+
+        {/* ── Phone number entry ── */}
+        {method === "phone" && !factorId && (
+          <View style={styles.stepCard}>
+            <Text style={styles.stepNum}>Step 1</Text>
+            <Text style={styles.stepTitle}>Enter your phone number</Text>
+            <Text style={styles.stepSub}>
+              We'll text a 6-digit code to this number to confirm it, and again each time you sign in. Message and data rates may apply.
+            </Text>
+
+            <View style={styles.phoneInputWrap}>
+              <Ionicons name="call-outline" size={18} color="#444" />
+              <TextInput
+                style={styles.phoneInput}
+                placeholder="(555) 123-4567"
+                placeholderTextColor="#555"
+                keyboardType="phone-pad"
+                autoComplete="tel"
+                textContentType="telephoneNumber"
+                value={phoneInput}
+                onChangeText={setPhoneInput}
+                onSubmitEditing={startPhone}
+                autoFocus={Platform.OS !== "web"}
+              />
+            </View>
+
+            {error && (
+              <View style={styles.errorBox}>
+                <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
+            <Pressable
+              style={[styles.verifyBtn, !phoneInput.trim() && styles.verifyBtnDisabled]}
+              onPress={startPhone}
+              disabled={!phoneInput.trim()}
+            >
+              <Ionicons name="paper-plane-outline" size={18} color="#000" />
+              <Text style={styles.verifyBtnText}>Text me a code</Text>
             </Pressable>
           </View>
-        </View>
+        )}
 
-        <View style={styles.stepCard}>
-          <Text style={styles.stepNum}>Step 2</Text>
-          <Text style={styles.stepTitle}>Enter the 6-digit code</Text>
-          <Text style={styles.stepSub}>Type the code shown in your authenticator app to confirm setup.</Text>
-
-          <TextInput
-            style={styles.codeInput}
-            value={code}
-            onChangeText={(t) => {
-              const d = t.replace(/\D/g, "").slice(0, 6);
-              setCode(d);
-              if (d.length === 6) setTimeout(() => handleVerify(), 0);
-            }}
-            keyboardType="number-pad"
-            maxLength={6}
-            placeholder="000000"
-            placeholderTextColor="#555"
-            textAlign="center"
-            autoFocus={Platform.OS !== "web"}
-          />
-
-          {error && (
-            <View style={styles.errorBox}>
-              <Ionicons name="alert-circle-outline" size={15} color="#ef4444" />
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          )}
-
-          <Pressable
-            style={[styles.verifyBtn, (verifying || code.length !== 6) && styles.verifyBtnDisabled]}
-            onPress={handleVerify}
-            disabled={verifying || code.length !== 6}
-          >
-            {verifying
-              ? <ActivityIndicator color="#000" size="small" />
-              : <>
-                  <Ionicons name="shield-checkmark-outline" size={18} color="#000" />
-                  <Text style={styles.verifyBtnText}>Enable 2FA</Text>
-                </>
-            }
-          </Pressable>
-        </View>
-      </View>
+        {/* ── Phone code verify ── */}
+        {method === "phone" && factorId && (
+          verifyCard(`We sent a code to ${phoneE164}. Enter it below to finish setup.`)
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -220,7 +410,20 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   headerTitle: { color: "#fff", fontSize: 17, fontWeight: "900" },
 
-  content: { flex: 1, padding: 18, gap: 16 },
+  content: { padding: 18, gap: 16 },
+
+  chooseTitle: { color: "#8a8a8a", fontSize: 14, lineHeight: 20, marginBottom: 2 },
+  methodCard: {
+    flexDirection: "row", alignItems: "center", gap: 14,
+    backgroundColor: "#111", borderRadius: 20, padding: 18,
+    borderWidth: 1, borderColor: "#1e1e1e",
+  },
+  methodIcon: {
+    width: 46, height: 46, borderRadius: 14, borderWidth: 1,
+    alignItems: "center", justifyContent: "center",
+  },
+  methodTitle: { color: "#fff", fontSize: 15.5, fontWeight: "900", marginBottom: 3 },
+  methodSub: { color: "#8a8a8a", fontSize: 12.5, lineHeight: 17 },
 
   stepCard: {
     backgroundColor: "#111", borderRadius: 20, padding: 20,
@@ -251,12 +454,22 @@ const styles = StyleSheet.create({
   },
   secretCode: { color: "#888", fontSize: 13, fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", letterSpacing: 1 },
 
+  phoneInputWrap: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    backgroundColor: "#0a0a0a", borderRadius: 14,
+    borderWidth: 1, borderColor: "#1e1e1e", paddingHorizontal: 14,
+  },
+  phoneInput: { flex: 1, color: "#fff", paddingVertical: 15, fontSize: 16 },
+
   codeInput: {
     fontSize: 28, fontWeight: "900", letterSpacing: 16,
     color: "#fff", backgroundColor: "#0a0a0a",
     borderRadius: 14, paddingVertical: 18,
     borderWidth: 1, borderColor: "#1e1e1e",
   },
+
+  resendBtn: { alignItems: "center", paddingVertical: 6 },
+  resendText: { color: "#06b6d4", fontSize: 13, fontWeight: "700" },
 
   errorBox: {
     flexDirection: "row", alignItems: "center", gap: 8,
