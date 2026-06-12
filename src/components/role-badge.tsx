@@ -56,6 +56,46 @@ export function RoleBadge({
   );
 }
 
+/** Beta-tester verification mark — separate from the role ladder. */
+export function BetaBadge({
+  visible,
+  showLabel = false,
+  size = 14,
+}: {
+  visible: boolean | null | undefined;
+  showLabel?: boolean;
+  size?: number;
+}) {
+  const [tooltipVisible, setTooltipVisible] = useState(false);
+  if (!visible) return null;
+
+  function handlePress() {
+    if (Platform.OS !== "web") {
+      setTooltipVisible(true);
+      setTimeout(() => setTooltipVisible(false), 2000);
+    }
+  }
+
+  const displayLabel = showLabel || tooltipVisible;
+
+  return (
+    <Pressable
+      style={styles.row}
+      onPress={handlePress}
+      onHoverIn={() => setTooltipVisible(true)}
+      onHoverOut={() => setTooltipVisible(false)}
+      hitSlop={8}
+    >
+      <Ionicons name="flask" size={size} color="#2dd4bf" />
+      {displayLabel && (
+        <Text style={[styles.label, { color: "#2dd4bf", fontSize: size - 3 }]}>
+          Beta Tester
+        </Text>
+      )}
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 3 },
   label: { fontWeight: "700", letterSpacing: 0.3 },

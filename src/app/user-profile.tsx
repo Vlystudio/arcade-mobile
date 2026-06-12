@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { RoleBadge } from "../components/role-badge";
+import { BetaBadge, RoleBadge } from "../components/role-badge";
 import type { AppRole } from "../components/role-badge";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
@@ -65,7 +65,7 @@ export default function UserProfileScreen() {
     const [profileRes, friendRes, blockRes] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, username, avatar_url, bio, is_private, role, featured_game_id, show_skeeball_stats")
+        .select("id, username, avatar_url, bio, is_private, role, featured_game_id, show_skeeball_stats, is_beta_tester")
         .eq("id", userId)
         .single(),
       supabase
@@ -281,6 +281,7 @@ export default function UserProfileScreen() {
           <View style={s.nameRow}>
             <Text style={s.heroName}>{profile.username}</Text>
             <RoleBadge role={profile.role} size={16} />
+            <BetaBadge visible={(profile as any).is_beta_tester} size={16} />
           </View>
 
           {profile.bio ? <Text style={s.bio}>{profile.bio}</Text> : null}

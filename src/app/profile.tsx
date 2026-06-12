@@ -23,7 +23,7 @@ import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar, { setTabBarAvatar } from "../components/bottom-tab-bar";
 import { Avatar } from "../components/avatar";
-import { RoleBadge, isElevatedRole } from "../components/role-badge";
+import { BetaBadge, RoleBadge, isElevatedRole } from "../components/role-badge";
 import type { AppRole } from "../components/role-badge";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
@@ -134,6 +134,7 @@ export default function ProfileScreen() {
   const [mfaEnabled, setMfaEnabled] = useState(false);
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [mfaFactorType, setMfaFactorType] = useState<string | null>(null);
+  const [isBetaTester, setIsBetaTester] = useState(false);
   const [disablingMfa, setDisablingMfa] = useState(false);
 
   // Privacy & status
@@ -161,7 +162,7 @@ export default function ProfileScreen() {
   async function loadProfile() {
     if (!user) return;
     const [profileRes, scoresRes, pendingRes, teamRes, placementsRes, friendsRes, trophiesRes, convRes] = await Promise.all([
-      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio, show_skeeball_stats, sub_available").eq("id", user.id).single(),
+      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio, show_skeeball_stats, sub_available, is_beta_tester").eq("id", user.id).single(),
       supabase.from("scores").select("score, game_id, games(id, name, type)").eq("user_id", user.id).eq("status", "approved"),
       supabase.from("scores").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       supabase.from("team_members").select("role, teams(name)").eq("user_id", user.id).maybeSingle(),
@@ -171,6 +172,7 @@ export default function ProfileScreen() {
       supabase.from("conversations").select("id, last_message_at").or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`),
     ]);
 
+    setIsBetaTester(!!(profileRes.data as any)?.is_beta_tester);
     setFriendsCount(friendsRes.count ?? 0);
     setTrophiesCount(trophiesRes.count ?? 0);
 
@@ -600,6 +602,7 @@ export default function ProfileScreen() {
             <View style={styles.nameRow}>
               <Text style={styles.displayName}>{username ?? "Player"}</Text>
               <RoleBadge role={role} size={15} />
+              <BetaBadge visible={isBetaTester} size={15} />
             </View>
             {teamName && (
               <View style={styles.teamRow}>
@@ -844,6 +847,16 @@ export default function ProfileScreen() {
                 <SettingsRow icon="time-outline" iconColor="#22c55e" iconBg="rgba(34,197,94,0.1)" label="Monday Night Schedule" onPress={() => navFromSettings("/skeeball-schedule")} />
                 <View style={styles.settingsDivider} />
                 <SettingsRow icon="bookmark-outline" label="Saved Posts" onPress={() => navFromSettings("/saved-posts")} />
+                {isBetaTester && (
+                  <SettingsRow
+                    icon="flask-outline"
+                    iconColor="#2dd4bf"
+                    iconBg="rgba(45,212,191,0.1)"
+                    label="Beta Feedback"
+                    sub="Report bugs, glitches & site-breaking issues"
+                    onPress={() => navFromSettings("/beta-feedback")}
+                  />
+                )}
                 <View style={styles.settingsDivider} />
                 <SettingsRow icon="bowling-ball-outline" label="My Games" onPress={() => navFromSettings("/my-games")} />
                 <View style={styles.settingsDivider} />

@@ -265,7 +265,7 @@ export default function AdminScreen() {
   const [checking, setChecking] = useState(true);
 
   // Users tab state
-  type UserProfile = { id: string; username: string; avatar_url: string | null; role: string; email?: string };
+  type UserProfile = { id: string; username: string; avatar_url: string | null; role: string; email?: string; is_beta_tester?: boolean };
   const [usersData, setUsersData] = useState<UserProfile[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [userSearch, setUserSearch] = useState("");
@@ -436,7 +436,16 @@ export default function AdminScreen() {
     content_preview: string | null; photo_url: string | null;
   };
   const [contentReports, setContentReports] = useState<ContentReport[]>([]);
-  const [reportsTab, setReportsTab] = useState<"pending" | "dismissed" | "actioned">("pending");
+  const [reportsTab, setReportsTab] = useState<"pending" | "dismissed" | "actioned" | "beta">("pending");
+  type BetaReport = {
+    id: string; username: string | null; category: string; severity: string;
+    title: string; description: string; steps: string | null; route: string | null;
+    platform: string | null; app_version: string | null; device_info: string | null;
+    screenshot_url: string | null; status: string; admin_note: string | null; created_at: string;
+  };
+  const [betaReports, setBetaReports] = useState<BetaReport[]>([]);
+  const [betaReportsLoading, setBetaReportsLoading] = useState(false);
+  const [betaActioning, setBetaActioning] = useState<string | null>(null);
   const [reportsLoading, setReportsLoading] = useState(false);
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [resolvingReport, setResolvingReport] = useState<string | null>(null);
@@ -505,7 +514,7 @@ export default function AdminScreen() {
     if (mainTab === "karaoke") loadKaraokeQueue();
     if (mainTab === "trivia") loadTriviaData();
     if (mainTab === "skeeball") { loadSkeeAdminSessions(); loadSkeeSeason(); loadDisputes(); }
-    if (mainTab === "reports") loadContentReports(reportsTab);
+    if (mainTab === "reports") { if (reportsTab === "beta") loadBetaReports(); else loadContentReports(reportsTab); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
@@ -643,6 +652,16 @@ export default function AdminScreen() {
     if (error) { setUsersError(error.message); setUsersLoading(false); return; }
     setUsersData((data ?? []) as any[]);
     setUsersLoading(false);
+  }
+
+  async function handleBetaToggle(targetId: string, enabled: boolean) {
+    setRoleChanging(targetId);
+    const { data, error } = await supabase.rpc("rpc_admin_set_beta_tester", {
+      p_user_id: targetId, p_enabled: enabled,
+    });
+    setRoleChanging(null);
+    if (error || data?.error) { setUsersError(data?.message ?? error?.message ?? "Failed"); return; }
+    setUsersData((prev) => prev.map((u) => u.id === targetId ? { ...u, is_beta_tester: enabled } : u));
   }
 
   async function handleRoleChange(targetId: string, newRole: string) {
@@ -1769,6 +1788,23 @@ export default function AdminScreen() {
       .eq("status", "active")
       .maybeSingle();
     setSkeeActiveSeason(data ?? null);
+  }
+
+  async function loadBetaReports() {
+    setBetaReportsLoading(true);
+    const { data } = await supabase.rpc("rpc_admin_get_beta_reports", { p_status: null });
+    setBetaReports(Array.isArray(data) ? (data as BetaReport[]) : []);
+    setBetaReportsLoading(false);
+  }
+
+  async function updateBetaReport(id: string, status: string) {
+    setBetaActioning(id);
+    const { data, error } = await supabase.rpc("rpc_admin_update_beta_report", {
+      p_id: id, p_status: status,
+    });
+    setBetaActioning(null);
+    if (error || data?.error) { showToast(data?.message ?? "Update failed", "error"); return; }
+    setBetaReports((prev) => prev.map((r) => r.id === id ? { ...r, status } : r));
   }
 
   async function loadContentReports(status: "pending" | "dismissed" | "actioned") {
@@ -3029,6 +3065,20 @@ export default function AdminScreen() {
                             <Text style={styles.userRoleBtnText}>→ {r}</Text>
                           </Pressable>
                         ))}
+                      <Pressable
+                        style={[
+                          styles.userRoleBtn,
+                          u.is_beta_tester && { borderColor: "rgba(45,212,191,0.5)", backgroundColor: "rgba(45,212,191,0.08)" },
+                          roleChanging === u.id && { opacity: 0.4 },
+                        ]}
+                        onPress={() => handleBetaToggle(u.id, !u.is_beta_tester)}
+                        disabled={roleChanging === u.id}
+                      >
+                        <Ionicons name="flask" size={11} color={u.is_beta_tester ? "#2dd4bf" : "#666"} />
+                        <Text style={[styles.userRoleBtnText, u.is_beta_tester && { color: "#2dd4bf" }]}>
+                          {u.is_beta_tester ? "beta ✓" : "beta"}
+                        </Text>
+                      </Pressable>
                     </View>
                   </View>
                 );
@@ -3714,7 +3764,7 @@ export default function AdminScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={reportsLoading} onRefresh={() => loadContentReports(reportsTab)} tintColor="#ef4444" />}
+          refreshControl={<RefreshControl refreshing={reportsLoading || betaReportsLoading} onRefresh={() => reportsTab === "beta" ? loadBetaReports() : loadContentReports(reportsTab)} tintColor="#ef4444" />}
         >
           {/* Broadcast announcement */}
           <View style={[styles.skeeWeekCard, { borderColor: "rgba(245,158,11,0.2)", backgroundColor: "rgba(245,158,11,0.04)" }]}>
@@ -3730,19 +3780,87 @@ export default function AdminScreen() {
 
           {/* Status tabs */}
           <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
-            {(["pending", "dismissed", "actioned"] as const).map((t) => (
+            {(["pending", "dismissed", "actioned", "beta"] as const).map((t) => (
               <Pressable
                 key={t}
                 style={[styles.subTab, reportsTab === t && styles.subTabActive]}
-                onPress={() => { setReportsTab(t); loadContentReports(t); }}
+                onPress={() => { setReportsTab(t); if (t === "beta") loadBetaReports(); else loadContentReports(t); }}
               >
                 <Text style={[styles.subTabText, reportsTab === t && styles.subTabTextActive]}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
+                  {t === "beta" ? "Beta 🧪" : t.charAt(0).toUpperCase() + t.slice(1)}
                 </Text>
               </Pressable>
             ))}
           </View>
 
+          {/* ── Beta tester QA reports ── */}
+          {reportsTab === "beta" ? (
+            betaReportsLoading ? (
+              <ActivityIndicator color="#2dd4bf" style={{ marginTop: 40 }} />
+            ) : betaReports.length === 0 ? (
+              <EmptyState
+                title="No beta reports"
+                sub="Structured bug reports from beta testers land here, sorted by severity."
+                icon="flask-outline"
+                color="#2dd4bf"
+              />
+            ) : (
+              betaReports.map((r) => {
+                const sevColor = r.severity === "critical" ? "#ef4444"
+                  : r.severity === "high" ? "#f97316"
+                  : r.severity === "medium" ? "#f59e0b" : "#22c55e";
+                const stColor = r.status === "fixed" ? "#22c55e"
+                  : r.status === "in_progress" ? "#f59e0b"
+                  : r.status === "triaged" ? "#a855f7"
+                  : r.status === "open" ? "#06b6d4" : "#777";
+                return (
+                  <View key={r.id} style={styles.reportCard}>
+                    <View style={styles.reportTopRow}>
+                      <View style={[styles.reportTypeChip, { borderColor: sevColor + "55", backgroundColor: sevColor + "14" }]}>
+                        <Text style={[styles.reportTypeChipText, { color: sevColor }]}>{r.severity.toUpperCase()}</Text>
+                      </View>
+                      <View style={styles.reportTypeChip}>
+                        <Text style={styles.reportTypeChipText}>{r.category.replace("_", " ")}</Text>
+                      </View>
+                      <View style={[styles.reportTypeChip, { borderColor: stColor + "55", backgroundColor: stColor + "14" }]}>
+                        <Text style={[styles.reportTypeChipText, { color: stColor }]}>{r.status.replace("_", " ")}</Text>
+                      </View>
+                      <Text style={styles.reportTime}>{relTime(r.created_at)}</Text>
+                    </View>
+                    <Text style={[styles.reportMeta, { color: "#fff", fontWeight: "800", fontSize: 14 }]}>{r.title}</Text>
+                    <Text style={styles.reportMeta}>
+                      {r.username ?? "Unknown"} · {r.platform ?? "?"} v{r.app_version ?? "?"} · {r.device_info ?? ""}
+                      {r.route ? ` · ${r.route}` : ""}
+                    </Text>
+                    <Text style={[styles.reportMeta, { color: "#bbb", marginTop: 6 }]}>{r.description}</Text>
+                    {!!r.steps && (
+                      <Text style={[styles.reportMeta, { color: "#888", marginTop: 6 }]}>Steps: {r.steps}</Text>
+                    )}
+                    {!!r.screenshot_url && (
+                      <Pressable onPress={() => setPhotoModal(r.screenshot_url)} style={{ marginTop: 6 }}>
+                        <Text style={{ color: "#06b6d4", fontSize: 12.5, fontWeight: "700" }}>View screenshot</Text>
+                      </Pressable>
+                    )}
+                    <View style={[styles.userRoleActions, { marginTop: 10 }]}>
+                      {(["triaged", "in_progress", "fixed", "wont_fix", "duplicate"] as const)
+                        .filter((st) => st !== r.status)
+                        .map((st) => (
+                          <Pressable
+                            key={st}
+                            style={[styles.userRoleBtn, betaActioning === r.id && { opacity: 0.4 }]}
+                            onPress={() => updateBetaReport(r.id, st)}
+                            disabled={betaActioning === r.id}
+                          >
+                            <Text style={styles.userRoleBtnText}>→ {st.replace("_", " ")}</Text>
+                          </Pressable>
+                        ))}
+                    </View>
+                  </View>
+                );
+              })
+            )
+          ) : (
+          <>
           {reportsError && <ErrorBanner message={reportsError} />}
           {reportsLoading && contentReports.length === 0 ? (
             <ActivityIndicator color="#ef4444" style={{ marginTop: 40 }} />
@@ -3803,6 +3921,8 @@ export default function AdminScreen() {
                 )}
               </View>
             ))
+          )}
+          </>
           )}
         </ScrollView>
       )}

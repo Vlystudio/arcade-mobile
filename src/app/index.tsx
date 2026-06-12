@@ -125,6 +125,12 @@ export default function FeedScreen() {
   const feedScrollRef = useRef<ScrollView>(null);
   const [inboxUnseen, setInboxUnseen] = useState(0);
 
+  // Interactions viewer (post owner taps likes/reaction counts)
+  const [interactionsPost, setInteractionsPost] = useState<Post | null>(null);
+  const [interactionLikes, setInteractionLikes] = useState<{ id: string; username: string; avatar_url: string | null }[]>([]);
+  const [interactionReactions, setInteractionReactions] = useState<{ id: string; username: string; avatar_url: string | null; emoji: string }[]>([]);
+  const [interactionsLoading, setInteractionsLoading] = useState(false);
+
   // Onboarding checklist for fresh accounts
   const [onboarding, setOnboarding] = useState<{ photo: boolean; team: boolean; rsvp: boolean; pick: boolean } | null>(null);
 
@@ -292,6 +298,34 @@ export default function FeedScreen() {
       return;
     }
     setOnboarding(state);
+  }
+
+  async function openInteractions(post: Post) {
+    setInteractionsPost(post);
+    setInteractionsLoading(true);
+    setInteractionLikes([]);
+    setInteractionReactions([]);
+    const [likesRes, reactsRes] = await Promise.all([
+      supabase.from("post_likes").select("user_id").eq("post_id", post.id),
+      supabase.from("post_reactions").select("user_id, emoji").eq("post_id", post.id),
+    ]);
+    const ids = [...new Set([
+      ...(likesRes.data ?? []).map((l: any) => l.user_id as string),
+      ...(reactsRes.data ?? []).map((r: any) => r.user_id as string),
+    ])];
+    let names: Record<string, { username: string; avatar_url: string | null }> = {};
+    if (ids.length) {
+      const { data: profs } = await supabase
+        .from("public_profiles").select("id, username, avatar_url").in("id", ids);
+      for (const pr of profs ?? []) names[(pr as any).id] = { username: (pr as any).username ?? "Unknown", avatar_url: (pr as any).avatar_url ?? null };
+    }
+    setInteractionLikes((likesRes.data ?? []).map((l: any) => ({
+      id: l.user_id, username: names[l.user_id]?.username ?? "Unknown", avatar_url: names[l.user_id]?.avatar_url ?? null,
+    })));
+    setInteractionReactions((reactsRes.data ?? []).map((r: any) => ({
+      id: r.user_id, emoji: r.emoji, username: names[r.user_id]?.username ?? "Unknown", avatar_url: names[r.user_id]?.avatar_url ?? null,
+    })));
+    setInteractionsLoading(false);
   }
 
   function dismissOnboarding() {
@@ -812,6 +846,7 @@ export default function FeedScreen() {
                 onUserPress={() => router.push({ pathname: "/user-profile" as any, params: { userId: post.user_id } })}
                 onToggleSave={() => toggleSave(post)}
                 onReact={(emoji) => handleReact(post, emoji)}
+                onShowInteractions={() => openInteractions(post)}
               />
             ))
           )}
@@ -822,6 +857,54 @@ export default function FeedScreen() {
 
       <ImageLightbox uri={lightboxUri} onClose={() => setLightboxUri(null)} />
       <WhatsNewSheet />
+
+      {/* Interactions viewer — who liked/reacted (post owner) */}
+      <Modal visible={!!interactionsPost} transparent animationType="slide" onRequestClose={() => setInteractionsPost(null)}>
+        <View style={styles.interModalBg}>
+          <Pressable style={styles.interModalDismiss} onPress={() => setInteractionsPost(null)} />
+          <View style={styles.interSheet}>
+            <View style={styles.interHandle} />
+            <Text style={styles.interTitle}>Interactions</Text>
+            {interactionsLoading ? (
+              <ActivityIndicator color="#06b6d4" style={{ marginVertical: 30 }} />
+            ) : interactionLikes.length === 0 && interactionReactions.length === 0 ? (
+              <Text style={styles.interEmpty}>No likes or reactions yet.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
+                {interactionLikes.length > 0 && (
+                  <Text style={styles.interSection}>❤️ LIKES ({interactionLikes.length})</Text>
+                )}
+                {interactionLikes.map((u) => (
+                  <Pressable
+                    key={`like_${u.id}`}
+                    style={styles.interRow}
+                    onPress={() => { setInteractionsPost(null); router.push({ pathname: "/user-profile" as any, params: { userId: u.id } }); }}
+                  >
+                    <Avatar uri={u.avatar_url} name={u.username} size={34} />
+                    <Text style={styles.interName}>{u.username}</Text>
+                    <Ionicons name="chevron-forward" size={14} color="#444" />
+                  </Pressable>
+                ))}
+                {interactionReactions.length > 0 && (
+                  <Text style={styles.interSection}>REACTIONS ({interactionReactions.length})</Text>
+                )}
+                {interactionReactions.map((u) => (
+                  <Pressable
+                    key={`react_${u.id}`}
+                    style={styles.interRow}
+                    onPress={() => { setInteractionsPost(null); router.push({ pathname: "/user-profile" as any, params: { userId: u.id } }); }}
+                  >
+                    <Avatar uri={u.avatar_url} name={u.username} size={34} />
+                    <Text style={styles.interName}>{u.username}</Text>
+                    <Text style={{ fontSize: 18 }}>{u.emoji}</Text>
+                  </Pressable>
+                ))}
+                <View style={{ height: 16 }} />
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
 
 
       {/* Comments modal */}
@@ -1137,9 +1220,10 @@ export default function FeedScreen() {
 
 const REACTION_EMOJIS = ["\ud83d\udc4d", "\u2764\ufe0f", "\ud83d\ude02", "\ud83d\udd25", "\ud83c\udfaf", "\ud83d\ude2e"];
 
-function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, onImagePress, onComment, onShare, onReport, onUserPress, onToggleSave, onReact }: {
+function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, onImagePress, onComment, onShare, onReport, onUserPress, onToggleSave, onReact, onShowInteractions }: {
   post: Post;
   isMe: boolean;
+  onShowInteractions?: () => void;
   canDelete: boolean;
   canEdit: boolean;
   onLike: () => void;
@@ -1229,9 +1313,14 @@ function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, on
             />
           </View>
           {post.like_count > 0 && (
-            <Text style={[styles.likeCount, post.liked_by_me && styles.likeCountActive]}>
-              {post.like_count}
-            </Text>
+            <Pressable
+              hitSlop={6}
+              onPress={isMe && onShowInteractions ? onShowInteractions : onLike}
+            >
+              <Text style={[styles.likeCount, post.liked_by_me && styles.likeCountActive]}>
+                {post.like_count}
+              </Text>
+            </Pressable>
           )}
         </Pressable>
         <Pressable style={styles.likeBtn} onPress={onComment}>
@@ -1290,7 +1379,7 @@ function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, on
             <Pressable
               key={emoji}
               style={[styles.reactionChip, post.my_reaction === emoji && styles.reactionChipMine]}
-              onPress={() => onReact(emoji)}
+              onPress={() => (isMe && onShowInteractions ? onShowInteractions() : onReact(emoji))}
             >
               <Text style={{ fontSize: 12 }}>{emoji}</Text>
               <Text style={styles.reactionChipCount}>{n}</Text>
@@ -1601,6 +1690,24 @@ const styles = StyleSheet.create({
   // Comments
   cmtEmpty: { alignItems: "center", justifyContent: "center", paddingVertical: 36, gap: 10 },
   cmtEmptyText: { color: "#777", fontSize: 14 },
+  interModalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" },
+  interModalDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  interSheet: {
+    backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 22, paddingTop: 14, paddingBottom: 32,
+    borderTopWidth: 1, borderColor: "#1e1e1e",
+    width: "100%", maxWidth: 560, alignSelf: "center",
+  },
+  interHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 12 },
+  interTitle: { color: "#fff", fontSize: 18, fontWeight: "900", textAlign: "center", marginBottom: 10 },
+  interEmpty: { color: "#777", fontSize: 13.5, textAlign: "center", paddingVertical: 26 },
+  interSection: { color: "#666", fontSize: 11, fontWeight: "800", letterSpacing: 1, marginTop: 10, marginBottom: 6 },
+  interRow: {
+    flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  interName: { flex: 1, color: "#fff", fontSize: 14, fontWeight: "700" },
+
   bellDot: {
     position: "absolute", top: 6, right: 6,
     width: 9, height: 9, borderRadius: 5, backgroundColor: "#ef4444",
