@@ -2971,6 +2971,11 @@ export default function AdminScreen() {
             autoCapitalize="none"
             autoCorrect={false}
           />
+          {!usersLoading && (
+            <Text style={styles.usersCountLine}>
+              {usersData.length} registered account{usersData.length === 1 ? "" : "s"} — every signup, including users who haven't finished profile setup (shown by email)
+            </Text>
+          )}
           {usersLoading ? (
             <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
           ) : (
@@ -5511,6 +5516,7 @@ const styles = StyleSheet.create({
   photoModalImage:  { width: "100%", height: 420 },
 
   // Users tab
+  usersCountLine: { color: "#777", fontSize: 12, lineHeight: 17, marginBottom: 12 },
   userSearchInput: {
     backgroundColor: "#111", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
     color: "#fff", fontSize: 14, paddingHorizontal: 16, paddingVertical: 12,

@@ -138,7 +138,7 @@ export default function FantasyScreen() {
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         <Head><title>Fantasy Skee-Ball · ArcadeTracker</title></Head>
         <View style={s.header}>
-          <Pressable style={s.backBtn} onPress={() => router.canGoBack() ? router.back() : router.replace("/teams" as any)}>
+          <Pressable style={s.backBtn} hitSlop={10} onPress={() => router.replace("/teams" as any)}>
             <Ionicons name="chevron-back" size={22} color="#fff" />
           </Pressable>
           <Text style={s.headerTitle}>Fantasy Skee-Ball</Text>
