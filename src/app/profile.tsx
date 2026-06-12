@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
 import { Ionicons } from "@expo/vector-icons";
@@ -5,18 +6,21 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
-import BottomTabBar from "../components/bottom-tab-bar";
+import BottomTabBar, { setTabBarAvatar } from "../components/bottom-tab-bar";
 import { Avatar } from "../components/avatar";
 import { RoleBadge, isElevatedRole } from "../components/role-badge";
 import type { AppRole } from "../components/role-badge";
@@ -33,6 +37,7 @@ type GameOption = { id: string; name: string; type: string; count: number };
 type TournPlacement = { tournament_id: string; title: string; placement: number; proposed_date: string | null };
 
 const PLACE_MEDALS = ["🥇", "🥈", "🥉"];
+const BIO_LIMIT = 160;
 
 export default function ProfileScreen() {
   const { user, loading: authLoading } = useRequireAuth();
@@ -49,63 +54,82 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Header stats
+  const [friendsCount, setFriendsCount] = useState(0);
+  const [trophiesCount, setTrophiesCount] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+
   // Featured game
   const [featuredGameId, setFeaturedGameId] = useState<string | null>(null);
   const [availableGames, setAvailableGames] = useState<GameOption[]>([]);
   const [gamePickerVisible, setGamePickerVisible] = useState(false);
   const [savingGame, setSavingGame] = useState(false);
-
-  // Computed stats for featured game
   const [featuredStats, setFeaturedStats] = useState<{ games: number; best: number; avg: number } | null>(null);
-
-  // All scores with game info (for local computation)
   const [allScoreRows, setAllScoreRows] = useState<{ score: number; game_id: string | null }[]>([]);
 
-  // Username editing
-  const [editingUsername, setEditingUsername] = useState(false);
-  const [draftUsername, setDraftUsername] = useState("");
-  const [savingUsername, setSavingUsername] = useState(false);
+  // Bio (displayed)
+  const [bio, setBio] = useState<string | null>(null);
 
   // Tournament placements
   const [tournPlacements, setTournPlacements] = useState<TournPlacement[]>([]);
 
-  // Avatar upload
+  // Edit profile sheet
+  const [editVisible, setEditVisible] = useState(false);
+  const [draftUsername, setDraftUsername] = useState("");
+  const [draftBio, setDraftBio] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarPickerVisible, setAvatarPickerVisible] = useState(false);
 
+  // Settings sheet
+  const [settingsVisible, setSettingsVisible] = useState(false);
+
   // MFA
-  const [mfaEnabled, setMfaEnabled]   = useState(false);
+  const [mfaEnabled, setMfaEnabled] = useState(false);
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [disablingMfa, setDisablingMfa] = useState(false);
 
   // Privacy & status
-  const [isPrivate, setIsPrivate]       = useState(false);
+  const [isPrivate, setIsPrivate] = useState(false);
   const [onlineStatus, setOnlineStatus] = useState<"online" | "offline">("offline");
   const [savingPrivacy, setSavingPrivacy] = useState(false);
-  const [savingStatus, setSavingStatus]   = useState(false);
-
-  // Bio
-  const BIO_LIMIT = 160;
-  const [bio, setBio]               = useState<string | null>(null);
-  const [editingBio, setEditingBio] = useState(false);
-  const [draftBio, setDraftBio]     = useState("");
-  const [savingBio, setSavingBio]   = useState(false);
+  const [savingStatus, setSavingStatus] = useState(false);
 
   // User search
-  const [searchVisible, setSearchVisible]   = useState(false);
-  const [searchQuery, setSearchQuery]       = useState("");
-  const [searchResults, setSearchResults]   = useState<{ id: string; username: string; avatar_url: string | null; role: AppRole }[]>([]);
-  const [searching, setSearching]           = useState(false);
+  const [searchVisible, setSearchVisible] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<{ id: string; username: string; avatar_url: string | null; role: AppRole }[]>([]);
+  const [searching, setSearching] = useState(false);
 
   async function loadProfile() {
     if (!user) return;
-    const [profileRes, scoresRes, pendingRes, teamRes, placementsRes] = await Promise.all([
+    const [profileRes, scoresRes, pendingRes, teamRes, placementsRes, friendsRes, trophiesRes, convRes] = await Promise.all([
       supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio").eq("id", user.id).single(),
       supabase.from("scores").select("score, game_id, games(id, name, type)").eq("user_id", user.id).eq("status", "approved"),
       supabase.from("scores").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       supabase.from("team_members").select("role, teams(name)").eq("user_id", user.id).maybeSingle(),
       supabase.from("tournament_placements").select("placement, tournament_id, tournaments(title, proposed_date)").eq("user_id", user.id).order("created_at", { ascending: false }).limit(10),
+      supabase.from("friendships").select("id", { count: "exact", head: true }).eq("status", "accepted").or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`),
+      supabase.from("tournament_placements").select("id", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("conversations").select("id, last_message_at").or(`participant_1.eq.${user.id},participant_2.eq.${user.id}`),
     ]);
+
+    setFriendsCount(friendsRes.count ?? 0);
+    setTrophiesCount(trophiesRes.count ?? 0);
+
+    // Unread messages: same read-marker logic as the chat screen
+    const convs = (convRes.data ?? []).filter((c: any) => c.last_message_at);
+    if (convs.length > 0) {
+      const entries = await Promise.all(
+        convs.map(async (c: any) => {
+          const lastRead = await AsyncStorage.getItem(`read_${c.id}`);
+          return !lastRead || new Date(c.last_message_at) > new Date(lastRead);
+        })
+      );
+      setUnreadMessages(entries.filter(Boolean).length);
+    } else {
+      setUnreadMessages(0);
+    }
 
     setTournPlacements((placementsRes.data ?? []).map((p: any) => {
       const t = Array.isArray(p.tournaments) ? p.tournaments[0] : p.tournaments;
@@ -124,16 +148,13 @@ export default function ProfileScreen() {
     setEmail(user.email ?? null);
     setPendingCount(pendingRes.count ?? 0);
 
-    // Build score rows and available games
     const rows = (scoresRes.data ?? []).map((s: any) => {
       const g = Array.isArray(s.games) ? s.games[0] : s.games;
-      // Prefer the joined game id; fall back to the raw FK column
       const gameId: string | null = g?.id ?? s.game_id ?? null;
       return { score: s.score, game_id: gameId, game_name: g?.name ?? null, game_type: g?.type ?? null };
     });
     setAllScoreRows(rows.map((r) => ({ score: r.score, game_id: r.game_id })));
 
-    // Build unique game list with counts — use a Map so keys are guaranteed unique
     const gameMap = new Map<string, GameOption>();
     for (const r of rows) {
       if (!r.game_id) continue;
@@ -141,10 +162,8 @@ export default function ProfileScreen() {
       if (existing) { existing.count++; }
       else { gameMap.set(r.game_id, { id: r.game_id, name: r.game_name ?? "Unknown", type: r.game_type ?? "", count: 1 }); }
     }
-    const games = Array.from(gameMap.values()).sort((a, b) => b.count - a.count);
-    setAvailableGames(games);
+    setAvailableGames(Array.from(gameMap.values()).sort((a, b) => b.count - a.count));
 
-    // Compute stats for current featured game
     const fid = profileRes.data?.featured_game_id ?? null;
     computeFeaturedStats(rows.map((r) => ({ score: r.score, game_id: r.game_id })), fid);
 
@@ -186,10 +205,9 @@ export default function ProfileScreen() {
       : await pickFromLibrary({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
     if (!asset) return;
 
-    const uri = asset.uri;
     setUploadingAvatar(true);
     try {
-      const response = await fetch(uri);
+      const response = await fetch(asset.uri);
       const blob = await response.blob();
       const path = `${user.id}/avatar.jpg`;
       const { publicUrl } = await uploadModeratedPublicImage({
@@ -206,6 +224,7 @@ export default function ProfileScreen() {
       if (dbError) throw dbError;
 
       setAvatarUrl(publicUrl);
+      setTabBarAvatar(publicUrl);
     } catch (err: any) {
       Alert.alert("Upload failed", err.message ?? "Could not upload photo.");
     } finally {
@@ -213,31 +232,59 @@ export default function ProfileScreen() {
     }
   }
 
-  async function saveUsername() {
-    if (!user || !draftUsername.trim()) return;
+  function openEditProfile() {
+    setDraftUsername(username ?? "");
+    setDraftBio(bio ?? "");
+    setEditVisible(true);
+  }
+
+  async function saveProfile() {
+    if (!user) return;
     const name = draftUsername.trim();
+    const newBio = draftBio.trim();
 
-    if (name.length < 3) { Alert.alert("Too short", "Username must be at least 3 characters."); return; }
-    if (name.length > 20) { Alert.alert("Too long", "Username must be 20 characters or less."); return; }
-    if (!/^[a-zA-Z0-9_]+$/.test(name)) {
-      Alert.alert("Invalid characters", "Only letters, numbers, and underscores are allowed.");
-      return;
+    // Username validation (same rules as before)
+    if (name.toLowerCase() !== (username ?? "").toLowerCase()) {
+      if (name.length < 3) { Alert.alert("Too short", "Username must be at least 3 characters."); return; }
+      if (name.length > 20) { Alert.alert("Too long", "Username must be 20 characters or less."); return; }
+      if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+        Alert.alert("Invalid characters", "Only letters, numbers, and underscores are allowed.");
+        return;
+      }
     }
-    if (name.toLowerCase() === username?.toLowerCase()) { setEditingUsername(false); return; }
 
-    setSavingUsername(true);
+    setSavingProfile(true);
 
-    const { data: existing } = await supabase
-      .from("profiles").select("id").ilike("username", name).neq("id", user.id).maybeSingle();
+    if (name.toLowerCase() !== (username ?? "").toLowerCase()) {
+      const { data: existing } = await supabase
+        .from("profiles").select("id").ilike("username", name).neq("id", user.id).maybeSingle();
+      if (existing) {
+        Alert.alert("Username taken", "That username is already in use.");
+        setSavingProfile(false);
+        return;
+      }
+    }
 
-    if (existing) { Alert.alert("Username taken", "That username is already in use."); setSavingUsername(false); return; }
+    if (newBio && newBio !== (bio ?? "")) {
+      const mod = await moderateText(newBio);
+      if (!mod.ok) {
+        Alert.alert("Bio blocked", mod.message);
+        setSavingProfile(false);
+        return;
+      }
+    }
 
-    const { error } = await supabase.from("profiles").update({ username: name }).eq("id", user.id);
-    if (error) { Alert.alert("Error", error.message); setSavingUsername(false); return; }
+    const { error } = await supabase
+      .from("profiles")
+      .update({ username: name, bio: newBio || null })
+      .eq("id", user.id);
+
+    setSavingProfile(false);
+    if (error) { Alert.alert("Error", error.message); return; }
 
     setUsername(name);
-    setEditingUsername(false);
-    setSavingUsername(false);
+    setBio(newBio || null);
+    setEditVisible(false);
   }
 
   async function loadMfaStatus() {
@@ -270,33 +317,23 @@ export default function ProfileScreen() {
     );
   }
 
-  async function togglePrivacy() {
+  async function togglePrivacy(next: boolean) {
     if (!user || savingPrivacy) return;
     setSavingPrivacy(true);
-    const next = !isPrivate;
+    setIsPrivate(next);
     const { error } = await supabase.from("profiles").update({ is_private: next }).eq("id", user.id);
-    if (!error) setIsPrivate(next);
+    if (error) setIsPrivate(!next);
     setSavingPrivacy(false);
   }
 
-  async function saveBio() {
-    if (!user) return;
-    setSavingBio(true);
-    const trimmed = draftBio.trim();
-
-    if (trimmed) {
-      const mod = await moderateText(trimmed);
-      if (!mod.ok) {
-        Alert.alert("Bio blocked", mod.message);
-        setSavingBio(false);
-        return;
-      }
-    }
-
-    const { error } = await supabase.from("profiles").update({ bio: trimmed || null }).eq("id", user.id);
-    if (!error) { setBio(trimmed || null); setEditingBio(false); }
-    else Alert.alert("Error", error.message);
-    setSavingBio(false);
+  async function toggleStatus(nextOn: boolean) {
+    if (!user || savingStatus) return;
+    setSavingStatus(true);
+    const next: "online" | "offline" = nextOn ? "online" : "offline";
+    setOnlineStatus(next);
+    const { error } = await supabase.from("profiles").update({ online_status: next }).eq("id", user.id);
+    if (error) setOnlineStatus(nextOn ? "offline" : "online");
+    setSavingStatus(false);
   }
 
   async function searchUsers(q: string) {
@@ -324,18 +361,16 @@ export default function ProfileScreen() {
     setSearchResults([]);
   }
 
-  async function toggleStatus() {
-    if (!user || savingStatus) return;
-    setSavingStatus(true);
-    const next: "online" | "offline" = onlineStatus === "online" ? "offline" : "online";
-    const { error } = await supabase.from("profiles").update({ online_status: next }).eq("id", user.id);
-    if (!error) setOnlineStatus(next);
-    setSavingStatus(false);
-  }
-
   function handleLogout() {
+    setSettingsVisible(false);
     supabase.auth.signOut().catch(() => {});
     router.replace("/login");
+  }
+
+  function navFromSettings(path: string) {
+    setSettingsVisible(false);
+    // Let the sheet close before pushing so the transition feels clean
+    setTimeout(() => router.push(path as any), 120);
   }
 
   useEffect(() => { if (user) { loadProfile(); loadMfaStatus(); } }, [user]);
@@ -350,12 +385,32 @@ export default function ProfileScreen() {
   return (
     <View style={styles.root}>
       <SafeAreaView style={styles.safe} edges={["top"]}>
+        {/* ── Top bar: @username + actions (IG style) ── */}
         <View style={styles.topBar}>
-          <Text style={styles.topBarTitle}>Profile</Text>
-          <Pressable style={styles.searchIconBtn} onPress={() => setSearchVisible(true)}>
-            <Ionicons name="search-outline" size={21} color="#06b6d4" />
-          </Pressable>
+          <View style={styles.topBarLeft}>
+            {isPrivate && <Ionicons name="lock-closed" size={14} color="#888" />}
+            <Text style={styles.topBarUsername} numberOfLines={1}>{username ?? "Profile"}</Text>
+            <Ionicons name="chevron-down" size={14} color="#666" />
+          </View>
+          <View style={styles.topBarActions}>
+            <Pressable style={styles.topBarIconBtn} onPress={() => setSearchVisible(true)} hitSlop={6}>
+              <Ionicons name="search-outline" size={23} color="#fff" />
+            </Pressable>
+            <Pressable style={styles.topBarIconBtn} onPress={() => router.push("/chat" as any)} hitSlop={6}>
+              <Ionicons name="paper-plane-outline" size={23} color="#fff" />
+              {unreadMessages > 0 && (
+                <View style={styles.unreadBadge}>
+                  <Text style={styles.unreadBadgeText}>{unreadMessages > 9 ? "9+" : unreadMessages}</Text>
+                </View>
+              )}
+            </Pressable>
+            <Pressable style={styles.topBarIconBtn} onPress={() => setSettingsVisible(true)} hitSlop={6}>
+              <Ionicons name="menu-outline" size={26} color="#fff" />
+              {pendingCount > 0 && isAdmin && <View style={styles.menuDot} />}
+            </Pressable>
+          </View>
         </View>
+
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
@@ -363,8 +418,8 @@ export default function ProfileScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadProfile(); }} tintColor="#06b6d4" />
           }
         >
-          {/* Hero */}
-          <View style={styles.hero}>
+          {/* ── Header: avatar + stats (IG style) ── */}
+          <View style={styles.headerRow}>
             <Pressable style={styles.avatarWrap} onPress={() => setAvatarPickerVisible(true)} disabled={uploadingAvatar}>
               {avatarUrl ? (
                 <Image source={{ uri: avatarUrl }} style={styles.avatarImg} contentFit="cover" />
@@ -373,98 +428,70 @@ export default function ProfileScreen() {
                   <Text style={styles.avatarInitial}>{initial}</Text>
                 </View>
               )}
+              {onlineStatus === "online" && <View style={styles.onlineDot} />}
               <View style={styles.cameraChip}>
                 {uploadingAvatar
                   ? <ActivityIndicator size="small" color="#000" />
-                  : <Ionicons name="camera" size={13} color="#000" />}
+                  : <Ionicons name="add" size={14} color="#000" />}
               </View>
             </Pressable>
 
-            {editingUsername ? (
-              <View style={styles.usernameEditRow}>
-                <TextInput
-                  style={styles.usernameInput}
-                  value={draftUsername}
-                  onChangeText={setDraftUsername}
-                  autoFocus
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  maxLength={20}
-                  returnKeyType="done"
-                  onSubmitEditing={saveUsername}
-                  selectTextOnFocus
-                />
-                {savingUsername ? (
-                  <ActivityIndicator size="small" color="#06b6d4" style={{ marginLeft: 8 }} />
-                ) : (
-                  <>
-                    <Pressable style={styles.editActionBtn} onPress={saveUsername}>
-                      <Ionicons name="checkmark" size={20} color="#06b6d4" />
-                    </Pressable>
-                    <Pressable style={styles.editActionBtn} onPress={() => setEditingUsername(false)}>
-                      <Ionicons name="close" size={20} color="#555" />
-                    </Pressable>
-                  </>
-                )}
+            <View style={styles.statsRow}>
+              <View style={styles.statCol}>
+                <Text style={styles.statValue}>{allScoreRows.length}</Text>
+                <Text style={styles.statLabel}>Scores</Text>
               </View>
-            ) : (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                <Pressable
-                  style={styles.usernameRow}
-                  onPress={() => { setDraftUsername(username ?? ""); setEditingUsername(true); }}
-                >
-                  <Text style={styles.heroName}>{username ?? "Player"}</Text>
-                  <Ionicons name="pencil-outline" size={14} color="#444" />
-                </Pressable>
-                <RoleBadge role={role} size={16} />
-              </View>
-            )}
-
-            <Text style={styles.heroEmail}>{email ?? ""}</Text>
-            {teamName && (
-              <View style={styles.teamPill}>
-                {teamRole === "captain" && <Ionicons name="star" size={11} color="#f59e0b" />}
-                <Text style={styles.teamPillText}>{teamName}</Text>
-              </View>
-            )}
-
-            {/* Bio */}
-            {editingBio ? (
-              <View style={styles.bioEditWrap}>
-                <TextInput
-                  style={styles.bioInput}
-                  value={draftBio}
-                  onChangeText={setDraftBio}
-                  multiline
-                  maxLength={BIO_LIMIT}
-                  placeholder="Write something about yourself…"
-                  placeholderTextColor="#333"
-                  autoFocus
-                />
-                <View style={styles.bioBtmRow}>
-                  <Text style={styles.bioCount}>{draftBio.length}/{BIO_LIMIT}</Text>
-                  <View style={{ flexDirection: "row", gap: 4 }}>
-                    <Pressable onPress={() => { setEditingBio(false); setDraftBio(bio ?? ""); }}>
-                      <Text style={styles.bioCancelText}>Cancel</Text>
-                    </Pressable>
-                    <Pressable onPress={saveBio} disabled={savingBio}>
-                      {savingBio
-                        ? <ActivityIndicator size="small" color="#06b6d4" />
-                        : <Text style={styles.bioSaveText}>Save</Text>}
-                    </Pressable>
-                  </View>
-                </View>
-              </View>
-            ) : (
-              <Pressable onPress={() => { setDraftBio(bio ?? ""); setEditingBio(true); }} style={styles.bioTapArea}>
-                <Text style={bio ? styles.bioText : styles.bioPlaceholder}>
-                  {bio || "+ Add a bio"}
-                </Text>
+              <Pressable style={styles.statCol} onPress={() => router.push("/friends" as any)}>
+                <Text style={styles.statValue}>{friendsCount}</Text>
+                <Text style={styles.statLabel}>Friends</Text>
               </Pressable>
-            )}
+              <View style={styles.statCol}>
+                <Text style={styles.statValue}>{trophiesCount}</Text>
+                <Text style={styles.statLabel}>Trophies</Text>
+              </View>
+            </View>
           </View>
 
-          {/* Featured game stats */}
+          {/* ── Identity block (left-aligned, IG style) ── */}
+          <View style={styles.identityBlock}>
+            <View style={styles.nameRow}>
+              <Text style={styles.displayName}>{username ?? "Player"}</Text>
+              <RoleBadge role={role} size={15} />
+            </View>
+            {teamName && (
+              <View style={styles.teamRow}>
+                {teamRole === "captain" && <Ionicons name="star" size={11} color="#f59e0b" />}
+                <Text style={styles.teamText}>{teamName}</Text>
+              </View>
+            )}
+            {bio ? <Text style={styles.bioText}>{bio}</Text> : null}
+            <Text style={styles.emailText}>{email ?? ""}</Text>
+          </View>
+
+          {/* ── Action buttons (IG style) ── */}
+          <View style={styles.btnRow}>
+            <Pressable style={styles.editBtn} onPress={openEditProfile}>
+              <Text style={styles.editBtnText}>Edit Profile</Text>
+            </Pressable>
+            <Pressable style={styles.editBtn} onPress={() => router.push("/friends" as any)}>
+              <Text style={styles.editBtnText}>Friends</Text>
+            </Pressable>
+            <Pressable style={styles.iconSquareBtn} onPress={() => router.push("/chat" as any)}>
+              <Ionicons name="chatbubble-outline" size={16} color="#fff" />
+            </Pressable>
+          </View>
+
+          {/* ── Pending scores notice ── */}
+          {pendingCount > 0 && (
+            <View style={styles.pendingBanner}>
+              <Ionicons name="time-outline" size={16} color="#f59e0b" />
+              <Text style={styles.pendingBannerText}>
+                {pendingCount} score{pendingCount !== 1 ? "s" : ""} pending admin review
+              </Text>
+            </View>
+          )}
+
+          {/* ── Featured game ── */}
           <View style={styles.featuredHeader}>
             <Text style={styles.sectionLabel}>
               {featuredGame ? featuredGame.name : "Featured Game"}
@@ -485,7 +512,7 @@ export default function ProfileScreen() {
           </View>
 
           {featuredGame && featuredStats ? (
-            <View style={styles.statsRow}>
+            <View style={styles.gameStatsRow}>
               <StatBox label="Games" value={featuredStats.games.toString()} color="#06b6d4" />
               <StatBox label="Best" value={featuredStats.best.toLocaleString()} color="#22c55e" />
               <StatBox label="Average" value={featuredStats.avg.toLocaleString()} color="#a855f7" />
@@ -498,17 +525,7 @@ export default function ProfileScreen() {
             </Pressable>
           )}
 
-          {/* Pending scores notice */}
-          {pendingCount > 0 && (
-            <View style={styles.pendingBanner}>
-              <Ionicons name="time-outline" size={16} color="#f59e0b" />
-              <Text style={styles.pendingBannerText}>
-                {pendingCount} score{pendingCount !== 1 ? "s" : ""} pending admin review
-              </Text>
-            </View>
-          )}
-
-          {/* Tournament History */}
+          {/* ── Tournament History ── */}
           {tournPlacements.length > 0 && (
             <>
               <Text style={styles.sectionLabel}>Tournament History</Text>
@@ -534,134 +551,224 @@ export default function ProfileScreen() {
               </View>
             </>
           )}
-
-          {/* Actions */}
-          <Text style={styles.sectionLabel}>Quick Actions</Text>
-          <View style={styles.actionsCard}>
-            <ActionRow icon="mic-outline" label="Karaoke Queue" onPress={() => router.push("/karaoke" as any)} />
-            <ActionRow icon="people-circle-outline" label="Friends" onPress={() => router.push("/friends" as any)} divider />
-            <ActionRow icon="chatbubbles-outline" label="Messages" onPress={() => router.push("/chat" as any)} divider />
-            <ActionRow icon="people-outline" label="Manage Teams" onPress={() => router.push("/teams")} divider />
-            <ActionRow icon="podium-outline" label="Leaderboard" onPress={() => router.push("/leaderboard")} divider />
-            <ActionRow icon="trophy-outline" label="Leagues" onPress={() => router.push("/leagues")} divider />
-            <ActionRow icon="chatbox-ellipses-outline" label="Contact Support" onPress={() => router.push("/support-chat" as any)} divider />
-            <ActionRow icon="star-half-outline" label="Send Feedback" onPress={() => router.push("/feedback" as any)} divider />
-            <ActionRow icon="map-outline" label="How to Use This App" onPress={replayTour} divider />
-            {(role === "owner" || role === "architect") && (
-              <ActionRow icon="business-outline" label="Owner Dashboard" onPress={() => router.push("/owner" as any)} divider />
-            )}
-            {role === "architect" && (
-              <ActionRow icon="hardware-chip-outline" label="Architect Panel" onPress={() => router.push("/architect" as any)} divider />
-            )}
-            {isAdmin && (
-              <ActionRow
-                icon="shield-checkmark-outline"
-                label="Admin Panel"
-                onPress={() => router.push("/admin" as any)}
-                divider
-                badge={pendingCount > 0 ? pendingCount : undefined}
-              />
-            )}
-          </View>
-
-          {/* Privacy & Status */}
-          <Text style={[styles.sectionLabel, { marginTop: 8 }]}>Privacy & Status</Text>
-          <View style={[styles.actionsCard, { marginBottom: 16 }]}>
-            <Pressable
-              style={({ pressed }) => [styles.actionRow, pressed && { opacity: 0.7 }]}
-              onPress={togglePrivacy}
-              disabled={savingPrivacy}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: "rgba(168,85,247,0.08)" }]}>
-                <Ionicons
-                  name={isPrivate ? "lock-closed-outline" : "globe-outline"}
-                  size={18}
-                  color="#a855f7"
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.actionLabel}>Profile Visibility</Text>
-                <Text style={{ color: "#555", fontSize: 11, marginTop: 1 }}>
-                  {isPrivate ? "Private — friends only" : "Public — visible to all"}
-                </Text>
-              </View>
-              {savingPrivacy
-                ? <ActivityIndicator size="small" color="#555" />
-                : <Ionicons name={isPrivate ? "lock-closed" : "lock-open"} size={16} color={isPrivate ? "#a855f7" : "#333"} />
-              }
-            </Pressable>
-            <View style={styles.rowDivider} />
-            <Pressable
-              style={({ pressed }) => [styles.actionRow, pressed && { opacity: 0.7 }]}
-              onPress={toggleStatus}
-              disabled={savingStatus}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: onlineStatus === "online" ? "rgba(34,197,94,0.08)" : "rgba(85,85,85,0.08)" }]}>
-                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: onlineStatus === "online" ? "#22c55e" : "#555" }} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.actionLabel}>Online Status</Text>
-                <Text style={{ color: onlineStatus === "online" ? "#22c55e" : "#555", fontSize: 11, marginTop: 1 }}>
-                  {onlineStatus === "online" ? "Appearing online" : "Appearing offline"}
-                </Text>
-              </View>
-              {savingStatus
-                ? <ActivityIndicator size="small" color="#555" />
-                : <Ionicons name="chevron-forward" size={16} color="#333" />
-              }
-            </Pressable>
-          </View>
-
-          {/* Security */}
-          <Text style={[styles.sectionLabel, { marginTop: 8 }]}>Security</Text>
-          <View style={[styles.actionsCard, { marginBottom: 16 }]}>
-            <Pressable
-              style={({ pressed }) => [styles.actionRow, pressed && { opacity: 0.7 }]}
-              onPress={mfaEnabled ? handleDisableMfa : () => router.push("/mfa-setup" as any)}
-              disabled={disablingMfa}
-            >
-              <View style={[styles.actionIcon, { backgroundColor: mfaEnabled ? "rgba(34,197,94,0.08)" : "rgba(239,68,68,0.08)" }]}>
-                <Ionicons
-                  name={mfaEnabled ? "shield-checkmark-outline" : "shield-outline"}
-                  size={18}
-                  color={mfaEnabled ? "#22c55e" : "#ef4444"}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.actionLabel}>Two-Factor Authentication</Text>
-                <Text style={{ color: mfaEnabled ? "#22c55e" : "#555", fontSize: 11, marginTop: 1 }}>
-                  {mfaEnabled ? "Enabled" : "Not enabled"}
-                </Text>
-              </View>
-              {disablingMfa
-                ? <ActivityIndicator size="small" color="#555" />
-                : <Ionicons name="chevron-forward" size={16} color="#333" />
-              }
-            </Pressable>
-          </View>
-
-          {/* Legal */}
-          <Text style={[styles.sectionLabel, { marginTop: 8 }]}>Legal</Text>
-          <View style={styles.actionsCard}>
-            <ActionRow icon="document-text-outline" label="Privacy Policy" onPress={() => router.push("/privacy" as any)} />
-            <ActionRow icon="reader-outline" label="Terms of Service" onPress={() => router.push("/terms" as any)} divider />
-            <ActionRow icon="trash-outline" label="Delete Account" onPress={() => router.push("/delete-account" as any)} divider />
-          </View>
-
-          <Pressable style={styles.logoutBtn} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={18} color="#ef4444" />
-            <Text style={styles.logoutText}>Log Out</Text>
-          </Pressable>
         </ScrollView>
       </SafeAreaView>
       <BottomTabBar />
 
-      {/* Game picker modal */}
+      {/* ════ Settings sheet (IG "Settings and activity") ════ */}
+      <Modal visible={settingsVisible} transparent animationType="slide" onRequestClose={() => setSettingsVisible(false)}>
+        <View style={styles.sheetBg}>
+          <Pressable style={styles.sheetDismiss} onPress={() => setSettingsVisible(false)} />
+          <View style={styles.settingsSheet}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.settingsTitle}>Settings and activity</Text>
+
+            <ScrollView showsVerticalScrollIndicator={false} style={{ flexGrow: 0 }}>
+              {/* Account */}
+              <Text style={styles.settingsGroupLabel}>Your account</Text>
+              <View style={styles.settingsGroup}>
+                <View style={styles.settingsRow}>
+                  <View style={[styles.settingsIcon, { backgroundColor: onlineStatus === "online" ? "rgba(34,197,94,0.1)" : "rgba(85,85,85,0.1)" }]}>
+                    <View style={[styles.statusDot, { backgroundColor: onlineStatus === "online" ? "#22c55e" : "#555" }]} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingsRowLabel}>Availability Status</Text>
+                    <Text style={styles.settingsRowSub}>{onlineStatus === "online" ? "Appearing online" : "Appearing offline"}</Text>
+                  </View>
+                  <Switch
+                    value={onlineStatus === "online"}
+                    onValueChange={toggleStatus}
+                    disabled={savingStatus}
+                    trackColor={{ false: "#2a2a2a", true: "rgba(34,197,94,0.5)" }}
+                    thumbColor={onlineStatus === "online" ? "#22c55e" : "#666"}
+                  />
+                </View>
+                <View style={styles.settingsDivider} />
+                <View style={styles.settingsRow}>
+                  <View style={[styles.settingsIcon, { backgroundColor: "rgba(168,85,247,0.1)" }]}>
+                    <Ionicons name={isPrivate ? "lock-closed" : "globe-outline"} size={17} color="#a855f7" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingsRowLabel}>Private Account</Text>
+                    <Text style={styles.settingsRowSub}>{isPrivate ? "Only friends can see your profile" : "Anyone can see your profile"}</Text>
+                  </View>
+                  <Switch
+                    value={isPrivate}
+                    onValueChange={togglePrivacy}
+                    disabled={savingPrivacy}
+                    trackColor={{ false: "#2a2a2a", true: "rgba(168,85,247,0.5)" }}
+                    thumbColor={isPrivate ? "#a855f7" : "#666"}
+                  />
+                </View>
+                <View style={styles.settingsDivider} />
+                <SettingsRow
+                  icon={mfaEnabled ? "shield-checkmark" : "shield-outline"}
+                  iconColor={mfaEnabled ? "#22c55e" : "#ef4444"}
+                  iconBg={mfaEnabled ? "rgba(34,197,94,0.1)" : "rgba(239,68,68,0.1)"}
+                  label="Two-Factor Authentication"
+                  sub={mfaEnabled ? "Enabled" : "Not enabled"}
+                  loading={disablingMfa}
+                  onPress={() => {
+                    if (mfaEnabled) { handleDisableMfa(); }
+                    else { navFromSettings("/mfa-setup"); }
+                  }}
+                />
+              </View>
+
+              {/* Activity */}
+              <Text style={styles.settingsGroupLabel}>Activity</Text>
+              <View style={styles.settingsGroup}>
+                <SettingsRow icon="people-circle-outline" label="Friends" onPress={() => navFromSettings("/friends")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="paper-plane-outline" label="Messages" badge={unreadMessages} onPress={() => navFromSettings("/chat")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="mic-outline" label="Karaoke Queue" onPress={() => navFromSettings("/karaoke")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="podium-outline" label="Leaderboard" onPress={() => navFromSettings("/leaderboard")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="trophy-outline" label="Leagues" onPress={() => navFromSettings("/leagues")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="people-outline" label="Manage Teams" onPress={() => navFromSettings("/teams")} />
+              </View>
+
+              {/* Admin */}
+              {(isAdmin || role === "owner" || role === "architect") && (
+                <>
+                  <Text style={styles.settingsGroupLabel}>Management</Text>
+                  <View style={styles.settingsGroup}>
+                    {isAdmin && (
+                      <SettingsRow
+                        icon="shield-checkmark-outline"
+                        iconColor="#f59e0b"
+                        iconBg="rgba(245,158,11,0.1)"
+                        label="Admin Panel"
+                        badge={pendingCount}
+                        onPress={() => navFromSettings("/admin")}
+                      />
+                    )}
+                    {(role === "owner" || role === "architect") && (
+                      <>
+                        {isAdmin && <View style={styles.settingsDivider} />}
+                        <SettingsRow icon="business-outline" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" label="Owner Dashboard" onPress={() => navFromSettings("/owner")} />
+                      </>
+                    )}
+                    {role === "architect" && (
+                      <>
+                        <View style={styles.settingsDivider} />
+                        <SettingsRow icon="hardware-chip-outline" iconColor="#f59e0b" iconBg="rgba(245,158,11,0.1)" label="Architect Panel" onPress={() => navFromSettings("/architect")} />
+                      </>
+                    )}
+                  </View>
+                </>
+              )}
+
+              {/* Support & about */}
+              <Text style={styles.settingsGroupLabel}>Support &amp; about</Text>
+              <View style={styles.settingsGroup}>
+                <SettingsRow icon="chatbox-ellipses-outline" label="Contact Support" onPress={() => navFromSettings("/support-chat")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="star-half-outline" label="Send Feedback" onPress={() => navFromSettings("/feedback")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="map-outline" label="How to Use This App" onPress={() => { setSettingsVisible(false); setTimeout(replayTour, 250); }} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="document-text-outline" label="Privacy Policy" onPress={() => navFromSettings("/privacy")} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="reader-outline" label="Terms of Service" onPress={() => navFromSettings("/terms")} />
+              </View>
+
+              {/* Danger zone */}
+              <View style={[styles.settingsGroup, { marginTop: 20 }]}>
+                <SettingsRow icon="log-out-outline" iconColor="#ef4444" iconBg="rgba(239,68,68,0.1)" label="Log Out" labelColor="#ef4444" hideChevron onPress={handleLogout} />
+                <View style={styles.settingsDivider} />
+                <SettingsRow icon="trash-outline" iconColor="#ef4444" iconBg="rgba(239,68,68,0.1)" label="Delete Account" labelColor="#ef4444" onPress={() => navFromSettings("/delete-account")} />
+              </View>
+
+              <View style={{ height: 24 }} />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ════ Edit Profile sheet (IG style) ════ */}
+      <Modal visible={editVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditVisible(false)}>
+        <SafeAreaView style={styles.editModal} edges={["top", "bottom"]}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <View style={styles.editHeader}>
+              <Pressable onPress={() => setEditVisible(false)} hitSlop={8}>
+                <Text style={styles.editCancelText}>Cancel</Text>
+              </Pressable>
+              <Text style={styles.editTitle}>Edit Profile</Text>
+              <Pressable onPress={saveProfile} disabled={savingProfile} hitSlop={8}>
+                {savingProfile
+                  ? <ActivityIndicator size="small" color="#06b6d4" />
+                  : <Text style={styles.editDoneText}>Done</Text>}
+              </Pressable>
+            </View>
+
+            <ScrollView contentContainerStyle={styles.editScroll} keyboardShouldPersistTaps="handled">
+              {/* Avatar */}
+              <Pressable style={styles.editAvatarWrap} onPress={() => setAvatarPickerVisible(true)} disabled={uploadingAvatar}>
+                {avatarUrl ? (
+                  <Image source={{ uri: avatarUrl }} style={styles.editAvatarImg} contentFit="cover" />
+                ) : (
+                  <View style={styles.editAvatarFallback}>
+                    <Text style={styles.editAvatarInitial}>{initial}</Text>
+                  </View>
+                )}
+                {uploadingAvatar && (
+                  <View style={styles.editAvatarOverlay}>
+                    <ActivityIndicator color="#fff" />
+                  </View>
+                )}
+              </Pressable>
+              <Pressable onPress={() => setAvatarPickerVisible(true)} disabled={uploadingAvatar}>
+                <Text style={styles.editAvatarAction}>Edit picture</Text>
+              </Pressable>
+
+              {/* Username */}
+              <View style={styles.editField}>
+                <Text style={styles.editFieldLabel}>Username</Text>
+                <TextInput
+                  style={styles.editFieldInput}
+                  value={draftUsername}
+                  onChangeText={setDraftUsername}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  maxLength={20}
+                  placeholder="username"
+                  placeholderTextColor="#333"
+                />
+              </View>
+
+              {/* Bio */}
+              <View style={styles.editField}>
+                <Text style={styles.editFieldLabel}>Bio</Text>
+                <TextInput
+                  style={[styles.editFieldInput, styles.editBioInput]}
+                  value={draftBio}
+                  onChangeText={setDraftBio}
+                  multiline
+                  maxLength={BIO_LIMIT}
+                  placeholder="Write something about yourself…"
+                  placeholderTextColor="#333"
+                />
+                <Text style={styles.editBioCount}>{draftBio.length}/{BIO_LIMIT}</Text>
+              </View>
+
+              <Text style={styles.editHint}>
+                Username can contain letters, numbers, and underscores (3–20 characters).
+              </Text>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
+
+      {/* ════ Game picker modal ════ */}
       <Modal visible={gamePickerVisible} transparent animationType="slide" onRequestClose={() => setGamePickerVisible(false)}>
-        <View style={styles.pickerBg}>
-          <Pressable style={styles.pickerDismiss} onPress={() => setGamePickerVisible(false)} />
+        <View style={styles.sheetBg}>
+          <Pressable style={styles.sheetDismiss} onPress={() => setGamePickerVisible(false)} />
           <View style={styles.pickerSheet}>
-            <View style={styles.pickerHandle} />
+            <View style={styles.sheetHandle} />
             <Text style={styles.pickerTitle}>Choose Featured Game</Text>
             <Text style={styles.pickerSub}>Stats for this game show on your public profile</Text>
             {availableGames.length === 0 ? (
@@ -697,12 +804,12 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* User search modal */}
+      {/* ════ User search modal ════ */}
       <Modal visible={searchVisible} transparent animationType="slide" onRequestClose={closeSearch}>
-        <View style={styles.pickerBg}>
-          <Pressable style={styles.pickerDismiss} onPress={closeSearch} />
+        <View style={styles.sheetBg}>
+          <Pressable style={styles.sheetDismiss} onPress={closeSearch} />
           <View style={[styles.pickerSheet, { maxHeight: "85%", gap: 0 }]}>
-            <View style={styles.pickerHandle} />
+            <View style={styles.sheetHandle} />
             <Text style={[styles.pickerTitle, { marginBottom: 16 }]}>Find Users</Text>
             <View style={styles.searchInputWrap}>
               <Ionicons name="search-outline" size={16} color="#444" />
@@ -748,12 +855,12 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* Avatar source picker modal */}
+      {/* ════ Avatar source picker modal ════ */}
       <Modal visible={avatarPickerVisible} transparent animationType="fade" onRequestClose={() => setAvatarPickerVisible(false)}>
-        <View style={styles.pickerBg}>
-          <Pressable style={styles.pickerDismiss} onPress={() => setAvatarPickerVisible(false)} />
+        <View style={styles.sheetBg}>
+          <Pressable style={styles.sheetDismiss} onPress={() => setAvatarPickerVisible(false)} />
           <View style={styles.pickerSheet}>
-            <View style={styles.pickerHandle} />
+            <View style={styles.sheetHandle} />
             <Text style={styles.pickerTitle}>Update Photo</Text>
             <Pressable style={styles.pickerOptionCamera} onPress={() => { setAvatarPickerVisible(false); pickAvatar("camera"); }}>
               <Ionicons name="camera" size={22} color="#000" />
@@ -791,35 +898,42 @@ const GAME_TYPE_COLORS: Record<string, string> = {
 function StatBox({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <View style={styles.statBox}>
-      <Text style={[styles.statValue, { color }]}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
+      <Text style={[styles.statBoxValue, { color }]}>{value}</Text>
+      <Text style={styles.statBoxLabel}>{label}</Text>
     </View>
   );
 }
 
-function ActionRow({ icon, label, onPress, divider, badge }: {
+function SettingsRow({ icon, label, sub, onPress, badge, iconColor = "#06b6d4", iconBg = "rgba(6,182,212,0.08)", labelColor = "#fff", loading, hideChevron }: {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   label: string;
+  sub?: string;
   onPress: () => void;
-  divider?: boolean;
   badge?: number;
+  iconColor?: string;
+  iconBg?: string;
+  labelColor?: string;
+  loading?: boolean;
+  hideChevron?: boolean;
 }) {
   return (
-    <>
-      {divider && <View style={styles.rowDivider} />}
-      <Pressable style={({ pressed }) => [styles.actionRow, pressed && { opacity: 0.7 }]} onPress={onPress}>
-        <View style={styles.actionIcon}>
-          <Ionicons name={icon} size={18} color="#06b6d4" />
+    <Pressable style={({ pressed }) => [styles.settingsRow, pressed && { opacity: 0.65 }]} onPress={onPress} disabled={loading}>
+      <View style={[styles.settingsIcon, { backgroundColor: iconBg }]}>
+        <Ionicons name={icon} size={17} color={iconColor} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[styles.settingsRowLabel, { color: labelColor }]}>{label}</Text>
+        {sub ? <Text style={styles.settingsRowSub}>{sub}</Text> : null}
+      </View>
+      {badge != null && badge > 0 && (
+        <View style={styles.settingsBadge}>
+          <Text style={styles.settingsBadgeText}>{badge > 9 ? "9+" : badge}</Text>
         </View>
-        <Text style={styles.actionLabel}>{label}</Text>
-        {badge != null && badge > 0 && (
-          <View style={styles.actionBadge}>
-            <Text style={styles.actionBadgeText}>{badge}</Text>
-          </View>
-        )}
-        <Ionicons name="chevron-forward" size={16} color="#333" />
-      </Pressable>
-    </>
+      )}
+      {loading
+        ? <ActivityIndicator size="small" color="#555" />
+        : !hideChevron && <Ionicons name="chevron-forward" size={15} color="#333" />}
+    </Pressable>
   );
 }
 
@@ -827,49 +941,85 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#0a0a0a" },
   safe: { flex: 1 },
   loader: { flex: 1, backgroundColor: "#0a0a0a", alignItems: "center", justifyContent: "center" },
-  content: { paddingHorizontal: 18, paddingTop: 0, paddingBottom: 32 },
+  content: { paddingHorizontal: 18, paddingTop: 4, paddingBottom: 32 },
 
-  hero: { alignItems: "center", paddingVertical: 36, gap: 0 },
+  // ── Top bar ──
+  topBar: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 18, paddingVertical: 8,
+  },
+  topBarLeft: { flexDirection: "row", alignItems: "center", gap: 6, flex: 1, marginRight: 12 },
+  topBarUsername: { color: "#fff", fontSize: 21, fontWeight: "900", letterSpacing: -0.3, flexShrink: 1 },
+  topBarActions: { flexDirection: "row", alignItems: "center", gap: 4 },
+  topBarIconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
+  unreadBadge: {
+    position: "absolute", top: 4, right: 2,
+    minWidth: 17, height: 17, borderRadius: 9, paddingHorizontal: 4,
+    backgroundColor: "#ef4444", alignItems: "center", justifyContent: "center",
+    borderWidth: 2, borderColor: "#0a0a0a",
+  },
+  unreadBadgeText: { color: "#fff", fontSize: 10, fontWeight: "900" },
+  menuDot: {
+    position: "absolute", top: 8, right: 7,
+    width: 8, height: 8, borderRadius: 4, backgroundColor: "#f59e0b",
+    borderWidth: 1.5, borderColor: "#0a0a0a",
+  },
 
-  avatarWrap: { marginBottom: 16, position: "relative" },
-  avatarImg: { width: 96, height: 96, borderRadius: 48 },
+  // ── Header: avatar + stats ──
+  headerRow: { flexDirection: "row", alignItems: "center", paddingTop: 12, paddingBottom: 4 },
+  avatarWrap: { position: "relative", marginRight: 8 },
+  avatarImg: { width: 86, height: 86, borderRadius: 43 },
   avatarFallback: {
-    width: 96, height: 96, borderRadius: 48,
+    width: 86, height: 86, borderRadius: 43,
     backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center",
   },
-  avatarInitial: { color: "#000", fontSize: 38, fontWeight: "900" },
+  avatarInitial: { color: "#000", fontSize: 34, fontWeight: "900" },
+  onlineDot: {
+    position: "absolute", top: 4, right: 4,
+    width: 14, height: 14, borderRadius: 7, backgroundColor: "#22c55e",
+    borderWidth: 2.5, borderColor: "#0a0a0a",
+  },
   cameraChip: {
-    position: "absolute", bottom: 2, right: 2,
-    width: 28, height: 28, borderRadius: 14,
+    position: "absolute", bottom: 0, right: 0,
+    width: 26, height: 26, borderRadius: 13,
     backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center",
     borderWidth: 2.5, borderColor: "#0a0a0a",
   },
 
-  usernameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
-  heroName: { color: "#fff", fontSize: 26, fontWeight: "900", letterSpacing: -0.4 },
-  usernameEditRow: { flexDirection: "row", alignItems: "center", gap: 4, marginBottom: 4 },
-  usernameInput: {
-    color: "#fff", fontSize: 24, fontWeight: "900", letterSpacing: -0.4,
-    borderBottomWidth: 1.5, borderBottomColor: "#06b6d4",
-    paddingVertical: 2, paddingHorizontal: 2, minWidth: 100, maxWidth: 200,
-  },
-  editActionBtn: { width: 34, height: 34, alignItems: "center", justifyContent: "center" },
+  statsRow: { flex: 1, flexDirection: "row", justifyContent: "space-evenly" },
+  statCol: { alignItems: "center", minWidth: 64 },
+  statValue: { color: "#fff", fontSize: 19, fontWeight: "900", letterSpacing: -0.3 },
+  statLabel: { color: "#888", fontSize: 12, fontWeight: "500", marginTop: 1 },
 
-  heroEmail: { color: "#3a3a3a", fontSize: 13, marginBottom: 14, marginTop: 2 },
-  teamPill: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    backgroundColor: "rgba(6,182,212,0.08)", borderRadius: 20,
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderWidth: 1, borderColor: "rgba(6,182,212,0.18)",
+  // ── Identity ──
+  identityBlock: { paddingTop: 12, paddingBottom: 4, gap: 3 },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 7 },
+  displayName: { color: "#fff", fontSize: 15, fontWeight: "800" },
+  teamRow: { flexDirection: "row", alignItems: "center", gap: 4 },
+  teamText: { color: "#06b6d4", fontSize: 13, fontWeight: "700" },
+  bioText: { color: "#ccc", fontSize: 13.5, lineHeight: 19, marginTop: 1 },
+  emailText: { color: "#3a3a3a", fontSize: 12, marginTop: 1 },
+
+  // ── Action buttons ──
+  btnRow: { flexDirection: "row", gap: 7, marginTop: 14, marginBottom: 20 },
+  editBtn: {
+    flex: 1, backgroundColor: "#1a1a1a", borderRadius: 10,
+    paddingVertical: 9, alignItems: "center",
+    borderWidth: StyleSheet.hairlineWidth, borderColor: "#2a2a2a",
   },
-  teamPillText: { color: "#06b6d4", fontWeight: "700", fontSize: 13 },
+  editBtnText: { color: "#fff", fontSize: 13.5, fontWeight: "700" },
+  iconSquareBtn: {
+    width: 38, backgroundColor: "#1a1a1a", borderRadius: 10,
+    alignItems: "center", justifyContent: "center",
+    borderWidth: StyleSheet.hairlineWidth, borderColor: "#2a2a2a",
+  },
 
   sectionLabel: {
     color: "#3a3a3a", fontSize: 10, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1.4, marginBottom: 12,
   },
 
-  // Featured game header row
+  // ── Featured game ──
   featuredHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
   changeGameBtn: {
     flexDirection: "row", alignItems: "center", gap: 5,
@@ -879,16 +1029,15 @@ const styles = StyleSheet.create({
   },
   changeGameText: { color: "#06b6d4", fontSize: 12, fontWeight: "700" },
 
-  statsRow: { flexDirection: "row", gap: 10, marginBottom: 22 },
+  gameStatsRow: { flexDirection: "row", gap: 10, marginBottom: 22 },
   statBox: {
     flex: 1, backgroundColor: "#111", borderRadius: 18,
     padding: 16, alignItems: "center",
     borderWidth: 1, borderColor: "#1e1e1e", gap: 4,
   },
-  statValue: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5 },
-  statLabel: { color: "#444", fontSize: 11, fontWeight: "600" },
+  statBoxValue: { fontSize: 26, fontWeight: "900", letterSpacing: -0.5 },
+  statBoxLabel: { color: "#444", fontSize: 11, fontWeight: "600" },
 
-  // No game selected state
   noGameCard: {
     backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e",
     padding: 24, alignItems: "center", gap: 8, marginBottom: 22,
@@ -896,42 +1045,21 @@ const styles = StyleSheet.create({
   noGameText: { color: "#fff", fontSize: 15, fontWeight: "800" },
   noGameSub: { color: "#444", fontSize: 12, textAlign: "center" },
 
-  actionsCard: {
-    backgroundColor: "#111", borderRadius: 18,
-    borderWidth: 1, borderColor: "#1e1e1e",
-    overflow: "hidden", marginBottom: 16,
-  },
-  actionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 15, gap: 14 },
-  actionIcon: {
-    width: 34, height: 34, borderRadius: 10,
-    backgroundColor: "rgba(6,182,212,0.08)",
-    alignItems: "center", justifyContent: "center",
-  },
-  actionLabel: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
-  rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#1a1a1a", marginLeft: 64 },
-
   pendingBanner: {
     flexDirection: "row", alignItems: "center", gap: 10,
-    backgroundColor: "rgba(245,158,11,0.08)", borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: "rgba(245,158,11,0.2)", marginBottom: 22,
+    backgroundColor: "rgba(245,158,11,0.08)", borderRadius: 14, padding: 13,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.2)", marginBottom: 20,
   },
   pendingBannerText: { color: "#f59e0b", fontWeight: "700", fontSize: 13, flex: 1 },
 
-  actionBadge: {
-    minWidth: 22, height: 22, borderRadius: 11,
-    backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center",
-    paddingHorizontal: 6, marginRight: 4,
-  },
-  actionBadgeText: { color: "#000", fontWeight: "900", fontSize: 12 },
-
-  // Tournament history
+  // ── Tournament history ──
   placementsCard: {
     backgroundColor: "#111", borderRadius: 18,
     borderWidth: 1, borderColor: "#1e1e1e",
     overflow: "hidden", marginBottom: 22,
   },
   placementRow:     { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
-  placementDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#1a1a1a", marginLeft: 52 },
+  placementDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   placementMedal:   { fontSize: 22, minWidth: 28, textAlign: "center" },
   placementTitle:   { color: "#fff", fontSize: 14, fontWeight: "800" },
   placementDate:    { color: "#444", fontSize: 12, marginTop: 2 },
@@ -942,23 +1070,83 @@ const styles = StyleSheet.create({
   placementBadgeText:    { color: "#555", fontSize: 12, fontWeight: "800" },
   placementBadgeTextTop: { color: "#fff" },
 
-  logoutBtn: {
-    flexDirection: "row", alignItems: "center", justifyContent: "center",
-    gap: 8, backgroundColor: "rgba(239,68,68,0.07)", borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: "rgba(239,68,68,0.18)",
-  },
-  logoutText: { color: "#ef4444", fontWeight: "800", fontSize: 15 },
+  // ── Shared bottom sheets ──
+  sheetBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
+  sheetDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 12 },
 
-  // Shared picker modal
-  pickerBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
-  pickerDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
+  // ── Settings sheet ──
+  settingsSheet: {
+    backgroundColor: "#0d0d0d", borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 18, paddingTop: 14, paddingBottom: 12,
+    borderTopWidth: 1, borderColor: "#1e1e1e",
+    maxHeight: "88%",
+  },
+  settingsTitle: { color: "#fff", fontSize: 17, fontWeight: "900", textAlign: "center", marginBottom: 16 },
+  settingsGroupLabel: {
+    color: "#3a3a3a", fontSize: 10, fontWeight: "800",
+    textTransform: "uppercase", letterSpacing: 1.4,
+    marginBottom: 8, marginTop: 14, paddingHorizontal: 4,
+  },
+  settingsGroup: {
+    backgroundColor: "#141414", borderRadius: 16,
+    borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden",
+  },
+  settingsRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12, gap: 12 },
+  settingsIcon: {
+    width: 32, height: 32, borderRadius: 9,
+    alignItems: "center", justifyContent: "center",
+  },
+  settingsRowLabel: { color: "#fff", fontSize: 14.5, fontWeight: "600" },
+  settingsRowSub: { color: "#555", fontSize: 11.5, marginTop: 1 },
+  settingsDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#1e1e1e", marginLeft: 58 },
+  settingsBadge: {
+    minWidth: 21, height: 21, borderRadius: 11, paddingHorizontal: 6,
+    backgroundColor: "#f59e0b", alignItems: "center", justifyContent: "center",
+  },
+  settingsBadgeText: { color: "#000", fontWeight: "900", fontSize: 11 },
+  statusDot: { width: 10, height: 10, borderRadius: 5 },
+
+  // ── Edit profile sheet ──
+  editModal: { flex: 1, backgroundColor: "#0a0a0a" },
+  editHeader: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    paddingHorizontal: 18, paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  editCancelText: { color: "#888", fontSize: 15, fontWeight: "600" },
+  editTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  editDoneText: { color: "#06b6d4", fontSize: 15, fontWeight: "800" },
+  editScroll: { padding: 20, alignItems: "center" },
+  editAvatarWrap: { position: "relative", marginBottom: 10 },
+  editAvatarImg: { width: 92, height: 92, borderRadius: 46 },
+  editAvatarFallback: {
+    width: 92, height: 92, borderRadius: 46,
+    backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center",
+  },
+  editAvatarInitial: { color: "#000", fontSize: 36, fontWeight: "900" },
+  editAvatarOverlay: {
+    ...StyleSheet.absoluteFillObject, borderRadius: 46,
+    backgroundColor: "rgba(0,0,0,0.5)", alignItems: "center", justifyContent: "center",
+  },
+  editAvatarAction: { color: "#06b6d4", fontSize: 14, fontWeight: "800", marginBottom: 24 },
+  editField: { width: "100%", marginBottom: 18 },
+  editFieldLabel: { color: "#666", fontSize: 12, fontWeight: "700", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.6 },
+  editFieldInput: {
+    backgroundColor: "#111", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
+    color: "#fff", fontSize: 15, paddingHorizontal: 16, paddingVertical: 13,
+  },
+  editBioInput: { minHeight: 88, maxHeight: 130, textAlignVertical: "top", paddingTop: 13 },
+  editBioCount: { color: "#333", fontSize: 11, textAlign: "right", marginTop: 5 },
+  editHint: { color: "#3a3a3a", fontSize: 12, textAlign: "center", lineHeight: 17, paddingHorizontal: 12 },
+
+  // ── Picker sheets (game / search / avatar) ──
   pickerSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
     borderTopWidth: 1, borderColor: "#1e1e1e", gap: 10,
     maxHeight: "75%",
   },
-  pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 4 },
   pickerTitle: { color: "#fff", fontSize: 16, fontWeight: "900", textAlign: "center" },
   pickerSub: { color: "#444", fontSize: 12, textAlign: "center", marginBottom: 4 },
   pickerOptionCamera: {
@@ -975,7 +1163,6 @@ const styles = StyleSheet.create({
   pickerCancel: { backgroundColor: "#0d0d0d", borderRadius: 16, padding: 16, alignItems: "center", marginTop: 4 },
   pickerCancelText: { color: "#555", fontWeight: "700", fontSize: 15 },
 
-  // Game list in picker
   gameList: { maxHeight: 320 },
   gameOption: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
@@ -991,31 +1178,6 @@ const styles = StyleSheet.create({
   noGamesWrap: { alignItems: "center", gap: 8, paddingVertical: 24 },
   noGamesText: { color: "#fff", fontWeight: "800", fontSize: 15 },
   noGamesSub: { color: "#444", fontSize: 12, textAlign: "center" },
-
-  topBar: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 18, paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
-  },
-  topBarTitle: { color: "#fff", fontSize: 17, fontWeight: "900" },
-  searchIconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
-
-  bioTapArea: { marginTop: 6, marginBottom: 2, paddingHorizontal: 8 },
-  bioText: { color: "#888", fontSize: 14, textAlign: "center", lineHeight: 20, maxWidth: 300 },
-  bioPlaceholder: { color: "#2a2a2a", fontSize: 13, textAlign: "center", fontStyle: "italic" },
-  bioEditWrap: {
-    width: "100%", marginTop: 8, marginBottom: 2,
-    backgroundColor: "#111", borderRadius: 14,
-    padding: 14, borderWidth: 1, borderColor: "#222",
-  },
-  bioInput: {
-    color: "#fff", fontSize: 14, lineHeight: 20,
-    minHeight: 56, maxHeight: 100, textAlignVertical: "top",
-  },
-  bioBtmRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginTop: 8 },
-  bioCount: { color: "#333", fontSize: 11 },
-  bioCancelText: { color: "#555", fontSize: 13, fontWeight: "700", paddingHorizontal: 6 },
-  bioSaveText: { color: "#06b6d4", fontSize: 13, fontWeight: "800", paddingHorizontal: 6 },
 
   searchInputWrap: {
     flexDirection: "row", alignItems: "center", gap: 10,

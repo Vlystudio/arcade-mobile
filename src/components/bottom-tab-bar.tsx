@@ -1,6 +1,7 @@
+import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -9,6 +10,8 @@ import Animated, {
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAdmin } from "../context/admin-context";
+import { useAuth } from "../context/auth-context";
+import { supabase } from "../../lib/supabase";
 
 type Tab = {
   label: string;
@@ -33,13 +36,45 @@ const ADMIN_TAB: Tab = {
   route: "/admin",
 };
 
-const SPRING_CONFIG = { damping: 20, stiffness: 200, mass: 0.6 };
+const SPRING_CONFIG = { damping: 20, stiffness: 220, mass: 0.55 };
+
+// Module-level avatar cache so the tab bar doesn't refetch on every screen change.
+// undefined = not fetched yet, null = fetched but user has no avatar.
+let cachedAvatarUrl: string | null | undefined;
+let cachedAvatarUserId: string | null = null;
+const avatarListeners = new Set<(url: string | null) => void>();
+
+export function setTabBarAvatar(url: string | null) {
+  cachedAvatarUrl = url;
+  avatarListeners.forEach((fn) => fn(url));
+}
 
 export default function BottomTabBar() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { isAdmin } = useAdmin();
+  const { user } = useAuth();
   const { width: windowWidth } = useWindowDimensions();
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(cachedAvatarUrl ?? null);
+
+  // Fetch the avatar once per session (module cache survives screen changes)
+  useEffect(() => {
+    const listener = (url: string | null) => setAvatarUrl(url);
+    avatarListeners.add(listener);
+
+    if (user && (cachedAvatarUrl === undefined || cachedAvatarUserId !== user.id)) {
+      cachedAvatarUserId = user.id;
+      supabase
+        .from("profiles")
+        .select("avatar_url")
+        .eq("id", user.id)
+        .single()
+        .then(({ data }) => {
+          setTabBarAvatar(data?.avatar_url ?? null);
+        });
+    }
+    return () => { avatarListeners.delete(listener); };
+  }, [user?.id]);
 
   const tabs: Tab[] = isAdmin
     ? [...BASE_TABS.slice(0, BASE_TABS.length - 1), ADMIN_TAB, BASE_TABS[BASE_TABS.length - 1]]
@@ -48,37 +83,41 @@ export default function BottomTabBar() {
   const activeIndex = tabs.findIndex((t) => t.route === pathname);
   const tabWidth = windowWidth / tabs.length;
 
-  const pillX = useSharedValue(Math.max(activeIndex, 0) * tabWidth);
+  // Animated dot indicator under the active tab
+  const dotX = useSharedValue(Math.max(activeIndex, 0) * tabWidth + tabWidth / 2 - 2);
 
   useEffect(() => {
     const idx = tabs.findIndex((t) => t.route === pathname);
     if (idx >= 0) {
-      pillX.value = withSpring(idx * tabWidth, SPRING_CONFIG);
+      dotX.value = withSpring(idx * tabWidth + tabWidth / 2 - 2, SPRING_CONFIG);
     }
   }, [pathname, tabWidth, tabs.length]);
 
   const isAdminActive = pathname === "/admin";
-  const pillColor = isAdminActive ? "rgba(245,158,11,0.18)" : "rgba(6,182,212,0.14)";
 
-  const pillStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: pillX.value }],
+  const dotStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: dotX.value }],
   }));
 
   return (
-    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-      {/* sliding active pill */}
-      <Animated.View
-        style={[
-          styles.pill,
-          { width: tabWidth, backgroundColor: pillColor },
-          pillStyle,
-        ]}
-        pointerEvents="none"
-      />
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+      {/* animated active-tab dot */}
+      {activeIndex >= 0 && (
+        <Animated.View
+          style={[
+            styles.dot,
+            { backgroundColor: isAdminActive ? "#f59e0b" : "#06b6d4" },
+            dotStyle,
+          ]}
+          pointerEvents="none"
+        />
+      )}
 
       {tabs.map((tab) => {
         const active = pathname === tab.route;
         const isAdminTab = tab.route === "/admin";
+        const isProfileTab = tab.route === "/profile";
+
         return (
           <Pressable
             key={tab.route}
@@ -86,18 +125,26 @@ export default function BottomTabBar() {
             onPress={() => {
               if (pathname !== tab.route) router.replace(tab.route as any);
             }}
+            accessibilityLabel={tab.label}
+            accessibilityRole="tab"
           >
-            <Ionicons
-              name={active ? tab.iconActive : tab.icon}
-              size={22}
-              color={active ? (isAdminTab ? "#f59e0b" : "#06b6d4") : "#484848"}
-            />
-            <Text style={[
-              styles.label,
-              active && (isAdminTab ? styles.labelAdmin : styles.labelActive),
-            ]}>
-              {tab.label}
-            </Text>
+            {isProfileTab && avatarUrl ? (
+              <View style={[styles.avatarRing, active && styles.avatarRingActive]}>
+                <Image source={{ uri: avatarUrl }} style={styles.avatarIcon} contentFit="cover" />
+              </View>
+            ) : isProfileTab && user ? (
+              <View style={[styles.avatarRing, styles.avatarFallback, active && styles.avatarRingActive]}>
+                <Text style={styles.avatarFallbackText}>
+                  {(user.email ?? "P")[0].toUpperCase()}
+                </Text>
+              </View>
+            ) : (
+              <Ionicons
+                name={active ? tab.iconActive : tab.icon}
+                size={24}
+                color={active ? (isAdminTab ? "#f59e0b" : "#fff") : "#5a5a5a"}
+              />
+            )}
           </Pressable>
         );
       })}
@@ -110,19 +157,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "#0a0a0a",
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#222",
-    paddingTop: 6,
+    borderTopColor: "#1e1e1e",
+    paddingTop: 10,
   },
-  pill: {
+  dot: {
     position: "absolute",
-    top: 0,
+    top: 2,
     left: 0,
-    height: "100%",
-    borderRadius: 0,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
   },
-  tab: { flex: 1, alignItems: "center", gap: 3, paddingTop: 4, paddingBottom: 2 },
+  tab: { flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 4 },
   tabPressed: { opacity: 0.45 },
-  label:       { fontSize: 10, fontWeight: "500", color: "#484848" },
-  labelActive: { color: "#06b6d4", fontWeight: "700" },
-  labelAdmin:  { color: "#f59e0b", fontWeight: "700" },
+
+  avatarRing: {
+    width: 27,
+    height: 27,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "transparent",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarRingActive: { borderColor: "#fff" },
+  avatarIcon: { width: 24, height: 24, borderRadius: 12 },
+  avatarFallback: { backgroundColor: "#06b6d4" },
+  avatarFallbackText: { color: "#000", fontSize: 11, fontWeight: "900" },
 });
