@@ -1,5 +1,5 @@
 import { Image } from "expo-image";
-import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
+import { pickFromCamera } from "../../lib/pick-image";
 import { compressImage, MAX_UPLOAD_BYTES } from "../../lib/compress-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -65,10 +65,6 @@ export default function SubmitScoreScreen() {
     if (asset) setProofUri(asset.uri);
   }
 
-  async function pickProofFromLibrary() {
-    const asset = await pickFromLibrary({ allowsEditing: false, quality: 0.85 });
-    if (asset) setProofUri(asset.uri);
-  }
 
   // Uploads photo to the private score-proofs bucket and returns the storage path.
   // The caller then attaches the path via rpc_attach_score_proof; no public URL is stored.
@@ -153,6 +149,9 @@ export default function SubmitScoreScreen() {
         if (proofErr) {
           // Path attachment failed — remove the orphaned file from storage
           await supabase.storage.from("score-proofs").remove([uploaded.path]);
+        } else {
+          // Kick off AI verification (deny-only mode); never block the UX on it
+          supabase.functions.invoke("verify-score-proof", { body: { score_id: scoreId } }).catch(() => {});
         }
       }
     } catch (e: any) {
@@ -315,10 +314,6 @@ export default function SubmitScoreScreen() {
                           <Ionicons name="camera-outline" size={13} color="#fff" />
                           <Text style={styles.proofChangeText}>Retake</Text>
                         </Pressable>
-                        <Pressable style={styles.proofChangeChip} onPress={pickProofFromLibrary}>
-                          <Ionicons name="images-outline" size={13} color="#fff" />
-                          <Text style={styles.proofChangeText}>Library</Text>
-                        </Pressable>
                       </View>
                     </View>
                   ) : (
@@ -328,16 +323,12 @@ export default function SubmitScoreScreen() {
                           <Ionicons name="camera-outline" size={28} color="#06b6d4" />
                         </View>
                         <Text style={styles.proofEmptyText}>Add photo proof</Text>
-                        <Text style={styles.proofEmptyHint}>Score screen on the machine</Text>
+                        <Text style={styles.proofEmptyHint}>Live photo of the machine’s score display — gallery uploads aren’t accepted</Text>
                       </View>
                       <View style={styles.proofBtnRow}>
                         <Pressable style={styles.proofCameraBtn} onPress={pickProofFromCamera}>
                           <Ionicons name="camera" size={18} color="#000" />
                           <Text style={styles.proofCameraBtnText}>Take Photo</Text>
-                        </Pressable>
-                        <Pressable style={styles.proofLibraryBtn} onPress={pickProofFromLibrary}>
-                          <Ionicons name="images-outline" size={18} color="#fff" />
-                          <Text style={styles.proofLibraryBtnText}>From Library</Text>
                         </Pressable>
                       </View>
                     </View>
@@ -405,10 +396,6 @@ export default function SubmitScoreScreen() {
                       <Ionicons name="camera-outline" size={13} color="#fff" />
                       <Text style={styles.proofChangeText}>Retake</Text>
                     </Pressable>
-                    <Pressable style={styles.proofChangeChip} onPress={pickProofFromLibrary}>
-                      <Ionicons name="images-outline" size={13} color="#fff" />
-                      <Text style={styles.proofChangeText}>Library</Text>
-                    </Pressable>
                   </View>
                 </View>
               ) : (
@@ -424,10 +411,6 @@ export default function SubmitScoreScreen() {
                     <Pressable style={styles.proofCameraBtn} onPress={pickProofFromCamera}>
                       <Ionicons name="camera" size={18} color="#000" />
                       <Text style={styles.proofCameraBtnText}>Take Photo</Text>
-                    </Pressable>
-                    <Pressable style={styles.proofLibraryBtn} onPress={pickProofFromLibrary}>
-                      <Ionicons name="images-outline" size={18} color="#fff" />
-                      <Text style={styles.proofLibraryBtnText}>From Library</Text>
                     </Pressable>
                   </View>
                 </View>

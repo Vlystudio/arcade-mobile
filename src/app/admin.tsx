@@ -31,11 +31,13 @@ import {
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { API_BASE } from "../../lib/api-base";
+import { compressImage } from "../../lib/compress-image";
+import { pickFromLibrary } from "../../lib/pick-image";
 import { showToast } from "../components/toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke" | "trivia" | "skeeball" | "reports";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke" | "trivia" | "skeeball" | "reports" | "games";
 type SupportTicket = { id: string; user_id: string; status: string; created_at: string; username: string; avatar_url: string | null };
 type SupportMsg    = { id: string; sender_id: string; content: string; is_admin_msg: boolean; created_at: string };
 type ReviewTab = "pending" | "approved" | "denied";
@@ -50,6 +52,9 @@ type ReviewScore = {
   photo_url: string | null;
   proof_storage_path: string | null;
   created_at: string;
+  ai_verdict: string | null;
+  ai_read_score: number | null;
+  ai_reasoning: string | null;
 };
 
 type ConfirmAction = {
@@ -190,6 +195,7 @@ const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
   { key: "trivia",      label: "Trivia",      icon: "help-circle-outline" },
   { key: "skeeball",   label: "Skeeball",   icon: "bowling-ball-outline" },
   { key: "reports",     label: "Reports",     icon: "flag-outline" },
+  { key: "games",       label: "Games",       icon: "image-outline" },
   { key: "users",       label: "Users",       icon: "person-outline" },
 ];
 
@@ -437,6 +443,13 @@ export default function AdminScreen() {
   };
   const [contentReports, setContentReports] = useState<ContentReport[]>([]);
   const [reportsTab, setReportsTab] = useState<"pending" | "dismissed" | "actioned" | "beta">("pending");
+
+  // Games tab: AI reference photos
+  type GameRef = { id: string; name: string; type: string | null; ref_path: string | null; signed_url: string | null };
+  const [gameRefs, setGameRefs] = useState<GameRef[]>([]);
+  const [gameRefsLoading, setGameRefsLoading] = useState(false);
+  const [refBusyFor, setRefBusyFor] = useState<string | null>(null);
+  const [aiMode, setAiMode] = useState<string>("deny_only");
   type BetaReport = {
     id: string; username: string | null; category: string; severity: string;
     title: string; description: string; steps: string | null; route: string | null;
@@ -509,6 +522,7 @@ export default function AdminScreen() {
     if (mainTab === "teams") loadAdminTeams();
     if (mainTab === "scheduler" && schedTeams.length === 0) loadSchedulerTeams();
     if (mainTab === "users") loadUsers();
+    if (mainTab === "games") loadGameRefs();
     if (mainTab === "forums") loadPendingForums(forumsTab);
     if (mainTab === "support") { loadSupportTickets(); setUnreadSupport(0); }
     if (mainTab === "karaoke") loadKaraokeQueue();
@@ -701,6 +715,9 @@ export default function AdminScreen() {
       photo_url:          row.photo_url          ?? null,
       proof_storage_path: row.proof_storage_path ?? null,
       created_at:         row.created_at,
+      ai_verdict:         row.ai_verdict         ?? null,
+      ai_read_score:      row.ai_read_score      ?? null,
+      ai_reasoning:       row.ai_reasoning       ?? null,
     })));
     setReviewLoading(false);
     setReviewRefreshing(false);
@@ -1788,6 +1805,68 @@ export default function AdminScreen() {
       .eq("status", "active")
       .maybeSingle();
     setSkeeActiveSeason(data ?? null);
+  }
+
+  async function loadGameRefs() {
+    setGameRefsLoading(true);
+    const [gamesRes, refsRes, cfgRes] = await Promise.all([
+      supabase.from("games").select("id, name, type").order("name"),
+      supabase.from("game_reference_photos").select("game_id, storage_path"),
+      supabase.from("ai_verification_config").select("mode").eq("id", 1).maybeSingle(),
+    ]);
+    const refMap: Record<string, string> = {};
+    for (const r of refsRes.data ?? []) refMap[(r as any).game_id] = (r as any).storage_path;
+    const paths = Object.values(refMap);
+    let urlMap: Record<string, string> = {};
+    if (paths.length) {
+      const { data: signed } = await supabase.storage.from("game-references").createSignedUrls(paths, 3600);
+      for (const su of signed ?? []) if (su.signedUrl && su.path) urlMap[su.path] = su.signedUrl;
+    }
+    setGameRefs((gamesRes.data ?? []).map((g: any) => ({
+      id: g.id, name: g.name, type: g.type ?? null,
+      ref_path: refMap[g.id] ?? null,
+      signed_url: refMap[g.id] ? (urlMap[refMap[g.id]] ?? null) : null,
+    })));
+    setAiMode((cfgRes.data as any)?.mode ?? "deny_only");
+    setGameRefsLoading(false);
+  }
+
+  async function uploadGameRef(game: { id: string; name: string; ref_path: string | null }) {
+    const asset = await pickFromLibrary({ allowsEditing: false, quality: 0.9 });
+    if (!asset) return;
+    setRefBusyFor(game.id);
+    try {
+      const compressed = await compressImage(asset.uri);
+      const resp = await fetch(compressed);
+      const buf = await resp.arrayBuffer();
+      const path = `${game.id}/${Date.now()}.jpg`;
+      const { error: upErr } = await supabase.storage
+        .from("game-references")
+        .upload(path, buf, { contentType: "image/jpeg", upsert: true });
+      if (upErr) throw upErr;
+      const { error: rowErr } = await supabase.from("game_reference_photos").upsert({
+        game_id: game.id, storage_path: path, uploaded_by: user!.id, updated_at: new Date().toISOString(),
+      });
+      if (rowErr) throw rowErr;
+      if (game.ref_path && game.ref_path !== path) {
+        await supabase.storage.from("game-references").remove([game.ref_path]);
+      }
+      showToast(`Reference photo set for ${game.name}`);
+      loadGameRefs();
+    } catch (e: any) {
+      showToast(e?.message ?? "Upload failed", "error");
+    }
+    setRefBusyFor(null);
+  }
+
+  async function deleteGameRef(game: { id: string; name: string; ref_path: string | null }) {
+    if (!game.ref_path) return;
+    setRefBusyFor(game.id);
+    await supabase.from("game_reference_photos").delete().eq("game_id", game.id);
+    await supabase.storage.from("game-references").remove([game.ref_path]);
+    setRefBusyFor(null);
+    showToast(`${game.name} back to manual review`);
+    loadGameRefs();
   }
 
   async function loadBetaReports() {
@@ -3927,6 +4006,80 @@ export default function AdminScreen() {
         </ScrollView>
       )}
 
+      {/* ── Games: AI reference photos ── */}
+      {mainTab === "games" && (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={gameRefsLoading} onRefresh={loadGameRefs} tintColor="#06b6d4" />}
+        >
+          <View style={[styles.skeeWeekCard, { borderColor: "rgba(6,182,212,0.2)", backgroundColor: "rgba(6,182,212,0.04)" }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.skeeWeekLabel}>AI proof verification — {aiMode === "full_auto" ? "FULL AUTO" : aiMode === "off" ? "OFF" : "deny-only (conservative)"}</Text>
+              <Text style={[styles.reportMeta, { marginTop: 4 }]}>
+                Games with a reference photo get AI checks on every score proof: blatant mismatches are auto-denied,
+                everything else is annotated for your review queue. Games without a reference stay fully manual.
+                Auto-approval stays off until you flip the mode.
+              </Text>
+            </View>
+          </View>
+
+          {gameRefsLoading && gameRefs.length === 0 ? (
+            <ActivityIndicator color="#06b6d4" style={{ marginTop: 40 }} />
+          ) : (
+            gameRefs.map((g) => (
+              <View key={g.id} style={styles.reportCard}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                  {g.signed_url ? (
+                    <Pressable onPress={() => setPhotoModal(g.signed_url)}>
+                      <Image source={{ uri: g.signed_url }} style={{ width: 56, height: 56, borderRadius: 10 }} contentFit="cover" />
+                    </Pressable>
+                  ) : (
+                    <View style={{ width: 56, height: 56, borderRadius: 10, backgroundColor: "#111", alignItems: "center", justifyContent: "center" }}>
+                      <Ionicons name="image-outline" size={22} color="#333" />
+                    </View>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.reportMeta, { color: "#fff", fontWeight: "800", fontSize: 14.5 }]}>{g.name}</Text>
+                    <View style={[styles.reportTypeChip, { alignSelf: "flex-start", marginTop: 5, borderColor: g.ref_path ? "rgba(34,197,94,0.4)" : "rgba(245,158,11,0.4)", backgroundColor: g.ref_path ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)" }]}>
+                      <Text style={[styles.reportTypeChipText, { color: g.ref_path ? "#22c55e" : "#f59e0b" }]}>
+                        {g.ref_path ? "AI verification active" : "Manual review"}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+                <View style={[styles.userRoleActions, { marginTop: 10 }]}>
+                  {g.signed_url && (
+                    <Pressable style={styles.userRoleBtn} onPress={() => setPhotoModal(g.signed_url)}>
+                      <Text style={styles.userRoleBtnText}>View</Text>
+                    </Pressable>
+                  )}
+                  <Pressable
+                    style={[styles.userRoleBtn, refBusyFor === g.id && { opacity: 0.4 }]}
+                    onPress={() => uploadGameRef(g)}
+                    disabled={refBusyFor === g.id}
+                  >
+                    {refBusyFor === g.id
+                      ? <ActivityIndicator size="small" color="#888" />
+                      : <Text style={styles.userRoleBtnText}>{g.ref_path ? "Replace photo" : "Upload reference"}</Text>}
+                  </Pressable>
+                  {g.ref_path && (
+                    <Pressable
+                      style={[styles.userRoleBtn, { borderColor: "rgba(239,68,68,0.4)" }, refBusyFor === g.id && { opacity: 0.4 }]}
+                      onPress={() => deleteGameRef(g)}
+                      disabled={refBusyFor === g.id}
+                    >
+                      <Text style={[styles.userRoleBtnText, { color: "#ef4444" }]}>Delete</Text>
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+            ))
+          )}
+        </ScrollView>
+      )}
+
       {/* ── Broadcast modal ── */}
       <Modal visible={broadcastVisible} transparent animationType="slide" onRequestClose={() => setBroadcastVisible(false)}>
         <View style={styles.modalOverlay}>
@@ -5272,8 +5425,26 @@ function ScoreCard({ item, tab, actioning, proofLoading, onApprove, onDeny, onRe
   onApprove: () => void; onDeny: () => void; onRevoke: () => void; onReApprove: () => void; onPhotoPress: () => void;
 }) {
   const hasProof = !!(item.proof_storage_path || item.photo_url);
+  const aiColor = item.ai_verdict === "looks_good" ? "#22c55e"
+    : item.ai_verdict === "needs_review" ? "#f59e0b"
+    : item.ai_verdict === "auto_denied" ? "#ef4444" : "#777";
+  const aiLabel = item.ai_verdict === "looks_good" ? "AI: looks legit"
+    : item.ai_verdict === "needs_review" ? "AI: needs a human look"
+    : item.ai_verdict === "auto_denied" ? "AI: auto-denied"
+    : item.ai_verdict === "no_reference" ? "AI: no reference photo"
+    : item.ai_verdict === "error" ? "AI: check failed" : null;
   return (
     <View style={styles.card}>
+      {aiLabel && (
+        <View style={[styles.statusBanner, { backgroundColor: aiColor + "12" }]}>
+          <Ionicons name="sparkles" size={12} color={aiColor} />
+          <Text style={[styles.statusBannerText, { color: aiColor, flex: 1 }]} numberOfLines={2}>
+            {aiLabel}
+            {item.ai_read_score !== null ? ` — display reads ${Number(item.ai_read_score).toLocaleString()}` : ""}
+            {item.ai_reasoning ? ` · ${item.ai_reasoning}` : ""}
+          </Text>
+        </View>
+      )}
       {tab !== "pending" && (
         <View style={[styles.statusBanner, { backgroundColor: tab === "approved" ? "rgba(34,197,94,0.07)" : "rgba(239,68,68,0.07)" }]}>
           <Ionicons name={tab === "approved" ? "checkmark-circle" : "close-circle"} size={12} color={tab === "approved" ? "#22c55e" : "#ef4444"} />
