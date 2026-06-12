@@ -21,6 +21,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { showToast } from "../components/toast";
+import { ListSkeleton } from "../components/skeleton";
 import { useRequireAuth } from "../hooks/use-require-auth";
 
 const CATEGORIES = [
@@ -146,7 +147,13 @@ export default function BetaFeedbackScreen() {
   }
 
   if (authLoading || isBeta === null) {
-    return <View style={s.loader}><ActivityIndicator size="large" color="#2dd4bf" /></View>;
+    return (
+      <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+        <View style={{ paddingHorizontal: 18, paddingTop: 60 }}>
+          <ListSkeleton rows={5} />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   if (!isBeta) {

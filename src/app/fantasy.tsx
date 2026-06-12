@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
 import { showToast } from "../components/toast";
+import { ListSkeleton } from "../components/skeleton";
 import { useRequireAuth } from "../hooks/use-require-auth";
 
 type Line = { line: number; over: number; under: number };
@@ -166,7 +167,13 @@ export default function FantasyScreen() {
   }
 
   if (authLoading || loading) {
-    return <View style={s.loader}><ActivityIndicator size="large" color="#a855f7" /></View>;
+    return (
+      <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 60 }}>
+          <ListSkeleton rows={6} />
+        </View>
+      </SafeAreaView>
+    );
   }
   if (!state) {
     return (

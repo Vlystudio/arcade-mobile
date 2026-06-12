@@ -450,6 +450,9 @@ export default function AdminScreen() {
   const [gameRefsLoading, setGameRefsLoading] = useState(false);
   const [refBusyFor, setRefBusyFor] = useState<string | null>(null);
   const [aiMode, setAiMode] = useState<string>("deny_only");
+  type LaneRow = { id: string; lane_number: number; game_name: string | null };
+  const [lanes, setLanes] = useState<LaneRow[]>([]);
+  const [posterBusy, setPosterBusy] = useState<string | null>(null);
   type BetaReport = {
     id: string; username: string | null; category: string; severity: string;
     title: string; description: string; steps: string | null; route: string | null;
@@ -1844,6 +1847,40 @@ export default function AdminScreen() {
     setSkeeActiveSeason(data ?? null);
   }
 
+  async function generateLanePoster(lane: { id: string; lane_number: number; game_name: string | null }) {
+    setPosterBusy(lane.id);
+    const { data, error } = await supabase.rpc("rpc_admin_generate_lane_qr_token", {
+      p_lane_id: lane.id, p_ttl_hours: 720,
+    });
+    setPosterBusy(null);
+    if (error || data?.error) {
+      showToast(data?.message ?? error?.message ?? "Token generation failed", "error");
+      return;
+    }
+    const base = process.env.EXPO_PUBLIC_SITE_URL ?? "https://vlystudios.com";
+    const scanUrl = `${base}/scan-lane?lane_token=${data.raw_token}`;
+    const qrImg = `https://api.qrserver.com/v1/create-qr-code/?size=480x480&data=${encodeURIComponent(scanUrl)}`;
+    showToast(`New QR for Lane ${lane.lane_number} — old codes are now revoked`);
+    if (Platform.OS === "web") {
+      const w = (window as any).open("", "_blank");
+      if (w) {
+        w.document.write(`<!doctype html><html><head><title>Lane ${lane.lane_number} QR</title>
+<style>body{font-family:sans-serif;text-align:center;padding:40px;color:#111}
+h1{font-size:64px;margin:0 0 6px}h2{font-size:22px;color:#555;margin:0 0 28px;font-weight:600}
+img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
+@media print{p.hint{display:none}}</style></head><body>
+<h1>LANE ${lane.lane_number}</h1><h2>${lane.game_name ?? "Scan to check in"}</h2>
+<img src="${qrImg}" alt="Lane QR" onload="setTimeout(()=>window.print(),300)"/>
+<p>Scan with your phone camera to check in</p>
+<p class="hint">Print dialog opens automatically — Ctrl+P if it doesn't.</p>
+</body></html>`);
+        w.document.close();
+      }
+    } else {
+      setPhotoModal(qrImg);
+    }
+  }
+
   async function loadGameRefs() {
     setGameRefsLoading(true);
     const [gamesRes, refsRes, cfgRes] = await Promise.all([
@@ -1865,6 +1902,12 @@ export default function AdminScreen() {
       signed_url: refMap[g.id] ? (urlMap[refMap[g.id]] ?? null) : null,
     })));
     setAiMode((cfgRes.data as any)?.mode ?? "deny_only");
+    const { data: laneRows } = await supabase
+      .from("lanes").select("id, lane_number, games(name)").order("lane_number");
+    setLanes((laneRows ?? []).map((l: any) => ({
+      id: l.id, lane_number: l.lane_number,
+      game_name: (Array.isArray(l.games) ? l.games[0] : l.games)?.name ?? null,
+    })));
     setGameRefsLoading(false);
   }
 
@@ -4113,6 +4156,35 @@ export default function AdminScreen() {
                 </View>
               </View>
             ))
+          )}
+
+          {/* Lane QR posters */}
+          {lanes.length > 0 && (
+            <>
+              <Text style={[styles.usersCountLine, { marginTop: 18 }]}>
+                Lane QR posters — generates a fresh token (revoking old codes for that lane) and opens a print-ready poster.
+              </Text>
+              {lanes.map((l) => (
+                <View key={l.id} style={styles.reportCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <Ionicons name="qr-code-outline" size={20} color="#06b6d4" />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.reportMeta, { color: "#fff", fontWeight: "800", fontSize: 14 }]}>Lane {l.lane_number}</Text>
+                      {!!l.game_name && <Text style={styles.reportMeta}>{l.game_name}</Text>}
+                    </View>
+                    <Pressable
+                      style={[styles.userRoleBtn, posterBusy === l.id && { opacity: 0.4 }]}
+                      onPress={() => generateLanePoster(l)}
+                      disabled={posterBusy === l.id}
+                    >
+                      {posterBusy === l.id
+                        ? <ActivityIndicator size="small" color="#888" />
+                        : <Text style={styles.userRoleBtnText}>New QR + Poster</Text>}
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </>
           )}
         </ScrollView>
       )}

@@ -31,7 +31,7 @@ import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ReportSheet, type ReportTarget } from "../components/report-sheet";
 import { MentionText } from "../components/mention-text";
-import { showToast } from "../components/toast";
+import { showActionToast, showToast } from "../components/toast";
 import { WhatsNewSheet } from "../components/whats-new";
 import { fetchInbox, unseenInboxCount } from "../lib/inbox";
 import { validateCommentContent, validatePostContent } from "../../lib/validation";
@@ -386,12 +386,19 @@ export default function FeedScreen() {
   }
 
   async function handleDelete(postId: string) {
-    const { error } = await supabase.from("posts").delete().eq("id", postId);
-    if (error) {
-      Alert.alert("Error", "Could not delete post: " + error.message);
-      return;
-    }
+    // Soft delete with a 5s undo window: hide locally, delete after the
+    // toast expires unless the user taps Undo.
+    const removed = posts.find((p) => p.id === postId);
     setPosts((prev) => prev.filter((p) => p.id !== postId));
+    let undone = false;
+    showActionToast("Post deleted", "Undo", () => {
+      undone = true;
+      if (removed) setPosts((prev) => [removed, ...prev.filter((p) => p.id !== postId)]);
+    });
+    setTimeout(async () => {
+      if (undone) return;
+      await supabase.from("posts").delete().eq("id", postId);
+    }, 5200);
   }
 
   function openEdit(post: Post) {

@@ -12,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { ListSkeleton } from "../components/skeleton";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { fetchInbox, markInboxSeen, type InboxItem } from "../lib/inbox";
 
@@ -41,7 +42,13 @@ export default function NotificationsScreen() {
   useEffect(() => { if (user) load(); }, [user]);
 
   if (authLoading || loading) {
-    return <View style={s.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
+    return (
+      <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+        <View style={{ paddingHorizontal: 16, paddingTop: 60 }}>
+          <ListSkeleton rows={6} />
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
