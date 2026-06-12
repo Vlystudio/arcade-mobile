@@ -3,7 +3,7 @@ import { compressImage, MAX_UPLOAD_BYTES } from "../../lib/compress-image";
 import { Image } from "expo-image";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAdmin } from "../context/admin-context";
 import {
   ActivityIndicator,
@@ -28,7 +28,10 @@ import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
 import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
-import { reportContent, type ReportReason } from "../../lib/report-content";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ReportSheet, type ReportTarget } from "../components/report-sheet";
+import { MentionText } from "../components/mention-text";
+import { showToast } from "../components/toast";
 import { validateCommentContent, validatePostContent } from "../../lib/validation";
 import { AppTour } from "../components/app-tour";
 import { useTour } from "../hooks/use-tour";
@@ -48,6 +51,9 @@ type Post = {
   like_count: number;
   liked_by_me: boolean;
   comment_count: number;
+  my_reaction: string | null;
+  reactions: Record<string, number>;
+  saved: boolean;
   created_at: string;
 };
 
@@ -108,11 +114,13 @@ export default function FeedScreen() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
 
-  // Report post
-  const [reportPostId, setReportPostId] = useState<string | null>(null);
-  const [reportReason, setReportReason] = useState<ReportReason | null>(null);
-  const [reportDetails, setReportDetails] = useState("");
-  const [reportSubmitting, setReportSubmitting] = useState(false);
+  // Reporting (shared sheet handles posts + comments)
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+
+  // Announcement banner + new-posts pill
+  const [announcement, setAnnouncement] = useState<{ id: string; title: string; body: string } | null>(null);
+  const [newPostCount, setNewPostCount] = useState(0);
+  const feedScrollRef = useRef<ScrollView>(null);
 
   const [userRole, setUserRole] = useState<AppRole>("user");
   const { tourVisible, dismissTour } = useTour(user?.id);
@@ -161,15 +169,28 @@ export default function FeedScreen() {
     const userIds = [...new Set(postsData.map((p: any) => p.user_id as string))];
     const scoreIds = postsData.map((p: any) => p.score_id).filter(Boolean);
 
-    // Step 2: parallel fetch of profiles, likes, scores, and comment counts
-    const [profilesRes, likesRes, scoresRes, commentsRes] = await Promise.all([
+    // Step 2: parallel fetch of profiles, likes, scores, comment counts,
+    // reactions, saves, and the caller's block list
+    const [profilesRes, likesRes, scoresRes, commentsRes, reactionsRes, savedRes, blocksRes] = await Promise.all([
       supabase.from("profiles").select("id, username, avatar_url").in("id", userIds),
       supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
       scoreIds.length
         ? supabase.from("scores").select("id, score, game_id, games(name)").in("id", scoreIds)
         : Promise.resolve({ data: [] }),
       supabase.from("post_comments").select("post_id").in("post_id", postIds),
+      supabase.from("post_reactions").select("post_id, user_id, emoji").in("post_id", postIds),
+      supabase.from("saved_posts").select("post_id").eq("user_id", user.id),
+      supabase.from("user_blocks").select("blocked_id").eq("blocker_id", user.id),
     ]);
+
+    const blockedIds = new Set((blocksRes.data ?? []).map((b: any) => b.blocked_id));
+    const savedIds = new Set((savedRes.data ?? []).map((r: any) => r.post_id));
+    const reactionMap: Record<string, { counts: Record<string, number>; mine: string | null }> = {};
+    for (const r of reactionsRes.data ?? []) {
+      const entry = (reactionMap[(r as any).post_id] ??= { counts: {}, mine: null });
+      entry.counts[(r as any).emoji] = (entry.counts[(r as any).emoji] ?? 0) + 1;
+      if ((r as any).user_id === user.id) entry.mine = (r as any).emoji;
+    }
 
     const profileMap = Object.fromEntries((profilesRes.data ?? []).map((p: any) => [p.id, p]));
     const likesMap: Record<string, string[]> = {};
@@ -183,7 +204,7 @@ export default function FeedScreen() {
       commentCountMap[(c as any).post_id] = (commentCountMap[(c as any).post_id] ?? 0) + 1;
     }
 
-    const mapped: Post[] = postsData.map((p: any) => {
+    const mapped: Post[] = postsData.filter((p: any) => !blockedIds.has(p.user_id)).map((p: any) => {
       const profile = profileMap[p.user_id];
       const score = p.score_id ? scoreMap[p.score_id] : null;
       const game = score ? (Array.isArray(score.games) ? score.games[0] : score.games) : null;
@@ -201,6 +222,9 @@ export default function FeedScreen() {
         like_count: postLikes.length,
         liked_by_me: postLikes.includes(user.id),
         comment_count: commentCountMap[p.id] ?? 0,
+        my_reaction: reactionMap[p.id]?.mine ?? null,
+        reactions: reactionMap[p.id]?.counts ?? {},
+        saved: savedIds.has(p.id),
         created_at: p.created_at,
       };
     });
@@ -221,8 +245,38 @@ export default function FeedScreen() {
   }
 
   useEffect(() => {
-    if (user) { loadProfile(); loadFeed(tab); }
+    if (user) { loadProfile(); loadFeed(tab); loadAnnouncement(); }
   }, [user]);
+
+  async function loadAnnouncement() {
+    const { data } = await supabase
+      .from("app_announcements")
+      .select("id, title, body")
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!data) { setAnnouncement(null); return; }
+    const dismissed = await AsyncStorage.getItem("dismissed_announcement");
+    setAnnouncement(dismissed === data.id ? null : data);
+  }
+
+  function dismissAnnouncement() {
+    if (announcement) AsyncStorage.setItem("dismissed_announcement", announcement.id).catch(() => {});
+    setAnnouncement(null);
+  }
+
+  // New-posts pill: realtime inserts from other users bump a counter
+  useEffect(() => {
+    if (!user) return;
+    const ch = supabase
+      .channel("feed_new_posts")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "posts" }, (payload: any) => {
+        if (payload.new?.user_id !== user.id) setNewPostCount((n) => n + 1);
+      })
+      .subscribe();
+    return () => { ch.unsubscribe(); };
+  }, [user?.id]);
 
 
   async function switchTab(t: FeedTab) {
@@ -260,29 +314,36 @@ export default function FeedScreen() {
     setEditError(null);
   }
 
-  function openReport(postId: string) {
-    setReportPostId(postId);
-    setReportReason(null);
-    setReportDetails("");
-  }
-
-  function closeReport() {
-    setReportPostId(null);
-    setReportReason(null);
-    setReportDetails("");
-  }
-
-  async function submitReport() {
-    if (!reportPostId || !reportReason) return;
-    setReportSubmitting(true);
-    const result = await reportContent("post", reportPostId, reportReason, reportDetails.trim() || undefined);
-    setReportSubmitting(false);
-    if (result.ok) {
-      closeReport();
-      Alert.alert("Report submitted", "Thanks for letting us know — our team will review this.");
+  async function handleReact(post: Post, emoji: string) {
+    if (!user) return;
+    const removing = post.my_reaction === emoji;
+    if (removing) {
+      await supabase.from("post_reactions").delete().eq("post_id", post.id).eq("user_id", user.id);
     } else {
-      Alert.alert("Couldn't submit report", result.message);
+      await supabase.from("post_reactions").upsert(
+        { post_id: post.id, user_id: user.id, emoji },
+        { onConflict: "post_id,user_id" },
+      );
     }
+    setPosts((prev) => prev.map((p) => {
+      if (p.id !== post.id) return p;
+      const counts = { ...p.reactions };
+      if (p.my_reaction) counts[p.my_reaction] = Math.max((counts[p.my_reaction] ?? 1) - 1, 0);
+      if (!removing) counts[emoji] = (counts[emoji] ?? 0) + 1;
+      return { ...p, my_reaction: removing ? null : emoji, reactions: counts };
+    }));
+  }
+
+  async function toggleSave(post: Post) {
+    if (!user) return;
+    if (post.saved) {
+      await supabase.from("saved_posts").delete().eq("user_id", user.id).eq("post_id", post.id);
+      showToast("Removed from saved", "info");
+    } else {
+      await supabase.from("saved_posts").insert({ user_id: user.id, post_id: post.id });
+      showToast("Post saved");
+    }
+    setPosts((prev) => prev.map((p) => (p.id === post.id ? { ...p, saved: !post.saved } : p)));
   }
 
   async function pickEditPhoto(source: "camera" | "library") {
@@ -558,6 +619,20 @@ export default function FeedScreen() {
           </View>
         </View>
 
+        {/* Broadcast announcement banner */}
+        {announcement && (
+          <View style={styles.broadcastBanner}>
+            <Ionicons name="megaphone" size={16} color="#f59e0b" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.broadcastTitle}>{announcement.title}</Text>
+              <Text style={styles.broadcastBody}>{announcement.body}</Text>
+            </View>
+            <Pressable onPress={dismissAnnouncement} hitSlop={8}>
+              <Ionicons name="close" size={18} color="#777" />
+            </Pressable>
+          </View>
+        )}
+
         {/* Tab switcher */}
         <View style={styles.tabRow}>
           <View style={styles.tabPill}>
@@ -575,11 +650,27 @@ export default function FeedScreen() {
           </View>
         </View>
 
+        {newPostCount > 0 && (
+          <Pressable
+            style={styles.newPostsPill}
+            onPress={() => {
+              setNewPostCount(0);
+              feedScrollRef.current?.scrollTo({ y: 0, animated: true });
+              loadFeed(tab);
+            }}
+          >
+            <Ionicons name="arrow-up" size={13} color="#000" />
+            <Text style={styles.newPostsPillText}>
+              {newPostCount} new {newPostCount === 1 ? "post" : "posts"}
+            </Text>
+          </Pressable>
+        )}
         <ScrollView
+          ref={feedScrollRef}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={posts.length === 0 ? styles.emptyContainer : undefined}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadFeed(tab); }} tintColor="#06b6d4" />
+            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setNewPostCount(0); loadFeed(tab); }} tintColor="#06b6d4" />
           }
         >
           {posts.length === 0 ? (
@@ -616,7 +707,10 @@ export default function FeedScreen() {
                 onImagePress={(uri) => setLightboxUri(uri)}
                 onComment={() => { setCommentPostId(post.id); setComments([]); setNewComment(""); loadComments(post.id); }}
                 onShare={() => openShare(post)}
-                onReport={() => openReport(post.id)}
+                onReport={() => setReportTarget({ type: "post", id: post.id, label: `Post by ${post.username}` })}
+                onUserPress={() => router.push({ pathname: "/user-profile" as any, params: { userId: post.user_id } })}
+                onToggleSave={() => toggleSave(post)}
+                onReact={(emoji) => handleReact(post, emoji)}
               />
             ))
           )}
@@ -657,10 +751,30 @@ export default function FeedScreen() {
                 ) : (
                   comments.map((c) => (
                     <View key={c.id} style={styles.cmtRow}>
-                      <Avatar uri={c.avatar_url} name={c.username} size={32} />
+                      <Pressable onPress={() => {
+                        setCommentPostId(null);
+                        router.push({ pathname: "/user-profile" as any, params: { userId: c.user_id } });
+                      }}>
+                        <Avatar uri={c.avatar_url} name={c.username} size={32} />
+                      </Pressable>
                       <View style={styles.cmtBubble}>
-                        <Text style={styles.cmtAuthor}>{c.username}</Text>
-                        <Text style={styles.cmtContent}>{c.content}</Text>
+                        <View style={styles.cmtTopRow}>
+                          <Pressable style={{ flex: 1 }} onPress={() => {
+                            setCommentPostId(null);
+                            router.push({ pathname: "/user-profile" as any, params: { userId: c.user_id } });
+                          }}>
+                            <Text style={styles.cmtAuthor}>{c.username}</Text>
+                          </Pressable>
+                          {c.user_id !== user?.id && (
+                            <Pressable
+                              onPress={() => setReportTarget({ type: "comment", id: c.id, label: `Comment by ${c.username}` })}
+                              hitSlop={8}
+                            >
+                              <Ionicons name="flag-outline" size={12} color="#444" />
+                            </Pressable>
+                          )}
+                        </View>
+                        <MentionText style={styles.cmtContent}>{c.content}</MentionText>
                       </View>
                     </View>
                   ))
@@ -817,54 +931,9 @@ export default function FeedScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Report post modal */}
-      <Modal visible={reportPostId !== null} transparent animationType="slide" onRequestClose={closeReport}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
-          <View style={styles.modalBg}>
-            <Pressable style={styles.modalDismiss} onPress={closeReport} />
-            <View style={styles.modalSheet}>
-              <View style={styles.modalHandle} />
-              <View style={styles.modalTop}>
-                <Text style={styles.editModalTitle}>Report Post</Text>
-                <Pressable style={styles.modalCloseBtn} onPress={closeReport}>
-                  <Ionicons name="close" size={18} color="#555" />
-                </Pressable>
-              </View>
+      <ReportSheet target={reportTarget} onClose={() => setReportTarget(null)} />
 
-              <Text style={styles.reportPrompt}>Why are you reporting this post?</Text>
-
-              {REPORT_REASONS.map((r) => (
-                <Pressable key={r.value} style={styles.reportOption} onPress={() => setReportReason(r.value)}>
-                  <View style={[styles.reportRadio, reportReason === r.value && styles.reportRadioActive]}>
-                    {reportReason === r.value && <View style={styles.reportRadioDot} />}
-                  </View>
-                  <Text style={styles.reportOptionText}>{r.label}</Text>
-                </Pressable>
-              ))}
-
-              <TextInput
-                style={[styles.postInput, styles.reportDetailsInput]}
-                placeholder="Additional details (optional)"
-                placeholderTextColor="#555"
-                multiline
-                value={reportDetails}
-                onChangeText={setReportDetails}
-                maxLength={500}
-              />
-
-              <Pressable
-                style={[styles.postBtn, styles.reportSubmitBtn, (!reportReason || reportSubmitting) && styles.postBtnOff]}
-                onPress={submitReport}
-                disabled={!reportReason || reportSubmitting}
-              >
-                <Text style={styles.postBtnText}>{reportSubmitting ? "Submitting…" : "Submit Report"}</Text>
-              </Pressable>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Create post modal */}
+      {/* Create post modal */}      {/* Create post modal */}
       <Modal visible={createVisible} transparent animationType="slide" onRequestClose={() => setCreateVisible(false)}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View style={styles.modalBg}>
@@ -964,7 +1033,9 @@ export default function FeedScreen() {
   );
 }
 
-function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, onImagePress, onComment, onShare, onReport }: {
+const REACTION_EMOJIS = ["\ud83d\udc4d", "\u2764\ufe0f", "\ud83d\ude02", "\ud83d\udd25", "\ud83c\udfaf", "\ud83d\ude2e"];
+
+function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, onImagePress, onComment, onShare, onReport, onUserPress, onToggleSave, onReact }: {
   post: Post;
   isMe: boolean;
   canDelete: boolean;
@@ -976,8 +1047,12 @@ function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, on
   onComment: () => void;
   onShare: () => void;
   onReport: () => void;
+  onUserPress: () => void;
+  onToggleSave: () => void;
+  onReact: (emoji: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const isAnnouncement = post.post_type === "announcement";
   const hasScore = post.score_value != null;
 
@@ -986,10 +1061,14 @@ function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, on
     <View style={[styles.postCard, isAnnouncement && styles.postCardOfficial]}>
       {/* Author row */}
       <View style={styles.postHeader}>
-        <Avatar uri={post.avatar_url} name={post.username} size={44} />
+        <Pressable onPress={onUserPress}>
+          <Avatar uri={post.avatar_url} name={post.username} size={44} />
+        </Pressable>
         <View style={styles.postMeta}>
           <View style={styles.postAuthorRow2}>
-            <Text style={styles.postAuthor}>{post.username}</Text>
+            <Pressable onPress={onUserPress}>
+              <Text style={styles.postAuthor}>{post.username}</Text>
+            </Pressable>
             {isAnnouncement && (
               <View style={styles.officialTag}>
                 <Ionicons name="shield-checkmark" size={9} color="#06b6d4" />
@@ -1023,7 +1102,7 @@ function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, on
       )}
 
       {/* Text content */}
-      {post.content ? <Text style={styles.postContent}>{post.content}</Text> : null}
+      {post.content ? <MentionText style={styles.postContent}>{post.content}</MentionText> : null}
 
       {/* Attached photo */}
       {post.photo_url && (
@@ -1068,7 +1147,55 @@ function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, on
             </View>
           </Pressable>
         )}
+        <Pressable style={styles.likeBtn} onPress={() => setPickerOpen((v) => !v)}>
+          <View style={[styles.likeIconWrap, !!post.my_reaction && styles.likeIconWrapActive]}>
+            {post.my_reaction
+              ? <Text style={{ fontSize: 13 }}>{post.my_reaction}</Text>
+              : <Ionicons name="happy-outline" size={16} color="#555" />}
+          </View>
+        </Pressable>
+        <View style={{ flex: 1 }} />
+        <Pressable style={styles.likeBtn} onPress={onToggleSave} hitSlop={6}>
+          <View style={styles.likeIconWrap}>
+            <Ionicons
+              name={post.saved ? "bookmark" : "bookmark-outline"}
+              size={15}
+              color={post.saved ? "#f59e0b" : "#555"}
+            />
+          </View>
+        </Pressable>
       </View>
+
+      {/* Emoji picker row */}
+      {pickerOpen && (
+        <View style={styles.reactionPicker}>
+          {REACTION_EMOJIS.map((e) => (
+            <Pressable
+              key={e}
+              style={[styles.reactionPickBtn, post.my_reaction === e && styles.reactionPickBtnActive]}
+              onPress={() => { setPickerOpen(false); onReact(e); }}
+            >
+              <Text style={{ fontSize: 20 }}>{e}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {/* Reaction counts */}
+      {Object.values(post.reactions).some((n) => n > 0) && (
+        <View style={styles.reactionRow}>
+          {Object.entries(post.reactions).filter(([, n]) => n > 0).map(([emoji, n]) => (
+            <Pressable
+              key={emoji}
+              style={[styles.reactionChip, post.my_reaction === emoji && styles.reactionChipMine]}
+              onPress={() => onReact(emoji)}
+            >
+              <Text style={{ fontSize: 12 }}>{emoji}</Text>
+              <Text style={styles.reactionChipCount}>{n}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
     </View>
 
     {/* Post action sheet */}
@@ -1104,14 +1231,6 @@ function PostCard({ post, isMe, canDelete, canEdit, onLike, onDelete, onEdit, on
   );
 }
 
-const REPORT_REASONS: { value: ReportReason; label: string }[] = [
-  { value: "inappropriate_picture", label: "Inappropriate picture" },
-  { value: "inappropriate_text", label: "Inappropriate text" },
-  { value: "racism", label: "Racism / hate speech" },
-  { value: "violence", label: "Violence" },
-  { value: "nudity", label: "Nudity" },
-  { value: "other", label: "Other" },
-];
 
 function relTime(iso: string) {
   const diff = (Date.now() - new Date(iso).getTime()) / 1000;
@@ -1380,6 +1499,42 @@ const styles = StyleSheet.create({
   // Comments
   cmtEmpty: { alignItems: "center", justifyContent: "center", paddingVertical: 36, gap: 10 },
   cmtEmptyText: { color: "#777", fontSize: 14 },
+  broadcastBanner: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    backgroundColor: "rgba(245,158,11,0.06)", borderRadius: 14,
+    padding: 12, marginHorizontal: 16, marginBottom: 10,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.25)",
+  },
+  broadcastTitle: { color: "#f59e0b", fontSize: 13.5, fontWeight: "800" },
+  broadcastBody: { color: "#bbb", fontSize: 12.5, lineHeight: 17, marginTop: 2 },
+
+  newPostsPill: {
+    position: "absolute", top: 108, alignSelf: "center", zIndex: 50,
+    flexDirection: "row", alignItems: "center", gap: 5,
+    backgroundColor: "#06b6d4", borderRadius: 18,
+    paddingHorizontal: 14, paddingVertical: 8,
+    elevation: 6, shadowColor: "#000", shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.4, shadowRadius: 8,
+  },
+  newPostsPillText: { color: "#000", fontSize: 12.5, fontWeight: "900" },
+
+  reactionPicker: {
+    flexDirection: "row", gap: 6, marginTop: 10,
+    backgroundColor: "#0a0a0a", borderRadius: 14, padding: 8,
+    borderWidth: 1, borderColor: "#222", alignSelf: "flex-start",
+  },
+  reactionPickBtn: { width: 38, height: 38, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  reactionPickBtnActive: { backgroundColor: "rgba(6,182,212,0.15)" },
+  reactionRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 },
+  reactionChip: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "#161616", borderRadius: 12,
+    paddingHorizontal: 9, paddingVertical: 4,
+    borderWidth: 1, borderColor: "#242424",
+  },
+  reactionChipMine: { borderColor: "rgba(6,182,212,0.5)", backgroundColor: "rgba(6,182,212,0.1)" },
+  reactionChipCount: { color: "#999", fontSize: 11.5, fontWeight: "800" },
+  cmtTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+
   cmtRow: { flexDirection: "row", gap: 10, paddingHorizontal: 4, marginBottom: 14, alignItems: "flex-start" },
   cmtBubble: { flex: 1, backgroundColor: "#161616", borderRadius: 14, padding: 10, borderWidth: 1, borderColor: "#1e1e1e" },
   cmtAuthor: { color: "#06b6d4", fontSize: 12, fontWeight: "800", marginBottom: 3 },

@@ -136,6 +136,12 @@ export default function RootLayout() {
           <Stack.Screen name="skeeball-compare" options={{ headerShown: false }} />
           <Stack.Screen name="skeeball-live" options={{ headerShown: false }} />
           <Stack.Screen name="skeeball-schedule" options={{ headerShown: false }} />
+          <Stack.Screen name="guidelines" options={{ headerShown: false }} />
+          <Stack.Screen name="hall-of-fame" options={{ headerShown: false }} />
+          <Stack.Screen name="my-games" options={{ headerShown: false }} />
+          <Stack.Screen name="events" options={{ headerShown: false }} />
+          <Stack.Screen name="saved-posts" options={{ headerShown: false }} />
+          <Stack.Screen name="welcome" options={{ headerShown: false }} />
         </Stack>
         <ToastHost />
         </AppColumn>
