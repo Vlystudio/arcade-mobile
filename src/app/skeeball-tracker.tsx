@@ -14,6 +14,7 @@ import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../components/avatar";
 import { supabase } from "../../lib/supabase";
+import { showToast } from "../components/toast";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { reportError } from "../lib/report-error";
 import { fetchPlayerStats } from "../lib/skeeball-stats";
@@ -407,6 +408,32 @@ export default function SkeeballTrackerScreen({
       if (error || (data as any)?.error) {
         reportError("SkeeballTracker.moveInOrder", (data as any)?.message ?? error?.message ?? "order failed");
       }
+    } finally {
+      setSavingOrder(false);
+    }
+  }
+
+  async function swapIntoLineup(inUserId: string) {
+    if (!mySession || savingOrder || sessionPlayers.length === 0) return;
+    const outPlayer = sessionPlayers[sessionPlayers.length - 1];
+    setSavingOrder(true);
+    try {
+      const { data, error } = await supabase.rpc("rpc_skeeball_swap_session_player", {
+        p_session_id: mySession.id,
+        p_out_user_id: outPlayer.player_user_id,
+        p_in_user_id: inUserId,
+      });
+      if (error || (data as any)?.error) {
+        showToast((data as any)?.message ?? "Couldn't swap players.", "error");
+        return;
+      }
+      const member = teamMembers.find((m) => m.user_id === inUserId);
+      setSessionPlayers((prev) => prev.map((sp) =>
+        sp.player_user_id === outPlayer.player_user_id
+          ? { ...sp, player_user_id: inUserId, username: member?.username ?? "Unknown", avatar_url: member?.avatar_url ?? null }
+          : sp
+      ));
+      showToast(`${member?.username ?? "Player"} swapped in for ${outPlayer.username}`);
     } finally {
       setSavingOrder(false);
     }
@@ -824,6 +851,34 @@ export default function SkeeballTrackerScreen({
                   </Pressable>
                 </View>
               ))}
+
+              {/* Bench — rest of the roster; swap into this game's lineup */}
+              {teamMembers.filter((m) => !sessionPlayers.some((sp) => sp.player_user_id === m.user_id)).length > 0 && (
+                <>
+                  <Text style={[s.orderHint, { marginTop: 10 }]}>
+                    Bench — tap to swap a player into this game (replaces the last shooter):
+                  </Text>
+                  {teamMembers
+                    .filter((m) => !sessionPlayers.some((sp) => sp.player_user_id === m.user_id))
+                    .map((m) => (
+                      <View key={m.user_id} style={[s.orderRow, { opacity: savingOrder ? 0.5 : 1 }]}>
+                        <View style={[s.orderPosBadge, { backgroundColor: "#1a1a1a" }]}>
+                          <Ionicons name="remove" size={12} color="#666" />
+                        </View>
+                        <Avatar uri={m.avatar_url} name={m.username} size={28} radius={9} />
+                        <Text style={[s.orderName, { color: "#999" }]}>{m.username}</Text>
+                        <Pressable
+                          style={s.orderArrow}
+                          onPress={() => swapIntoLineup(m.user_id)}
+                          disabled={savingOrder}
+                          hitSlop={6}
+                        >
+                          <Ionicons name="swap-horizontal" size={17} color="#22c55e" />
+                        </Pressable>
+                      </View>
+                    ))}
+                </>
+              )}
             </View>
           )}
 
