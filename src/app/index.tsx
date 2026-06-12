@@ -270,11 +270,16 @@ export default function FeedScreen() {
     monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
     const weekOf = monday.toISOString().slice(0, 10);
     const [profRes, teamRes, rsvpRes, pickRes] = await Promise.all([
-      supabase.from("profiles").select("avatar_url").eq("id", user.id).single(),
+      supabase.from("profiles").select("avatar_url, onboarding_dismissed").eq("id", user.id).single(),
       supabase.from("team_members").select("team_id", { count: "exact", head: true }).eq("user_id", user.id),
       supabase.from("league_rsvps").select("user_id", { count: "exact", head: true }).eq("user_id", user.id).eq("week_of", weekOf),
       supabase.from("pickem_picks").select("user_id", { count: "exact", head: true }).eq("user_id", user.id).eq("week_of", weekOf),
     ]);
+    // Dismissed on another device? Mirror it locally and stay hidden.
+    if (profRes.data?.onboarding_dismissed) {
+      AsyncStorage.setItem("onboarding_dismissed", "1").catch(() => {});
+      return;
+    }
     const state = {
       photo: !!profRes.data?.avatar_url,
       team: (teamRes.count ?? 0) > 0,
@@ -283,7 +288,7 @@ export default function FeedScreen() {
     };
     // Fully done? Never show again.
     if (Object.values(state).every(Boolean)) {
-      AsyncStorage.setItem("onboarding_dismissed", "1").catch(() => {});
+      dismissOnboarding();
       return;
     }
     setOnboarding(state);
@@ -291,6 +296,9 @@ export default function FeedScreen() {
 
   function dismissOnboarding() {
     AsyncStorage.setItem("onboarding_dismissed", "1").catch(() => {});
+    if (user) {
+      supabase.from("profiles").update({ onboarding_dismissed: true }).eq("id", user.id).then(() => {});
+    }
     setOnboarding(null);
   }
 

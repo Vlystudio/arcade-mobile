@@ -24,11 +24,42 @@ export default function Root({ children }: PropsWithChildren) {
         <link rel="apple-touch-icon" href="/icon.png" />
         <ScrollViewStyleReset />
         <style dangerouslySetInnerHTML={{ __html: css }} />
+        {/* After each deploy, route chunks from the previous build 404 for
+            browsers that still have the old shell open — navigation then lands
+            on a blank page. Detect the failed chunk load and reload once so
+            the user gets the new build at the URL they wanted. */}
+        <script dangerouslySetInnerHTML={{ __html: chunkRecoveryJs }} />
       </head>
       <body>{children}</body>
     </html>
   );
 }
+
+const chunkRecoveryJs = `
+(function () {
+  var KEY = "chunk_reload_at";
+  function recover() {
+    try {
+      var last = +sessionStorage.getItem(KEY) || 0;
+      if (Date.now() - last < 15000) return; // never loop
+      sessionStorage.setItem(KEY, String(Date.now()));
+      location.reload();
+    } catch (e) {}
+  }
+  function isChunkError(msg) {
+    return /Loading chunk|ChunkLoadError|dynamically imported module|Importing a module script failed|Failed to fetch|Unexpected token '<'/i.test(String(msg || ""));
+  }
+  window.addEventListener("error", function (e) {
+    var t = e.target || {};
+    if (t.tagName === "SCRIPT" && t.src) { recover(); return; }
+    if (e.message && isChunkError(e.message)) recover();
+  }, true);
+  window.addEventListener("unhandledrejection", function (e) {
+    var r = e.reason || {};
+    if (isChunkError(r && r.message ? r.message : r)) recover();
+  });
+})();
+`;
 
 const css = `
 html, body { background: #000; }

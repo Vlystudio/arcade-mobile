@@ -10,16 +10,38 @@ import {
   View,
 } from "react-native";
 
+import { getLastErrorAt, onErrorSignal } from "../lib/error-signal";
+
 type PreviewState = {
   dataUrl: string;
   blob: Blob;
 };
 
+// Only show the camera for a short window after the user hits an error,
+// so it doesn't cover UI during normal use.
+const ERROR_WINDOW_MS = 90_000;
+
 export function ScreenshotButton() {
   const [capturing, setCapturing] = useState(false);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [copied, setCopied] = useState(false);
+  const [visible, setVisible] = useState(Date.now() - getLastErrorAt() < ERROR_WINDOW_MS);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const show = () => {
+      setVisible(true);
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      hideTimer.current = setTimeout(() => setVisible(false), ERROR_WINDOW_MS);
+    };
+    if (Date.now() - getLastErrorAt() < ERROR_WINDOW_MS) show();
+    const off = onErrorSignal(show);
+    return () => {
+      off();
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, []);
 
   // Auto-dismiss preview after 8 seconds
   useEffect(() => {
@@ -90,6 +112,10 @@ export function ScreenshotButton() {
     setPreview(null);
     setCopied(false);
   }
+
+  // Hidden during normal use — appears only in the post-error window
+  // (keep rendering while a captured preview is on screen).
+  if (!visible && !preview) return null;
 
   return (
     <>

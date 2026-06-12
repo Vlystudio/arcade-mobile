@@ -14,13 +14,34 @@ import {
   View,
 } from "react-native";
 import { captureScreen } from "react-native-view-shot";
+import { getLastErrorAt, onErrorSignal } from "../lib/error-signal";
+
+// Only show the camera for a short window after the user hits an error,
+// so it doesn't cover UI during normal use.
+const ERROR_WINDOW_MS = 90_000;
 
 export function ScreenshotButton() {
   const [capturing, setCapturing] = useState(false);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [visible, setVisible] = useState(Date.now() - getLastErrorAt() < ERROR_WINDOW_MS);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const show = () => {
+      setVisible(true);
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      hideTimer.current = setTimeout(() => setVisible(false), ERROR_WINDOW_MS);
+    };
+    if (Date.now() - getLastErrorAt() < ERROR_WINDOW_MS) show();
+    const off = onErrorSignal(show);
+    return () => {
+      off();
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+    };
+  }, []);
 
   // Auto-dismiss preview after 8 seconds
   useEffect(() => {
@@ -74,6 +95,10 @@ export function ScreenshotButton() {
     setPreviewUri(null);
     setSaved(false);
   }
+
+  // Hidden during normal use — appears only in the post-error window
+  // (keep rendering while a captured preview is on screen).
+  if (!visible && !previewUri) return null;
 
   // The transparent Modal is the only reliable way to render above react-native-screens
   // on both iOS (UIViewController) and Android (Fragment). We manually forward the

@@ -2,7 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Device from "expo-device";
 import * as ImagePicker from "expo-image-picker";
 import { usePathname } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { signalError } from "../lib/error-signal";
 import { reportError } from "../lib/report-error";
 import { supabase } from "../../lib/supabase";
 
@@ -30,6 +31,8 @@ import { supabase } from "../../lib/supabase";
  */
 export function BugReportBanner({ error }: { error: string | null }) {
   const [open, setOpen] = useState(false);
+  // Surface the screenshot button whenever an error is shown to the user
+  useEffect(() => { if (error) signalError(); }, [error]);
   if (!error) return null;
   return (
     <>

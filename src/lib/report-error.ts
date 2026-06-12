@@ -1,4 +1,5 @@
 import * as Sentry from "@sentry/react-native";
+import { signalError } from "./error-signal";
 
 /**
  * Reports an operational error (failed network/RPC call, unexpected
@@ -7,6 +8,7 @@ import * as Sentry from "@sentry/react-native";
  * match") - those are expected user feedback, not bugs.
  */
 export function reportError(scope: string, message: string, extra?: Record<string, unknown>) {
+  signalError();
   Sentry.captureMessage(message, {
     level: "error",
     tags: { scope },
