@@ -89,6 +89,9 @@ END;
 $$;
 
 -- ── Per-player stats by shooting position ──
+-- Position history FOLLOWS THE PLAYER, not the team: the team id only
+-- selects the current roster, then each player's stats aggregate across
+-- every league session they've ever played (any team) in the window.
 -- NULL auth.uid() is allowed so the server-side AI coach endpoint
 -- (service role) can read the same aggregates; anon cannot execute.
 CREATE OR REPLACE FUNCTION public.rpc_skeeball_position_stats(
@@ -105,7 +108,10 @@ AS $$
 DECLARE
   v_players json;
 BEGIN
-  WITH member_games AS (
+  WITH roster AS (
+    SELECT tm.user_id FROM team_members tm WHERE tm.team_id = p_team_id
+  ),
+  member_games AS (
     SELECT ss.id AS session_id, ss.week_of, bs.player_user_id,
            sp.shoot_position,
            SUM(bs.score)::int AS game_score
@@ -113,8 +119,8 @@ BEGIN
       JOIN skeeball_ball_scores bs ON bs.session_id = ss.id
       JOIN skeeball_session_players sp
         ON sp.session_id = ss.id AND sp.player_user_id = bs.player_user_id
-     WHERE ss.team_id = p_team_id
-       AND ss.status = 'completed'
+      JOIN roster r ON r.user_id = bs.player_user_id
+     WHERE ss.status = 'completed'
        AND (p_start IS NULL OR ss.week_of >= p_start)
        AND (p_end IS NULL OR ss.week_of <= p_end)
      GROUP BY ss.id, ss.week_of, bs.player_user_id, sp.shoot_position

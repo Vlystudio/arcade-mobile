@@ -222,9 +222,14 @@ export function suggestOrder(players: PlayerPositionStats[]): OrderSuggestion | 
     avg: p.positions[String(i + 1) as "1" | "2" | "3"]?.avg ?? null,
   }));
 
-  // Quick tips: positions where a player meaningfully out-performs their overall avg
+  // Quick tips: positions where a player meaningfully out-performs their
+  // overall avg (>=5% lift across 2+ games). When multiple players favor
+  // the same position, explain how the conflict was resolved.
   const POS_LABEL = ["first", "second", "third"];
   const tips: string[] = [];
+
+  type Pref = { player: PlayerPositionStats; pos: number; pct: number; avg: number };
+  const prefs: Pref[] = [];
   for (const p of pool) {
     let bestPos: number | null = null;
     let bestPct = 0;
@@ -235,9 +240,46 @@ export function suggestOrder(players: PlayerPositionStats[]): OrderSuggestion | 
       if (pct >= 5 && pct > bestPct) { bestPct = pct; bestPos = pos; }
     }
     if (bestPos != null) {
-      tips.push(`${p.username} averages ${bestPct}% higher when shooting ${POS_LABEL[bestPos - 1]}.`);
+      prefs.push({ player: p, pos: bestPos, pct: bestPct, avg: score(p, bestPos) });
     }
   }
+
+  const assignedPos = (userId: string) => order.find((o) => o.user_id === userId)?.position ?? null;
+
+  // Group preferences by position to detect conflicts
+  const byPos = new Map<number, Pref[]>();
+  for (const pr of prefs) {
+    byPos.set(pr.pos, [...(byPos.get(pr.pos) ?? []), pr]);
+  }
+
+  for (const [pos, group] of byPos) {
+    if (group.length === 1) {
+      const pr = group[0];
+      const got = assignedPos(pr.player.user_id);
+      tips.push(
+        got === pos
+          ? `${pr.player.username} averages ${pr.pct}% higher when shooting ${POS_LABEL[pos - 1]}.`
+          : `${pr.player.username} shoots best ${POS_LABEL[pos - 1]} (+${pr.pct}%), but the lineup scores higher overall with them ${got ? POS_LABEL[got - 1] : "elsewhere"}.`,
+      );
+    } else {
+      // Conflict: multiple players favor the same position — the optimizer
+      // already resolved it for max total; explain who got it and why.
+      const sorted = [...group].sort((a, b) => b.avg - a.avg);
+      const winner = sorted.find((pr) => assignedPos(pr.player.user_id) === pos) ?? sorted[0];
+      const others = sorted.filter((pr) => pr.player.user_id !== winner.player.user_id);
+      const names = group.map((pr) => pr.player.username).join(" and ");
+      const otherNotes = others
+        .map((pr) => {
+          const got = assignedPos(pr.player.user_id);
+          return got ? `${pr.player.username} slots ${POS_LABEL[got - 1]} (still strong there)` : pr.player.username;
+        })
+        .join("; ");
+      tips.push(
+        `${names} both shoot best ${POS_LABEL[pos - 1]} — ${winner.player.username} takes it with the higher average there (${winner.avg}), and ${otherNotes}.`,
+      );
+    }
+  }
+
   if (tips.length === 0 && pool.length >= 2) {
     tips.push("Not enough per-position data for strong patterns yet — keep recording your shooting order each week.");
   }

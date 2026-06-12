@@ -787,6 +787,9 @@ export default function TeamDetailScreen() {
           <>
             <SectionLabel text="Lineup Optimizer" />
             <View style={styles.leagueCard}>
+              <Text style={styles.coachHint}>
+                Position averages follow each player across every team they've played on.
+              </Text>
               {/* Per-position averages table */}
               <View style={styles.posTableHead}>
                 <Text style={[styles.posTableCell, { flex: 1.6, textAlign: "left" }]}>Player</Text>

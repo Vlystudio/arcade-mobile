@@ -118,6 +118,9 @@ ${describePlayers(opponentPlayers)}
   prompt += `
 Recommend the optimal shooting order for "${teamName}". Rules:
 - Base recommendations strictly on the data above (position averages, sample sizes).
+- Player position stats are career stats that follow the player across teams.
+- If multiple players perform best in the SAME position, assign it to maximize the
+  team's total expected score and add a tip explaining who takes the contested spot and why.
 - Mention when sample sizes are too small to be confident.
 - If opponent data is provided, factor in matchups (e.g., counter a strong opener).
 - Keep each tip to one short sentence, written to the team, plain language.
