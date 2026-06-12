@@ -54,6 +54,9 @@ export default function UserProfileScreen() {
   const [leagueInsights, setLeagueInsights] = useState<PlayerInsights | null>(null);
   const [skeeSeason, setSkeeSeason] = useState<SkeeSeason | null>(null);
   const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [teamInfo, setTeamInfo] = useState<{ name: string; isCaptain: boolean } | null>(null);
+  const [friendsCount, setFriendsCount] = useState(0);
+  const [trophiesCount, setTrophiesCount] = useState(0);
   const [isBlocked, setIsBlocked] = useState(false);
   const [blockBusy, setBlockBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -62,7 +65,7 @@ export default function UserProfileScreen() {
     if (!user || !userId) return;
     if (userId === user.id) { router.replace("/profile"); return; }
 
-    const [profileRes, friendRes, blockRes] = await Promise.all([
+    const [profileRes, friendRes, blockRes, teamRes, friendsCntRes, trophiesRes] = await Promise.all([
       supabase
         .from("profiles")
         .select("id, username, avatar_url, bio, is_private, role, featured_game_id, show_skeeball_stats, is_beta_tester")
@@ -79,9 +82,18 @@ export default function UserProfileScreen() {
         .eq("blocker_id", user.id)
         .eq("blocked_id", userId)
         .maybeSingle(),
+      supabase.from("team_members").select("role, teams(name)").eq("user_id", userId).maybeSingle(),
+      supabase.from("friendships").select("id", { count: "exact", head: true }).eq("status", "accepted").or(`requester_id.eq.${userId},addressee_id.eq.${userId}`),
+      supabase.from("tournament_placements").select("id", { count: "exact", head: true }).eq("user_id", userId),
     ]);
 
     setIsBlocked(!!blockRes.data);
+
+    const tm = teamRes.data as any;
+    const tmTeam = tm ? (Array.isArray(tm.teams) ? tm.teams[0] : tm.teams) : null;
+    setTeamInfo(tmTeam?.name ? { name: tmTeam.name, isCaptain: tm.role === "captain" } : null);
+    setFriendsCount(friendsCntRes.count ?? 0);
+    setTrophiesCount(trophiesRes.count ?? 0);
 
     if (!profileRes.data) { router.back(); return; }
 
@@ -284,7 +296,31 @@ export default function UserProfileScreen() {
             <BetaBadge visible={(profile as any).is_beta_tester} size={16} />
           </View>
 
+          {teamInfo && (
+            <View style={s.teamRow}>
+              {teamInfo.isCaptain && <Ionicons name="star" size={11} color="#f59e0b" />}
+              <Text style={s.teamText}>{teamInfo.name}</Text>
+            </View>
+          )}
+
           {profile.bio ? <Text style={s.bio}>{profile.bio}</Text> : null}
+
+          {canSeeStats && (
+            <View style={s.countsRow}>
+              <View style={s.countBox}>
+                <Text style={s.countVal}>{totalScores}</Text>
+                <Text style={s.countLabel}>Scores</Text>
+              </View>
+              <View style={s.countBox}>
+                <Text style={s.countVal}>{friendsCount}</Text>
+                <Text style={s.countLabel}>Friends</Text>
+              </View>
+              <View style={s.countBox}>
+                <Text style={s.countVal}>{trophiesCount}</Text>
+                <Text style={s.countLabel}>Trophies</Text>
+              </View>
+            </View>
+          )}
 
           {/* Friend / Message button */}
           <View style={s.ctaWrap}>
@@ -438,6 +474,13 @@ const s = StyleSheet.create({
   avatarInitial: { color: "#000", fontSize: 34, fontWeight: "900" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   heroName: { color: "#fff", fontSize: 24, fontWeight: "900", letterSpacing: -0.4 },
+  teamRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 },
+  teamText: { color: "#06b6d4", fontSize: 13.5, fontWeight: "800" },
+  countsRow: { flexDirection: "row", gap: 28, marginTop: 14, justifyContent: "center" },
+  countBox: { alignItems: "center" },
+  countVal: { color: "#fff", fontSize: 18, fontWeight: "900" },
+  countLabel: { color: "#8a8a8a", fontSize: 12, marginTop: 2 },
+
   bio: { color: "#888", fontSize: 14, textAlign: "center", lineHeight: 20, paddingHorizontal: 24, maxWidth: 360 },
 
   ctaWrap: { marginTop: 6 },
