@@ -1,8 +1,28 @@
+import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit } from "../_ratelimit";
 import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "../_cors";
 
 function sendJson(res: any, status: number, body: any) {
   res.status(status).json(body);
+}
+
+// Karaoke queries repeat heavily across patrons, while YouTube search costs
+// ~101 quota units against a 10,000/day default (~99 searches/day total).
+// Serving repeats from karaoke_search_cache stretches that to several
+// hundred user-facing searches per day.
+const CACHE_TTL_DAYS = 7;
+
+const supabase =
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(
+        (process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL)!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        { auth: { persistSession: false } }
+      )
+    : null;
+
+function normalizeQuery(q: string): string {
+  return q.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
 export default async function handler(req: any, res: any) {
@@ -18,6 +38,30 @@ export default async function handler(req: any, res: any) {
 
   const q = String(req.query?.q ?? "").trim();
   if (!q) return sendJson(res, 400, { error: "Missing query" });
+
+  // ── Cache first: identical queries within the TTL cost zero quota ──
+  const queryNorm = normalizeQuery(q);
+  if (supabase) {
+    try {
+      const cutoff = new Date(Date.now() - CACHE_TTL_DAYS * 86400000).toISOString();
+      const { data: hit } = await supabase
+        .from("karaoke_search_cache")
+        .select("results, hits")
+        .eq("query_norm", queryNorm)
+        .gte("created_at", cutoff)
+        .maybeSingle();
+      if (hit?.results) {
+        void supabase
+          .from("karaoke_search_cache")
+          .update({ hits: (hit.hits ?? 0) + 1 })
+          .eq("query_norm", queryNorm)
+          .then(() => {});
+        return sendJson(res, 200, { items: hit.results, cached: true });
+      }
+    } catch {
+      // cache unavailable — fall through to live search
+    }
+  }
 
   const apiKey = process.env.YOUTUBE_DATA_API_KEY;
   if (!apiKey) {
@@ -79,5 +123,21 @@ export default async function handler(req: any, res: any) {
     }
   }
 
-  return sendJson(res, 200, { items: items.filter((i: any) => embeddableIds.has(i.videoId)) });
+  const finalItems = items.filter((i: any) => embeddableIds.has(i.videoId));
+
+  // Store for the next patron searching the same song (only useful results;
+  // upsert refreshes created_at so popular queries stay warm)
+  if (supabase && finalItems.length > 0) {
+    try {
+      await supabase.from("karaoke_search_cache").upsert({
+        query_norm: queryNorm,
+        results: finalItems,
+        created_at: new Date().toISOString(),
+      });
+    } catch {
+      // caching is best-effort — never fail the search over it
+    }
+  }
+
+  return sendJson(res, 200, { items: finalItems });
 }
