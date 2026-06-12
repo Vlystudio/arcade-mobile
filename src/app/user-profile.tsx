@@ -16,6 +16,8 @@ import { RoleBadge } from "../components/role-badge";
 import type { AppRole } from "../components/role-badge";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { PlayerLeagueCard } from "../components/skeeball-stats";
+import { fetchPlayerStats, fetchSkeeSeasons, type PlayerStats, type SkeeSeason } from "../lib/skeeball-stats";
 
 type UserProfile = {
   id: string;
@@ -45,6 +47,8 @@ export default function UserProfileScreen() {
   const [gameStats, setGameStats] = useState<GameStats | null>(null);
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [totalScores, setTotalScores] = useState(0);
+  const [leagueStats, setLeagueStats] = useState<PlayerStats | null>(null);
+  const [skeeSeason, setSkeeSeason] = useState<SkeeSeason | null>(null);
 
   async function load() {
     if (!user || !userId) return;
@@ -53,7 +57,7 @@ export default function UserProfileScreen() {
     const [profileRes, friendRes] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, username, avatar_url, bio, is_private, role, featured_game_id")
+        .select("id, username, avatar_url, bio, is_private, role, featured_game_id, show_skeeball_stats")
         .eq("id", userId)
         .single(),
       supabase
@@ -124,6 +128,14 @@ export default function UserProfileScreen() {
           return { title: t?.title ?? "Tournament", placement: r.placement, proposed_date: t?.proposed_date ?? null };
         })
       );
+
+      // Skee-ball league card (respects their profile display preference)
+      if ((p as any).show_skeeball_stats ?? true) {
+        const seasons = await fetchSkeeSeasons();
+        const active = seasons.find((sn) => sn.status === "active") ?? null;
+        setSkeeSeason(active);
+        setLeagueStats(await fetchPlayerStats(userId, active));
+      }
     }
 
     setLoading(false);
@@ -270,6 +282,15 @@ export default function UserProfileScreen() {
               )}
             </View>
             {gameStats && <Text style={s.featuredLabel}>Featured: {gameStats.gameName}</Text>}
+
+            {leagueStats && leagueStats.totals.games > 0 && (
+              <>
+                <Text style={[s.sectionLabel, { marginTop: 22 }]}>
+                  {skeeSeason ? skeeSeason.name : "Skee-Ball League"}
+                </Text>
+                <PlayerLeagueCard stats={leagueStats} season={skeeSeason} />
+              </>
+            )}
 
             {placements.length > 0 && (
               <>

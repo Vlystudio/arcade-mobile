@@ -502,6 +502,9 @@ export default function TeamsScreen() {
                 <Text style={styles.pageSub}>Skee-ball crews</Text>
               </View>
               <View style={styles.headerBtns}>
+                <Pressable style={styles.compareIconBtn} onPress={() => router.push("/skeeball-compare" as any)}>
+                  <Ionicons name="git-compare-outline" size={16} color="#06b6d4" />
+                </Pressable>
                 <Pressable style={styles.leaguesBtn} onPress={() => router.push("/leagues")}>
                   <Ionicons name="trophy-outline" size={14} color="#f59e0b" />
                   <Text style={styles.leaguesBtnText}>Leagues</Text>
@@ -1233,6 +1236,12 @@ const styles = StyleSheet.create({
   slotChipText: { color: "#555", fontSize: 13, fontWeight: "700" },
   slotChipTextActive: { color: "#06b6d4", fontWeight: "800" },
   slotChipTextActive2: { color: "#f59e0b", fontWeight: "800" },
+
+  compareIconBtn: {
+    width: 34, height: 34, borderRadius: 12,
+    backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.2)",
+  },
 
   // Locked "New" button (active season, no paid team registration)
   newBtnLocked: {

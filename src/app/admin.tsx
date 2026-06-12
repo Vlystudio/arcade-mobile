@@ -399,6 +399,10 @@ export default function AdminScreen() {
   const [skeeWeekSaving, setSkeeWeekSaving] = useState(false);
   const [skeeOpenMatch, setSkeeOpenMatch] = useState<{ id: string; expected: number; completed: number; checkedIn: number } | null>(null);
   const [skeeForceFinalizing, setSkeeForceFinalizing] = useState(false);
+  const [skeeActiveSeason, setSkeeActiveSeason] = useState<{ id: string; name: string; start_week: string; end_week: string } | null>(null);
+  const [startSeasonVisible, setStartSeasonVisible] = useState(false);
+  const [newSeasonName, setNewSeasonName] = useState("");
+  const [startingSeason, setStartingSeason] = useState(false);
 
   // Player list management (all tournaments)
   type RegPlayer = { id: string; user_id: string | null; guest_name: string | null; username: string; status: string };
@@ -449,7 +453,7 @@ export default function AdminScreen() {
     if (mainTab === "support") { loadSupportTickets(); setUnreadSupport(0); }
     if (mainTab === "karaoke") loadKaraokeQueue();
     if (mainTab === "trivia") loadTriviaData();
-    if (mainTab === "skeeball") loadSkeeAdminSessions();
+    if (mainTab === "skeeball") { loadSkeeAdminSessions(); loadSkeeSeason(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
@@ -1680,6 +1684,31 @@ export default function AdminScreen() {
     }
 
     setSkeeAdminLoading(false);
+  }
+
+  async function loadSkeeSeason() {
+    const { data } = await supabase
+      .from("skeeball_seasons")
+      .select("id, name, start_week, end_week")
+      .eq("status", "active")
+      .maybeSingle();
+    setSkeeActiveSeason(data ?? null);
+  }
+
+  async function handleStartSeason() {
+    const name = newSeasonName.trim();
+    if (name.length < 2 || startingSeason) return;
+    setStartingSeason(true);
+    setSkeeAdminError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_skeeball_start_season", { p_name: name });
+    setStartingSeason(false);
+    if (error || (data as any)?.error) {
+      setSkeeAdminError((data as any)?.message ?? (data as any)?.error ?? error?.message ?? "Failed to start season.");
+      return;
+    }
+    setStartSeasonVisible(false);
+    setNewSeasonName("");
+    await loadSkeeSeason();
   }
 
   async function saveSkeeWeekTeams() {
@@ -3462,6 +3491,39 @@ export default function AdminScreen() {
             Adjust league standing points or game score for any completed session. Adjustments are additive on top of the original values.
           </Text>
 
+          {/* Season management */}
+          <View style={[styles.skeeWeekCard, { borderColor: "rgba(245,158,11,0.2)", backgroundColor: "rgba(245,158,11,0.04)" }]}>
+            <View style={{ flex: 1 }}>
+              {skeeActiveSeason ? (
+                <>
+                  <Text style={styles.skeeWeekLabel}>{skeeActiveSeason.name}</Text>
+                  <Text style={styles.skeeWeekHint}>
+                    {(() => {
+                      const monday = new Date();
+                      monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+                      const wk = Math.floor((monday.getTime() - new Date(skeeActiveSeason.start_week).getTime()) / (7 * 86400000)) + 1;
+                      return wk >= 1 && wk <= 8
+                        ? `Week ${wk} of 8 · ends ${new Date(skeeActiveSeason.end_week).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                        : wk > 8 ? "Season window finished — start a new one" : "Season starts soon";
+                    })()}
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.skeeWeekLabel}>No Active Season</Text>
+                  <Text style={styles.skeeWeekHint}>Start an 8-week season so stats and standings are tracked per season.</Text>
+                </>
+              )}
+            </View>
+            <Pressable
+              style={[styles.skeeForceBtn]}
+              onPress={() => { setNewSeasonName(""); setStartSeasonVisible(true); }}
+            >
+              <Ionicons name="play-outline" size={14} color="#f59e0b" />
+              <Text style={styles.skeeForceBtnText}>New Season</Text>
+            </Pressable>
+          </View>
+
           {/* Teams-per-round setting for this week */}
           <View style={styles.skeeWeekCard}>
             <View style={{ flex: 1 }}>
@@ -3575,6 +3637,46 @@ export default function AdminScreen() {
 
         </ScrollView>
       )}
+
+      {/* ── Start New Season Modal ── */}
+      <Modal visible={startSeasonVisible} transparent animationType="fade" onRequestClose={() => setStartSeasonVisible(false)}>
+        <View style={styles.confirmBg}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setStartSeasonVisible(false)} />
+          <View style={[styles.confirmSheet, { width: "90%" }]}>
+            <View style={[styles.confirmIconWrap, { backgroundColor: "rgba(245,158,11,0.1)", borderColor: "rgba(245,158,11,0.25)" }]}>
+              <Ionicons name="trophy-outline" size={36} color="#f59e0b" />
+            </View>
+            <Text style={styles.confirmTitle}>Start New Season</Text>
+            <Text style={[styles.confirmBody, { marginBottom: 16 }]}>
+              Starts an 8-week season beginning this week.
+              {skeeActiveSeason ? ` "${skeeActiveSeason.name}" will be marked completed — its stats stay saved on every team page.` : ""}
+            </Text>
+            <TextInput
+              style={[styles.editTournInput, { width: "100%", marginBottom: 16 }]}
+              placeholder='Season name (e.g. "Summer 2026")'
+              placeholderTextColor="#333"
+              value={newSeasonName}
+              onChangeText={setNewSeasonName}
+              maxLength={60}
+              autoFocus
+            />
+            <View style={{ flexDirection: "row", gap: 10, width: "100%" }}>
+              <Pressable style={styles.confirmCancel} onPress={() => setStartSeasonVisible(false)}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmActionBtn, { flex: 1, backgroundColor: "#f59e0b" }, (newSeasonName.trim().length < 2 || startingSeason) && { opacity: 0.4 }]}
+                onPress={handleStartSeason}
+                disabled={newSeasonName.trim().length < 2 || startingSeason}
+              >
+                {startingSeason
+                  ? <ActivityIndicator size="small" color="#000" />
+                  : <Text style={[styles.confirmActionText, { color: "#000" }]}>Start Season</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Skeeball Adjust Modal ── */}
       <Modal visible={!!editingSkeeSession} transparent animationType="fade" onRequestClose={() => setEditingSkeeSession(null)}>

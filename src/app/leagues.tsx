@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,11 +14,18 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import {
+  fetchSkeeSeasons,
+  fetchStandings,
+  seasonWeekNumber,
+  type SkeeSeason,
+  type StandingRow,
+} from "../lib/skeeball-stats";
 
 type Season = { id: string; name: string; game_type: string; start_date: string; end_date: string; status: "planning" | "active" | "completed" };
 type Standing = { team_id: string; team_name: string; wins: number; losses: number; points: number; isMyTeam: boolean };
 type Match = { id: string; match_date: string; status: string; home_team: string; away_team: string; home_score: number | null; away_score: number | null };
-type SkeeballStanding = { team_id: string; team_name: string; total_points: number; matches_played: number; gold: number; silver: number; bronze: number; isMyTeam: boolean };
+type SkeeballStanding = { team_id: string; team_name: string; total_points: number; matches_played: number; gold: number; silver: number; bronze: number; avg_score: number | null; isMyTeam: boolean };
 type SkeeballMatchResult = { match_id: string; week_of: string; teams: { team_name: string; placement: number; league_points: number; game_score: number }[] };
 type PageTab = "seasons" | "skeeball";
 
@@ -35,6 +43,8 @@ export default function LeaguesScreen() {
   const [skeeStandings, setSkeeStandings] = useState<SkeeballStanding[]>([]);
   const [skeeMatches, setSkeeMatches] = useState<SkeeballMatchResult[]>([]);
   const [skeeLoading, setSkeeLoading] = useState(false);
+  const [skeeSeasons, setSkeeSeasons] = useState<SkeeSeason[]>([]);
+  const [skeeSeasonId, setSkeeSeasonId] = useState<string | "all">("all");
 
   async function loadLeagues() {
     if (!user) return;
@@ -79,20 +89,40 @@ export default function LeaguesScreen() {
     setRefreshing(false);
   }
 
-  async function loadSkeeballLeague(teamId: string | null) {
+  async function loadSkeeballLeague(teamId: string | null, seasonOverride?: SkeeSeason | null) {
     setSkeeLoading(true);
-    const [standRes, matchRes] = await Promise.all([
-      supabase.from("skeeball_league_standings").select("*"),
-      supabase
-        .from("skeeball_league_matches")
-        .select("id, week_of, skeeball_sessions(team_id, placement, league_points, teams(name), skeeball_ball_scores(score))")
-        .eq("status", "completed")
-        .order("created_at", { ascending: false })
-        .limit(10),
+
+    // Seasons list (for the picker) — keep the current selection valid
+    const allSeasons = await fetchSkeeSeasons();
+    setSkeeSeasons(allSeasons);
+    let season: SkeeSeason | null;
+    if (seasonOverride !== undefined) {
+      season = seasonOverride;
+    } else if (skeeSeasonId === "all") {
+      // Default to the live season on first load when one exists
+      season = allSeasons.find((s) => s.status === "active") ?? null;
+      if (season) setSkeeSeasonId(season.id);
+    } else {
+      season = allSeasons.find((s) => s.id === skeeSeasonId) ?? null;
+    }
+
+    let matchQuery = supabase
+      .from("skeeball_league_matches")
+      .select("id, week_of, skeeball_sessions(team_id, placement, league_points, teams(name), skeeball_ball_scores(score))")
+      .eq("status", "completed")
+      .order("created_at", { ascending: false })
+      .limit(10);
+    if (season) {
+      matchQuery = matchQuery.gte("week_of", season.start_week).lte("week_of", season.end_week);
+    }
+
+    const [standings, matchRes] = await Promise.all([
+      fetchStandings(season),
+      matchQuery,
     ]);
 
     setSkeeStandings(
-      (standRes.data ?? []).map((r: any) => ({
+      standings.map((r: StandingRow) => ({
         team_id: r.team_id,
         team_name: r.team_name,
         total_points: r.total_points ?? 0,
@@ -100,6 +130,7 @@ export default function LeaguesScreen() {
         gold: r.gold ?? 0,
         silver: r.silver ?? 0,
         bronze: r.bronze ?? 0,
+        avg_score: r.avg_score ?? null,
         isMyTeam: r.team_id === teamId,
       }))
     );
@@ -187,6 +218,46 @@ export default function LeaguesScreen() {
           {pageTab === "skeeball" ? (
             /* ── Skee-Ball League ── */
             <>
+              {/* Season selector */}
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.pillScroll, { flexGrow: 0 }]} contentContainerStyle={styles.pillContent}>
+                <Pressable
+                  style={[styles.pill, skeeSeasonId === "all" && styles.pillActive]}
+                  onPress={() => { setSkeeSeasonId("all"); loadSkeeballLeague(myTeamId, null); }}
+                >
+                  <Text style={[styles.pillText, skeeSeasonId === "all" && styles.pillTextActive]}>All Time</Text>
+                </Pressable>
+                {skeeSeasons.map((sn) => (
+                  <Pressable
+                    key={sn.id}
+                    style={[styles.pill, skeeSeasonId === sn.id && styles.pillActive]}
+                    onPress={() => { setSkeeSeasonId(sn.id); loadSkeeballLeague(myTeamId, sn); }}
+                  >
+                    {sn.status === "active" && <View style={styles.liveDot} />}
+                    <Text style={[styles.pillText, skeeSeasonId === sn.id && styles.pillTextActive]}>{sn.name}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              {/* Live season progress */}
+              {(() => {
+                const sel = skeeSeasons.find((sn) => sn.id === skeeSeasonId);
+                if (!sel || sel.status !== "active") return null;
+                const wk = seasonWeekNumber(sel);
+                return (
+                  <View style={styles.weekProgressCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.weekProgressTitle}>{sel.name}</Text>
+                      <Text style={styles.weekProgressSub}>{wk ? `Week ${wk} of 8` : "Season scheduled"}</Text>
+                    </View>
+                    <View style={styles.weekDots}>
+                      {Array.from({ length: 8 }, (_, i) => (
+                        <View key={i} style={[styles.weekDot, wk != null && i < wk && styles.weekDotDone]} />
+                      ))}
+                    </View>
+                  </View>
+                );
+              })()}
+
               {skeeLoading ? (
                 <ActivityIndicator color="#06b6d4" style={{ marginVertical: 40 }} />
               ) : (
@@ -204,23 +275,30 @@ export default function LeaguesScreen() {
                         <Text style={[styles.tableCell, styles.rankCol]}>#</Text>
                         <Text style={[styles.tableCell, styles.nameCol]}>Team</Text>
                         <Text style={[styles.tableCell, styles.numCol]}>GP</Text>
+                        <Text style={[styles.tableCell, styles.numCol]}>AVG</Text>
                         <Text style={[styles.tableCell, { width: 52, textAlign: "center" }]}>🥇🥈🥉</Text>
                         <Text style={[styles.tableCell, styles.numCol]}>PTS</Text>
                       </View>
                       {skeeStandings.map((s, i) => (
-                        <View key={s.team_id} style={[styles.tableRow, s.isMyTeam && styles.tableRowMe]}>
+                        <Pressable
+                          key={s.team_id}
+                          style={({ pressed }) => [styles.tableRow, s.isMyTeam && styles.tableRowMe, pressed && { opacity: 0.7 }]}
+                          onPress={() => router.push({ pathname: "/team-detail" as any, params: { teamId: s.team_id, teamName: s.team_name } })}
+                        >
                           <Text style={[styles.tableCell, styles.rankCol, styles.rankText]}>{i + 1}</Text>
                           <View style={[styles.nameCol, { flexDirection: "row", alignItems: "center", gap: 6 }]}>
                             <Text style={styles.teamNameCell} numberOfLines={1}>{s.team_name}</Text>
                             {s.isMyTeam && <View style={styles.youBadge}><Text style={styles.youBadgeText}>YOU</Text></View>}
                           </View>
                           <Text style={[styles.tableCell, styles.numCol, { color: "#555" }]}>{s.matches_played}</Text>
+                          <Text style={[styles.tableCell, styles.numCol, { color: "#888", fontWeight: "800" }]}>{s.avg_score ?? "—"}</Text>
                           <Text style={[styles.tableCell, { width: 52, textAlign: "center", fontSize: 11 }]}>
                             {s.gold > 0 ? `${s.gold}🥇 ` : ""}{s.silver > 0 ? `${s.silver}🥈 ` : ""}{s.bronze > 0 ? `${s.bronze}🥉` : ""}
                           </Text>
                           <Text style={[styles.tableCell, styles.numCol, { color: "#06b6d4", fontWeight: "900", fontSize: 15 }]}>{s.total_points}</Text>
-                        </View>
+                        </Pressable>
                       ))}
+                      <Text style={styles.tapHint}>Tap a team to see full performance, players &amp; charts</Text>
                     </View>
                   )}
 
@@ -456,6 +534,18 @@ const styles = StyleSheet.create({
   leaguePointsEmoji: { fontSize: 18, width: 26 },
   leaguePointsPlace: { color: "#666", fontSize: 13, fontWeight: "700", flex: 1 },
   leaguePointsPts: { color: "#06b6d4", fontSize: 13, fontWeight: "900" },
+
+  weekProgressCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "rgba(34,197,94,0.05)", borderRadius: 16, padding: 14, marginBottom: 20,
+    borderWidth: 1, borderColor: "rgba(34,197,94,0.18)",
+  },
+  weekProgressTitle: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  weekProgressSub: { color: "#22c55e", fontSize: 12, fontWeight: "700", marginTop: 2 },
+  weekDots: { flexDirection: "row", gap: 4 },
+  weekDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#1e1e1e" },
+  weekDotDone: { backgroundColor: "#22c55e" },
+  tapHint: { color: "#333", fontSize: 11, textAlign: "center", paddingVertical: 9, fontStyle: "italic" },
 
   skeeMatchCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: "#1e1e1e" },
   skeeMatchDate: { color: "#444", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 },

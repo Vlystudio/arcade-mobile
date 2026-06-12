@@ -23,6 +23,16 @@ import { moderateText } from "../../lib/moderate-text";
 import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { validateChatMessage } from "../../lib/validation";
+import { RingBreakdown, TrendBadge, WeeklyBarChart } from "../components/skeeball-stats";
+import {
+  fetchPlayerStats,
+  fetchSkeeSeasons,
+  fetchTeamStats,
+  weekLabel,
+  type PlayerStats as LeaguePlayerStats,
+  type SkeeSeason,
+  type TeamStats as LeagueTeamStats,
+} from "../lib/skeeball-stats";
 
 const SLOTS = ["6:00 PM", "7:15 PM", "8:30 PM"] as const;
 type SlotTime = typeof SLOTS[number];
@@ -103,6 +113,15 @@ export default function TeamDetailScreen() {
   const [editSlot1, setEditSlot1] = useState<string | null>(null);
   const [editSlot2, setEditSlot2] = useState<string | null>(null);
   const [savingSlots, setSavingSlots] = useState(false);
+
+  // Skee-ball league performance
+  const [skeeSeasons, setSkeeSeasons] = useState<SkeeSeason[]>([]);
+  const [selectedSkeeSeasonId, setSelectedSkeeSeasonId] = useState<string | "all">("all");
+  const [skeePickerVisible, setSkeePickerVisible] = useState(false);
+  const [leagueTeam, setLeagueTeam] = useState<LeagueTeamStats | null>(null);
+  const [leagueLoading, setLeagueLoading] = useState(false);
+  const [expandedMemberId, setExpandedMemberId] = useState<string | null>(null);
+  const [expandedMemberStats, setExpandedMemberStats] = useState<LeaguePlayerStats | null>(null);
 
   // Announcements
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -350,6 +369,41 @@ export default function TeamDetailScreen() {
 
   useEffect(() => { if (user) loadData(); }, [user, teamId]);
 
+  // League seasons: default to the active one
+  useEffect(() => {
+    if (!user) return;
+    fetchSkeeSeasons().then((all) => {
+      setSkeeSeasons(all);
+      const active = all.find((s) => s.status === "active");
+      if (active) setSelectedSkeeSeasonId(active.id);
+    });
+  }, [user]);
+
+  const selectedSkeeSeason = skeeSeasons.find((s) => s.id === selectedSkeeSeasonId) ?? null;
+
+  // Load team league stats whenever the season selection changes
+  useEffect(() => {
+    if (!user || !teamId) return;
+    setLeagueLoading(true);
+    setExpandedMemberId(null);
+    setExpandedMemberStats(null);
+    fetchTeamStats(teamId, selectedSkeeSeason).then((stats) => {
+      setLeagueTeam(stats);
+      setLeagueLoading(false);
+    });
+  }, [user, teamId, selectedSkeeSeasonId, skeeSeasons.length]);
+
+  async function toggleMemberExpand(userId: string) {
+    if (expandedMemberId === userId) {
+      setExpandedMemberId(null);
+      setExpandedMemberStats(null);
+      return;
+    }
+    setExpandedMemberId(userId);
+    setExpandedMemberStats(null);
+    setExpandedMemberStats(await fetchPlayerStats(userId, selectedSkeeSeason));
+  }
+
   // Build seasons as 8-week chunks from the date of the first score
   const seasons = useMemo<ComputedSeason[]>(() => {
     if (allScores.length === 0) return [];
@@ -549,6 +603,116 @@ export default function TeamDetailScreen() {
           </View>
         )}
 
+        {/* ── Skee-Ball League Performance ── */}
+        <View style={styles.leagueHeaderRow}>
+          <SectionLabel text="League Performance" />
+          <Pressable style={styles.leagueSeasonPill} onPress={() => setSkeePickerVisible(true)}>
+            <Ionicons name="trophy-outline" size={12} color="#f59e0b" />
+            <Text style={styles.leagueSeasonPillText}>
+              {selectedSkeeSeason ? selectedSkeeSeason.name : "All Time"}
+            </Text>
+            <Ionicons name="chevron-down" size={12} color="#555" />
+          </Pressable>
+        </View>
+
+        {leagueLoading ? (
+          <ActivityIndicator color="#06b6d4" style={{ marginVertical: 24 }} />
+        ) : !leagueTeam || leagueTeam.weeks.length === 0 ? (
+          <View style={styles.emptyCard}>
+            <Ionicons name="bowling-ball-outline" size={32} color="#2a2a2a" />
+            <Text style={styles.emptyCardText}>
+              No league games {selectedSkeeSeason ? `in ${selectedSkeeSeason.name}` : "yet"}.
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.leagueCard}>
+            {/* Summary */}
+            <View style={styles.leagueSummaryRow}>
+              <View style={styles.leagueSummaryBox}>
+                <Text style={[styles.leagueSummaryValue, { color: "#f59e0b" }]}>{leagueTeam.season_points}</Text>
+                <Text style={styles.leagueSummaryLabel}>League Pts</Text>
+              </View>
+              <View style={styles.leagueSummaryBox}>
+                <Text style={styles.leagueSummaryValue}>
+                  {Math.round(leagueTeam.weeks.reduce((a, w) => a + w.avg, 0) / leagueTeam.weeks.length)}
+                </Text>
+                <Text style={styles.leagueSummaryLabel}>Avg Game</Text>
+              </View>
+              <View style={styles.leagueSummaryBox}>
+                <Text style={[styles.leagueSummaryValue, { color: "#22c55e" }]}>
+                  {Math.max(...leagueTeam.weeks.map((w) => w.best))}
+                </Text>
+                <Text style={styles.leagueSummaryLabel}>Best Game</Text>
+              </View>
+              <View style={styles.leagueSummaryBox}>
+                <Text style={[styles.leagueSummaryValue, { color: "#a855f7" }]}>
+                  {leagueTeam.weeks.reduce((a, w) => a + w.games, 0)}
+                </Text>
+                <Text style={styles.leagueSummaryLabel}>Games</Text>
+              </View>
+            </View>
+
+            {/* Weekly chart + trend */}
+            <View style={styles.leagueChartHeader}>
+              <Text style={styles.leagueSubLabel}>Team Weekly Average</Text>
+              <TrendBadge weeks={leagueTeam.weeks} />
+            </View>
+            <WeeklyBarChart weeks={leagueTeam.weeks} season={selectedSkeeSeason} />
+
+            {/* Member performance */}
+            <Text style={[styles.leagueSubLabel, { marginTop: 14 }]}>Player Performance</Text>
+            {leagueTeam.members.map((m) => {
+              const isExpanded = expandedMemberId === m.user_id;
+              return (
+                <View key={m.user_id}>
+                  <Pressable style={styles.leagueMemberRow} onPress={() => toggleMemberExpand(m.user_id)}>
+                    <Avatar uri={m.avatar_url} name={m.username} size={34} radius={11} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.leagueMemberName}>{m.username}</Text>
+                      <Text style={styles.leagueMemberMeta}>
+                        {m.games} {m.games === 1 ? "game" : "games"}
+                        {m.best_week ? ` · best ${weekLabel(m.best_week, selectedSkeeSeason)}` : ""}
+                        {m.worst_week && m.worst_week !== m.best_week ? ` · worst ${weekLabel(m.worst_week, selectedSkeeSeason)}` : ""}
+                      </Text>
+                    </View>
+                    <View style={styles.leagueMemberNums}>
+                      <Text style={styles.leagueMemberAvg}>{m.avg}</Text>
+                      <Text style={styles.leagueMemberAvgLabel}>avg · {m.best} best</Text>
+                    </View>
+                    <Ionicons name={isExpanded ? "chevron-up" : "chevron-down"} size={14} color="#333" />
+                  </Pressable>
+                  {isExpanded && (
+                    <View style={styles.leagueMemberDetail}>
+                      {!expandedMemberStats ? (
+                        <ActivityIndicator size="small" color="#06b6d4" style={{ marginVertical: 12 }} />
+                      ) : (
+                        <>
+                          <WeeklyBarChart
+                            weeks={expandedMemberStats.weeks}
+                            season={selectedSkeeSeason}
+                            height={90}
+                          />
+                          <Text style={[styles.leagueSubLabel, { marginTop: 10, marginBottom: 6 }]}>Shot Breakdown</Text>
+                          <RingBreakdown rings={expandedMemberStats.totals.rings} compact />
+                        </>
+                      )}
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+
+            {/* Compare */}
+            <Pressable
+              style={styles.compareBtn}
+              onPress={() => router.push({ pathname: "/skeeball-compare" as any, params: { teamId: teamId ?? "" } })}
+            >
+              <Ionicons name="git-compare-outline" size={15} color="#06b6d4" />
+              <Text style={styles.compareBtnText}>Compare Players</Text>
+            </Pressable>
+          </View>
+        )}
+
         {/* Announcements */}
         <View style={styles.announceSectionRow}>
           <Text style={styles.annSectionLabel}>Announcements</Text>
@@ -619,6 +783,51 @@ export default function TeamDetailScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* League season picker */}
+      <Modal visible={skeePickerVisible} transparent animationType="slide" onRequestClose={() => setSkeePickerVisible(false)}>
+        <Pressable style={styles.modalBg} onPress={() => setSkeePickerVisible(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHandle} />
+            <Text style={styles.modalTitle}>League Season</Text>
+            <Text style={styles.modalSub}>Each season is 8 weeks</Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              <Pressable
+                style={[styles.seasonRow, selectedSkeeSeasonId === "all" && styles.seasonRowActive]}
+                onPress={() => { setSelectedSkeeSeasonId("all"); setSkeePickerVisible(false); }}
+              >
+                <Text style={[styles.seasonRowLabel, selectedSkeeSeasonId === "all" && styles.seasonRowLabelActive]}>All Time</Text>
+                {selectedSkeeSeasonId === "all" && <Ionicons name="checkmark-circle" size={20} color="#06b6d4" />}
+              </Pressable>
+              {skeeSeasons.map((sn) => {
+                const active = selectedSkeeSeasonId === sn.id;
+                return (
+                  <Pressable
+                    key={sn.id}
+                    style={[styles.seasonRow, active && styles.seasonRowActive]}
+                    onPress={() => { setSelectedSkeeSeasonId(sn.id); setSkeePickerVisible(false); }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={[styles.seasonRowLabel, active && styles.seasonRowLabelActive]}>{sn.name}</Text>
+                        {sn.status === "active" && (
+                          <View style={styles.liveSeasonChip}><Text style={styles.liveSeasonChipText}>LIVE</Text></View>
+                        )}
+                      </View>
+                      <Text style={styles.seasonRowRange}>
+                        {new Date(sn.start_week).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        {" – "}
+                        {new Date(sn.end_week).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </Text>
+                    </View>
+                    {active && <Ionicons name="checkmark-circle" size={20} color="#06b6d4" />}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Team photo source picker */}
       <Modal visible={photoSourceVisible} transparent animationType="fade" onRequestClose={() => setPhotoSourceVisible(false)}>
@@ -1015,6 +1224,55 @@ const styles = StyleSheet.create({
   seasonRowLabel: { color: "#777", fontSize: 16, fontWeight: "700" },
   seasonRowLabelActive: { color: "#fff" },
   seasonRowRange: { color: "#333", fontSize: 12, marginTop: 2 },
+
+  // League performance section
+  leagueHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingRight: 20 },
+  leagueSeasonPill: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    backgroundColor: "rgba(245,158,11,0.07)", borderRadius: 10,
+    paddingHorizontal: 10, paddingVertical: 6, marginBottom: 12,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.2)",
+  },
+  leagueSeasonPillText: { color: "#f59e0b", fontSize: 12, fontWeight: "800" },
+  leagueCard: {
+    backgroundColor: "#111", borderRadius: 18, padding: 16,
+    borderWidth: 1, borderColor: "#1e1e1e",
+    marginHorizontal: 20, marginBottom: 28, gap: 10,
+  },
+  leagueSummaryRow: { flexDirection: "row", gap: 8 },
+  leagueSummaryBox: {
+    flex: 1, backgroundColor: "#0c0c0c", borderRadius: 12, paddingVertical: 10,
+    alignItems: "center", borderWidth: 1, borderColor: "#191919",
+  },
+  leagueSummaryValue: { color: "#06b6d4", fontSize: 17, fontWeight: "900", letterSpacing: -0.3 },
+  leagueSummaryLabel: { color: "#444", fontSize: 9.5, fontWeight: "700", marginTop: 2 },
+  leagueChartHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 4 },
+  leagueSubLabel: {
+    color: "#3a3a3a", fontSize: 10, fontWeight: "800",
+    textTransform: "uppercase", letterSpacing: 1.2,
+  },
+  leagueMemberRow: {
+    flexDirection: "row", alignItems: "center", gap: 11,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  leagueMemberName: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  leagueMemberMeta: { color: "#444", fontSize: 11, marginTop: 1 },
+  leagueMemberNums: { alignItems: "flex-end" },
+  leagueMemberAvg: { color: "#06b6d4", fontSize: 16, fontWeight: "900" },
+  leagueMemberAvgLabel: { color: "#3a3a3a", fontSize: 10 },
+  leagueMemberDetail: {
+    backgroundColor: "#0c0c0c", borderRadius: 12, padding: 12, marginVertical: 8,
+    borderWidth: 1, borderColor: "#191919",
+  },
+  compareBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7,
+    backgroundColor: "rgba(6,182,212,0.07)", borderRadius: 12, paddingVertical: 12, marginTop: 6,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.2)",
+  },
+  compareBtnText: { color: "#06b6d4", fontSize: 13, fontWeight: "800" },
+  liveSeasonChip: { backgroundColor: "rgba(34,197,94,0.12)", borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
+  liveSeasonChipText: { color: "#22c55e", fontSize: 9, fontWeight: "900" },
 
   photoPickerBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   photoPickerDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },

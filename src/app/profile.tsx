@@ -32,6 +32,8 @@ import { sendSecurityAlert } from "../../lib/security-notify";
 import { AppTour } from "../components/app-tour";
 import { useTour } from "../hooks/use-tour";
 import { getTourSteps } from "../../lib/tour-steps";
+import { PlayerLeagueCard } from "../components/skeeball-stats";
+import { fetchPlayerStats, fetchSkeeSeasons, type PlayerStats, type SkeeSeason } from "../lib/skeeball-stats";
 
 type GameOption = { id: string; name: string; type: string; count: number };
 type TournPlacement = { tournament_id: string; title: string; placement: number; proposed_date: string | null };
@@ -70,6 +72,12 @@ export default function ProfileScreen() {
   // Bio (displayed)
   const [bio, setBio] = useState<string | null>(null);
 
+  // Skee-ball league stats
+  const [leagueStats, setLeagueStats] = useState<PlayerStats | null>(null);
+  const [skeeSeason, setSkeeSeason] = useState<SkeeSeason | null>(null);
+  const [showSkeeStats, setShowSkeeStats] = useState(true);
+  const [savingSkeeToggle, setSavingSkeeToggle] = useState(false);
+
   // Tournament placements
   const [tournPlacements, setTournPlacements] = useState<TournPlacement[]>([]);
 
@@ -104,7 +112,7 @@ export default function ProfileScreen() {
   async function loadProfile() {
     if (!user) return;
     const [profileRes, scoresRes, pendingRes, teamRes, placementsRes, friendsRes, trophiesRes, convRes] = await Promise.all([
-      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio").eq("id", user.id).single(),
+      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio, show_skeeball_stats").eq("id", user.id).single(),
       supabase.from("scores").select("score, game_id, games(id, name, type)").eq("user_id", user.id).eq("status", "approved"),
       supabase.from("scores").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       supabase.from("team_members").select("role, teams(name)").eq("user_id", user.id).maybeSingle(),
@@ -144,7 +152,14 @@ export default function ProfileScreen() {
       setIsPrivate(profileRes.data.is_private ?? false);
       setOnlineStatus((profileRes.data.online_status ?? "offline") as "online" | "offline");
       setBio(profileRes.data.bio ?? null);
+      setShowSkeeStats((profileRes.data as any).show_skeeball_stats ?? true);
     }
+
+    // Skee-ball league stats, scoped to the active season when one exists
+    const seasons = await fetchSkeeSeasons();
+    const active = seasons.find((s) => s.status === "active") ?? null;
+    setSkeeSeason(active);
+    setLeagueStats(await fetchPlayerStats(user.id, active));
     setEmail(user.email ?? null);
     setPendingCount(pendingRes.count ?? 0);
 
@@ -324,6 +339,15 @@ export default function ProfileScreen() {
     const { error } = await supabase.from("profiles").update({ is_private: next }).eq("id", user.id);
     if (error) setIsPrivate(!next);
     setSavingPrivacy(false);
+  }
+
+  async function toggleSkeeStats(next: boolean) {
+    if (!user || savingSkeeToggle) return;
+    setSavingSkeeToggle(true);
+    setShowSkeeStats(next);
+    const { error } = await supabase.from("profiles").update({ show_skeeball_stats: next }).eq("id", user.id);
+    if (error) setShowSkeeStats(!next);
+    setSavingSkeeToggle(false);
   }
 
   async function toggleStatus(nextOn: boolean) {
@@ -525,6 +549,16 @@ export default function ProfileScreen() {
             </Pressable>
           )}
 
+          {/* ── Skee-Ball League stats ── */}
+          {showSkeeStats && leagueStats && leagueStats.totals.games > 0 && (
+            <View style={{ marginBottom: 22 }}>
+              <Text style={styles.sectionLabel}>
+                {skeeSeason ? skeeSeason.name : "Skee-Ball League"}
+              </Text>
+              <PlayerLeagueCard stats={leagueStats} season={skeeSeason} />
+            </View>
+          )}
+
           {/* ── Tournament History ── */}
           {tournPlacements.length > 0 && (
             <>
@@ -598,6 +632,25 @@ export default function ProfileScreen() {
                     disabled={savingPrivacy}
                     trackColor={{ false: "#2a2a2a", true: "rgba(168,85,247,0.5)" }}
                     thumbColor={isPrivate ? "#a855f7" : "#666"}
+                  />
+                </View>
+                <View style={styles.settingsDivider} />
+                <View style={styles.settingsRow}>
+                  <View style={[styles.settingsIcon, { backgroundColor: "rgba(6,182,212,0.1)" }]}>
+                    <Ionicons name="bowling-ball-outline" size={17} color="#06b6d4" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingsRowLabel}>League Stats on Profile</Text>
+                    <Text style={styles.settingsRowSub}>
+                      {showSkeeStats ? "Visible on your profile" : "Hidden from your profile"}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={showSkeeStats}
+                    onValueChange={toggleSkeeStats}
+                    disabled={savingSkeeToggle}
+                    trackColor={{ false: "#2a2a2a", true: "rgba(6,182,212,0.5)" }}
+                    thumbColor={showSkeeStats ? "#06b6d4" : "#666"}
                   />
                 </View>
                 <View style={styles.settingsDivider} />
