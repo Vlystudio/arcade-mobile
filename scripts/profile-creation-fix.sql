@@ -66,9 +66,12 @@ BEGIN
     ON CONFLICT (id) DO UPDATE
       SET username = EXCLUDED.username
       WHERE profiles.username IS NULL OR profiles.username = '';
-  EXCEPTION WHEN unique_violation THEN
-    -- Lost a race against a concurrent signup for the same username —
-    -- retry with a guaranteed-unique, UUID-derived username.
+  EXCEPTION WHEN unique_violation OR SQLSTATE 'P0002' THEN
+    -- Either lost a race against a concurrent signup for the same username,
+    -- or the content-moderation trigger rejected the chosen username
+    -- (P0002). Retry with a guaranteed-unique, moderation-safe,
+    -- UUID-derived username — the account must always get a profiles row;
+    -- the user can pick a different display name afterwards.
     INSERT INTO public.profiles (id, username)
     VALUES (NEW.id, 'user_' || replace(NEW.id::text, '-', ''))
     ON CONFLICT (id) DO UPDATE
