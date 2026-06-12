@@ -79,15 +79,12 @@ SELECT * FROM test_result(
   (SELECT COUNT(*) FROM venue_admins) = 0
 );
 
--- public_profiles view should be readable by anon (it is the public-facing view)
--- but only show non-private profiles
+-- public_profiles view should be readable by anon (it is the public-facing
+-- view). Identity is always visible; private-detail hiding is asserted in
+-- BLOCK 18 (runs with table access so it can see the is_private flag).
 SELECT * FROM test_result(
-  'anon: public_profiles only shows non-private',
-  NOT EXISTS (
-    SELECT 1 FROM public_profiles pp
-    JOIN profiles p ON p.id = pp.id
-    WHERE COALESCE(p.is_private, false) = true
-  )
+  'anon: public_profiles readable',
+  (SELECT count(*) FROM public_profiles) >= 0
 );
 
 ROLLBACK;
@@ -727,15 +724,31 @@ SELECT * FROM test_result(
   )
 );
 
--- Verify the view definition filters private profiles
+-- Verify the view definition gates details on is_private
 SELECT * FROM test_result(
-  'public_profiles: view definition excludes private profiles for others',
+  'public_profiles: view definition gates details on is_private',
   EXISTS (
     SELECT 1
     FROM pg_views
     WHERE schemaname = 'public'
       AND viewname   = 'public_profiles'
       AND definition LIKE '%is_private%'
+  )
+);
+
+-- Identity always visible; details (bio/online_status/featured_game_id)
+-- must be NULL for private users when viewed by someone else
+-- (auth.uid() is NULL in this block, so "someone else" = everyone).
+SELECT * FROM test_result(
+  'public_profiles: identity visible, private details hidden',
+  (SELECT count(*) FROM public_profiles)
+    = (SELECT count(*) FROM profiles)
+  AND NOT EXISTS (
+    SELECT 1
+      FROM public_profiles pp
+      JOIN profiles pr ON pr.id = pp.id
+     WHERE COALESCE(pr.is_private, false) = true
+       AND (pp.bio IS NOT NULL OR pp.online_status IS NOT NULL OR pp.featured_game_id IS NOT NULL)
   )
 );
 

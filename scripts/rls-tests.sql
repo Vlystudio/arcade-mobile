@@ -109,12 +109,16 @@ BEGIN;
     RAISE NOTICE '%  T9: user A cannot read messages from teams they are not in (rows=%)',
       CASE WHEN v_cnt = 0 THEN 'PASS' ELSE 'FAIL' END, v_cnt;
 
-    -- T10: public_profiles view respects is_private
+    -- T10: public_profiles view respects is_private — identity stays
+    -- visible, but details (bio/online_status/featured_game_id) must be
+    -- NULL on private users when viewed by someone else
     SELECT count(*) INTO v_cnt
       FROM public.public_profiles pp
       JOIN public.profiles pr ON pr.id = pp.id
-     WHERE COALESCE(pr.is_private, false) = true AND pp.id <> v_uid_a;
-    RAISE NOTICE '%  T10: public_profiles hides other users with is_private=true (rows=%)',
+     WHERE COALESCE(pr.is_private, false) = true
+       AND pp.id <> v_uid_a
+       AND (pp.bio IS NOT NULL OR pp.online_status IS NOT NULL OR pp.featured_game_id IS NOT NULL);
+    RAISE NOTICE '%  T10: public_profiles hides private users'' details (leaky rows=%)',
       CASE WHEN v_cnt = 0 THEN 'PASS' ELSE 'FAIL' END, v_cnt;
 
   END; $$;

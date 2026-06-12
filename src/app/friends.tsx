@@ -111,7 +111,7 @@ export default function FriendsScreen() {
     const { data } = await supabase
       .from("public_profiles")
       .select("id, username, avatar_url")
-      .ilike("username", `%${text.trim()}%`)
+      .ilike("username", `%${text.replace(/\s+/g, "")}%`)
       .neq("id", user.id)
       .limit(10);
 

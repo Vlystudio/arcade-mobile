@@ -456,8 +456,9 @@ export default function ProfileScreen() {
     if (!q.trim()) { setSearchResults([]); setTeamResults([]); setForumResults([]); return; }
     setSearching(true);
     const term = `%${q.trim()}%`;
+    const userTerm = `%${q.replace(/\s+/g, "")}%`;
     const [usersRes, teamsRes, forumsRes] = await Promise.all([
-      supabase.from("profiles").select("id, username, avatar_url, role").ilike("username", term).neq("id", user!.id).limit(10),
+      supabase.from("profiles").select("id, username, avatar_url, role").ilike("username", userTerm).neq("id", user!.id).limit(10),
       supabase.from("teams").select("id, name").ilike("name", term).limit(6),
       supabase.from("forums").select("id, title").eq("status", "approved").ilike("title", term).limit(6),
     ]);

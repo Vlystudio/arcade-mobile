@@ -136,7 +136,7 @@ export default function PoolScreen() {
     const { data } = await supabase
       .from("public_profiles")
       .select("id, username, avatar_url")
-      .ilike("username", `%${text.trim()}%`)
+      .ilike("username", `%${text.replace(/\s+/g, "")}%`)
       .neq("id", user.id)
       .limit(6);
     setOpponentResults((data ?? []).filter(u => !opponents.find(o => o.id === u.id)));

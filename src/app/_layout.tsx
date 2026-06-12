@@ -145,6 +145,7 @@ export default function RootLayout() {
           <Stack.Screen name="saved-posts" options={{ headerShown: false }} />
           <Stack.Screen name="welcome" options={{ headerShown: false }} />
           <Stack.Screen name="notifications" options={{ headerShown: false }} />
+          <Stack.Screen name="fantasy" options={{ headerShown: false }} />
         </Stack>
         <ToastHost />
         </AppColumn>

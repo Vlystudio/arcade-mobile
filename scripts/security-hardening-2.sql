@@ -200,9 +200,12 @@ GRANT  EXECUTE ON FUNCTION public.rpc_submit_score(uuid, uuid, uuid, uuid, integ
 
 -- ── A8: public_profiles view — privacy filter ─────────────────
 -- ⚠ SOURCE OF TRUTH for public.public_profiles.
--- Users with is_private = true are only visible to themselves.
--- Exposes ONLY public display fields: no email, phone, role, admin flags,
--- billing IDs, or private settings (is_private itself is filter-only).
+-- Identity (username + avatar) is ALWAYS visible — names must render in
+-- feeds, comments, teams, and search even for private accounts (new
+-- accounts default to is_private = true). Privacy gates the DETAILS:
+-- bio, online status, and featured game are NULLed for private users
+-- unless viewing yourself. Exposes no email, phone, role, admin flags,
+-- billing IDs, or the is_private flag itself.
 -- DROP + CREATE because CREATE OR REPLACE VIEW cannot remove columns.
 DROP VIEW IF EXISTS public.public_profiles;
 CREATE VIEW public.public_profiles AS
@@ -210,13 +213,15 @@ CREATE VIEW public.public_profiles AS
     id,
     username,
     avatar_url,
-    bio,
-    online_status,
+    CASE WHEN (NOT COALESCE(is_private, false)) OR id = auth.uid()
+         THEN bio END AS bio,
+    CASE WHEN (NOT COALESCE(is_private, false)) OR id = auth.uid()
+         THEN online_status END AS online_status,
     created_at,
-    featured_game_id
-  FROM profiles
-  WHERE (NOT COALESCE(is_private, false)) OR id = auth.uid();
+    CASE WHEN (NOT COALESCE(is_private, false)) OR id = auth.uid()
+         THEN featured_game_id END AS featured_game_id
+  FROM profiles;
 
 -- anon needs read for the public landing page / standings surfaces;
--- rows remain privacy-filtered either way.
+-- details remain privacy-filtered either way.
 GRANT SELECT ON public.public_profiles TO anon, authenticated;

@@ -398,7 +398,7 @@ export default function TeamsScreen() {
   async function searchInviteUsers(text: string) {
     if (!text.trim() || !user) { setInviteResults([]); return; }
     setInviteSearching(true);
-    const { data } = await supabase.from("public_profiles").select("id, username").ilike("username", `%${text.trim()}%`).neq("id", user.id).limit(8);
+    const { data } = await supabase.from("public_profiles").select("id, username").ilike("username", `%${text.replace(/\s+/g, "")}%`).neq("id", user.id).limit(8);
     setInviteResults(data ?? []);
     setInviteSearching(false);
   }

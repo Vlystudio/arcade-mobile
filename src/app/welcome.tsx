@@ -62,6 +62,23 @@ export default function WelcomeScreen() {
           </View>
         </View>
 
+        {/* Guest actions — no account needed */}
+        <View style={s.guestCard}>
+          <Text style={s.guestTitle}>At the bar right now? No account needed.</Text>
+          <View style={s.guestRow}>
+            <Pressable style={s.guestBtn} onPress={() => router.push("/food" as any)}>
+              <Ionicons name="restaurant-outline" size={22} color="#f59e0b" />
+              <Text style={s.guestBtnTitle}>Order Food</Text>
+              <Text style={s.guestBtnSub}>Browse the menu & check out</Text>
+            </Pressable>
+            <Pressable style={s.guestBtn} onPress={() => router.push("/karaoke" as any)}>
+              <Ionicons name="mic-outline" size={22} color="#a855f7" />
+              <Text style={s.guestBtnTitle}>Karaoke</Text>
+              <Text style={s.guestBtnSub}>Request a song as a guest</Text>
+            </Pressable>
+          </View>
+        </View>
+
         {/* Live standings teaser */}
         {standings.length > 0 && (
           <View style={s.standingsCard}>
@@ -133,6 +150,20 @@ const s = StyleSheet.create({
     borderWidth: 1, borderColor: "#2a2a2a",
   },
   ctaSecondaryText: { color: "#fff", fontSize: 15, fontWeight: "700" },
+
+  guestCard: {
+    backgroundColor: "rgba(245,158,11,0.05)", borderRadius: 20, padding: 16, marginTop: 4,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.2)",
+  },
+  guestTitle: { color: "#fff", fontSize: 14.5, fontWeight: "800", textAlign: "center", marginBottom: 12 },
+  guestRow: { flexDirection: "row", gap: 10 },
+  guestBtn: {
+    flex: 1, alignItems: "center", gap: 4,
+    backgroundColor: "#111", borderRadius: 16, paddingVertical: 16, paddingHorizontal: 10,
+    borderWidth: 1, borderColor: "#222",
+  },
+  guestBtnTitle: { color: "#fff", fontSize: 14.5, fontWeight: "900", marginTop: 4 },
+  guestBtnSub: { color: "#888", fontSize: 11.5, textAlign: "center" },
 
   standingsCard: {
     backgroundColor: "#0d0d0d", borderRadius: 20, padding: 18, marginVertical: 16,

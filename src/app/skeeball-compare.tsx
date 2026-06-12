@@ -92,7 +92,7 @@ export default function SkeeballCompareScreen() {
     const { data } = await supabase
       .from("public_profiles")
       .select("id, username, avatar_url")
-      .ilike("username", `%${q.trim()}%`)
+      .ilike("username", `%${q.replace(/\s+/g, "")}%`)
       .limit(12);
     setResults((data ?? []).map((p: any) => ({ id: p.id, username: p.username ?? "Unknown", avatar_url: p.avatar_url ?? null })));
     setSearching(false);

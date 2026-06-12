@@ -2052,7 +2052,26 @@ export default function AdminScreen() {
         )}
       </View>
 
-      {/* Main tab bar — swipe left/right to see all tabs */}
+      {/* Main tab bar — wraps to show every tab on web; swipes on native */}
+      {Platform.OS === "web" ? (
+        <View style={styles.mainTabBarWebWrap}>
+          {MAIN_TABS.filter((t) => t.key !== "users" || userRole === "owner" || userRole === "architect").map(({ key, label, icon }) => (
+            <Pressable
+              key={key}
+              style={[styles.mainTabItem, mainTab === key && styles.mainTabItemActive]}
+              onPress={() => setMainTab(key as MainTab)}
+            >
+              <View>
+                <Ionicons name={icon as any} size={16} color={mainTab === key ? "#f59e0b" : "#444"} />
+                {key === "support" && unreadSupport > 0 && mainTab !== "support" && (
+                  <View style={styles.tabUnreadDot} />
+                )}
+              </View>
+              <Text style={[styles.mainTabLabel, mainTab === key && styles.mainTabLabelActive]}>{label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : (
       <View style={styles.mainTabBarWrap}>
         <ScrollView
           horizontal
@@ -2079,6 +2098,7 @@ export default function AdminScreen() {
         {/* Right-edge fade hints that more tabs are off-screen */}
         <View style={styles.mainTabFadeRight} pointerEvents="none" />
       </View>
+      )}
 
       {/* ── Reviews ── */}
       {mainTab === "reviews" && (
@@ -5224,6 +5244,11 @@ const styles = StyleSheet.create({
 
   // Main tabs (Reviews / Stats / Health / …)
   mainTabBarWrap: { position: "relative" },
+  mainTabBarWebWrap: {
+    flexDirection: "row", flexWrap: "wrap",
+    paddingHorizontal: 8, rowGap: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
   mainTabBar: {
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
   },
