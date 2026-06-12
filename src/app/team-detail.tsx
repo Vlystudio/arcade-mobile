@@ -23,8 +23,10 @@ import { moderateText } from "../../lib/moderate-text";
 import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { validateChatMessage } from "../../lib/validation";
-import { RingBreakdown, TrendBadge, WeeklyBarChart } from "../components/skeeball-stats";
+import { InsightChips, LaneStats, RingBreakdown, TrendBadge, WeeklyBarChart } from "../components/skeeball-stats";
 import {
+  fetchHeadToHead,
+  fetchPlayerInsights,
   fetchPlayerStats,
   fetchPositionStats,
   fetchSkeeSeasons,
@@ -32,7 +34,9 @@ import {
   fetchTeamWeekHistory,
   suggestOrder,
   weekLabel,
+  type HeadToHead,
   type OrderSuggestion,
+  type PlayerInsights,
   type PlayerPositionStats,
   type PlayerStats as LeaguePlayerStats,
   type SkeeSeason,
@@ -145,6 +149,11 @@ export default function TeamDetailScreen() {
   const [coachResult, setCoachResult] = useState<CoachResult | null>(null);
   const [coachLoading, setCoachLoading] = useState(false);
   const [coachError, setCoachError] = useState<string | null>(null);
+  const [headToHead, setHeadToHead] = useState<HeadToHead | null>(null);
+  const [expandedMemberInsights, setExpandedMemberInsights] = useState<PlayerInsights | null>(null);
+  const [recapResult, setRecapResult] = useState<{ recap: string; highlights: string[]; mode: string } | null>(null);
+  const [recapLoading, setRecapLoading] = useState<"week" | "season" | null>(null);
+  const [recapError, setRecapError] = useState<string | null>(null);
 
   // Announcements
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -466,11 +475,51 @@ export default function TeamDetailScreen() {
     if (expandedMemberId === userId) {
       setExpandedMemberId(null);
       setExpandedMemberStats(null);
+      setExpandedMemberInsights(null);
       return;
     }
     setExpandedMemberId(userId);
     setExpandedMemberStats(null);
-    setExpandedMemberStats(await fetchPlayerStats(userId, selectedSkeeSeason));
+    setExpandedMemberInsights(null);
+    const [stats, insights] = await Promise.all([
+      fetchPlayerStats(userId, selectedSkeeSeason),
+      fetchPlayerInsights(userId, selectedSkeeSeason),
+    ]);
+    setExpandedMemberStats(stats);
+    setExpandedMemberInsights(insights);
+  }
+
+  // Head-to-head record loads when an opponent is picked for the coach
+  useEffect(() => {
+    if (!teamId || !coachOpponent) { setHeadToHead(null); return; }
+    fetchHeadToHead(teamId, coachOpponent.id, selectedSkeeSeason).then(setHeadToHead);
+  }, [teamId, coachOpponent?.id, selectedSkeeSeasonId]);
+
+  async function askRecap(mode: "week" | "season") {
+    if (!teamId || recapLoading) return;
+    setRecapLoading(mode);
+    setRecapError(null);
+    setRecapResult(null);
+    try {
+      const resp = await fetch(`${API_BASE}/api/skeeball/recap`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          teamId,
+          mode,
+          seasonStart: selectedSkeeSeason?.start_week ?? undefined,
+          seasonEnd: selectedSkeeSeason?.end_week ?? undefined,
+        }),
+      });
+      const json = await resp.json();
+      if (!resp.ok || json.error) setRecapError(json.error ?? "Recap failed. Please try again.");
+      else if (json.ok === false) setRecapError(json.message ?? "No games to recap yet.");
+      else setRecapResult({ recap: json.recap, highlights: json.highlights ?? [], mode });
+    } catch {
+      setRecapError("Network error. Please try again.");
+    } finally {
+      setRecapLoading(null);
+    }
   }
 
   // Build seasons as 8-week chunks from the date of the first score
@@ -756,6 +805,11 @@ export default function TeamDetailScreen() {
                         <ActivityIndicator size="small" color="#06b6d4" style={{ marginVertical: 12 }} />
                       ) : (
                         <>
+                          {expandedMemberInsights && (
+                            <View style={{ marginBottom: 10 }}>
+                              <InsightChips insights={expandedMemberInsights} />
+                            </View>
+                          )}
                           <WeeklyBarChart
                             weeks={expandedMemberStats.weeks}
                             season={selectedSkeeSeason}
@@ -763,6 +817,12 @@ export default function TeamDetailScreen() {
                           />
                           <Text style={[styles.leagueSubLabel, { marginTop: 10, marginBottom: 6 }]}>Shot Breakdown</Text>
                           <RingBreakdown rings={expandedMemberStats.totals.rings} compact />
+                          {expandedMemberInsights && expandedMemberInsights.lanes.length >= 2 && (
+                            <>
+                              <Text style={[styles.leagueSubLabel, { marginTop: 10, marginBottom: 6 }]}>Lane Averages</Text>
+                              <LaneStats lanes={expandedMemberInsights.lanes} />
+                            </>
+                          )}
                         </>
                       )}
                     </View>
@@ -779,6 +839,55 @@ export default function TeamDetailScreen() {
               <Ionicons name="git-compare-outline" size={15} color="#06b6d4" />
               <Text style={styles.compareBtnText}>Compare Players</Text>
             </Pressable>
+
+            {/* AI recaps */}
+            {isTeamMember && (
+              <>
+                <View style={styles.recapBtnRow}>
+                  <Pressable
+                    style={[styles.recapBtn, recapLoading === "week" && { opacity: 0.6 }]}
+                    onPress={() => askRecap("week")}
+                    disabled={recapLoading !== null}
+                  >
+                    {recapLoading === "week"
+                      ? <ActivityIndicator size="small" color="#f59e0b" />
+                      : <><Ionicons name="newspaper-outline" size={14} color="#f59e0b" /><Text style={styles.recapBtnText}>Weekly Recap</Text></>}
+                  </Pressable>
+                  <Pressable
+                    style={[styles.recapBtn, recapLoading === "season" && { opacity: 0.6 }]}
+                    onPress={() => askRecap("season")}
+                    disabled={recapLoading !== null}
+                  >
+                    {recapLoading === "season"
+                      ? <ActivityIndicator size="small" color="#f59e0b" />
+                      : <><Ionicons name="book-outline" size={14} color="#f59e0b" /><Text style={styles.recapBtnText}>Season Report</Text></>}
+                  </Pressable>
+                </View>
+                {recapError && (
+                  <View style={styles.tipRow}>
+                    <Ionicons name="alert-circle-outline" size={13} color="#ef4444" />
+                    <Text style={[styles.tipText, { color: "#ef4444" }]}>{recapError}</Text>
+                  </View>
+                )}
+                {recapResult && (
+                  <View style={styles.recapCard}>
+                    <View style={styles.coachResultHeader}>
+                      <Ionicons name="newspaper-outline" size={13} color="#f59e0b" />
+                      <Text style={[styles.coachResultTitle, { color: "#f59e0b" }]}>
+                        {recapResult.mode === "week" ? "This Week's Recap" : "Season Report"}
+                      </Text>
+                    </View>
+                    <Text style={styles.recapText}>{recapResult.recap}</Text>
+                    {recapResult.highlights.map((h, i) => (
+                      <View key={i} style={styles.tipRow}>
+                        <Ionicons name="star-outline" size={12} color="#f59e0b" />
+                        <Text style={styles.tipText}>{h}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
           </View>
         )}
 
@@ -857,6 +966,15 @@ export default function TeamDetailScreen() {
                 )}
                 <Ionicons name="chevron-down" size={13} color="#555" />
               </Pressable>
+              {coachOpponent && headToHead && headToHead.meetings > 0 && (
+                <View style={styles.h2hCard}>
+                  <Text style={styles.h2hTitle}>vs {coachOpponent.name} ({selectedSkeeSeason ? selectedSkeeSeason.name : "all time"})</Text>
+                  <Text style={styles.h2hLine}>
+                    {headToHead.wins}W – {headToHead.losses}L over {headToHead.meetings} {headToHead.meetings === 1 ? "meeting" : "meetings"}
+                    {" · "}avg margin {headToHead.avg_margin >= 0 ? "+" : ""}{headToHead.avg_margin} pts
+                  </Text>
+                </View>
+              )}
               <Pressable
                 style={[styles.coachBtn, coachLoading && { opacity: 0.6 }]}
                 onPress={askCoach}
@@ -1594,6 +1712,26 @@ const styles = StyleSheet.create({
   coachOrderRow: { flexDirection: "row", alignItems: "flex-start", gap: 9 },
   coachOrderName: { color: "#fff", fontSize: 13.5, fontWeight: "800" },
   coachOrderReason: { color: "#777", fontSize: 12, lineHeight: 17, marginTop: 1 },
+
+  // Head-to-head + recaps
+  h2hCard: {
+    backgroundColor: "rgba(6,182,212,0.04)", borderRadius: 12, padding: 11, marginTop: 8,
+    borderWidth: 1, borderColor: "rgba(6,182,212,0.15)",
+  },
+  h2hTitle: { color: "#06b6d4", fontSize: 12, fontWeight: "800", marginBottom: 3 },
+  h2hLine: { color: "#999", fontSize: 12.5 },
+  recapBtnRow: { flexDirection: "row", gap: 8, marginTop: 8 },
+  recapBtn: {
+    flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    backgroundColor: "rgba(245,158,11,0.07)", borderRadius: 12, paddingVertical: 11,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.2)",
+  },
+  recapBtnText: { color: "#f59e0b", fontSize: 12.5, fontWeight: "800" },
+  recapCard: {
+    backgroundColor: "rgba(245,158,11,0.04)", borderRadius: 14, padding: 12, marginTop: 10,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.2)", gap: 8,
+  },
+  recapText: { color: "#ccc", fontSize: 13.5, lineHeight: 20 },
 
   // Season schedule
   upcomingRow: {

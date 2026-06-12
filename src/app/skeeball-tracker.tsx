@@ -16,6 +16,7 @@ import { Avatar } from "../components/avatar";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { reportError } from "../lib/report-error";
+import { fetchPlayerStats } from "../lib/skeeball-stats";
 
 const LANE_COUNT = 6;
 const TOTAL_BALLS = 9;
@@ -105,6 +106,8 @@ export default function SkeeballTrackerScreen({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savingOrder, setSavingOrder] = useState(false);
+  // Career best BEFORE this game, for the new-PB celebration
+  const [myPrevBest, setMyPrevBest] = useState<number | null>(null);
 
   // Inactivity warning
   const [showWarning, setShowWarning] = useState(false);
@@ -257,6 +260,11 @@ export default function SkeeballTrackerScreen({
       }
 
       setMySession(mine);
+
+      // Snapshot career best while the game is still active (PB celebration)
+      if (mine && mine.status === "active" && user) {
+        fetchPlayerStats(user.id).then((st) => setMyPrevBest(st?.totals.best ?? null));
+      }
 
       if (mine) await loadSessionData(mine.id, members);
     } catch (e: any) {
@@ -631,6 +639,23 @@ export default function SkeeballTrackerScreen({
           <View style={s.trophyWrap}><Ionicons name="trophy" size={48} color="#f59e0b" /></View>
           <Text style={s.bigTitle}>Game Complete!</Text>
           <Text style={s.bigSub}>Scores submitted for review.</Text>
+          {(() => {
+            const myTotal = ballScores
+              .filter((b) => b.player_user_id === user?.id)
+              .reduce((sum, b) => sum + b.score, 0);
+            if (myPrevBest != null && myTotal > myPrevBest) {
+              return (
+                <View style={s.pbBanner}>
+                  <Text style={s.pbEmoji}>🎉</Text>
+                  <View>
+                    <Text style={s.pbTitle}>New personal best!</Text>
+                    <Text style={s.pbSub}>{myTotal} pts — previous best was {myPrevBest}</Text>
+                  </View>
+                </View>
+              );
+            }
+            return null;
+          })()}
           {placementLabel && (
             <View style={[s.placementBadge, { borderColor: placementColor + "44" }]}>
               <Text style={s.placementEmoji}>{placementEmoji}</Text>
@@ -1074,6 +1099,15 @@ const s = StyleSheet.create({
   orderPosText: { color: "#06b6d4", fontSize: 11, fontWeight: "900" },
   orderName: { flex: 1, color: "#fff", fontSize: 13.5, fontWeight: "700" },
   orderArrow: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
+
+  pbBanner: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "rgba(34,197,94,0.07)", borderRadius: 16, padding: 14, marginTop: 14,
+    borderWidth: 1, borderColor: "rgba(34,197,94,0.25)",
+  },
+  pbEmoji: { fontSize: 26 },
+  pbTitle: { color: "#22c55e", fontSize: 15, fontWeight: "900" },
+  pbSub: { color: "#777", fontSize: 12.5, marginTop: 2 },
 
   playerSection: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#1e1e1e" },
   playerSectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },

@@ -89,6 +89,7 @@ export default function RootLayout() {
           <Stack.Screen name="owner" options={{ headerShown: false }} />
           <Stack.Screen name="architect" options={{ headerShown: false }} />
           <Stack.Screen name="skeeball-compare" options={{ headerShown: false }} />
+          <Stack.Screen name="skeeball-live" options={{ headerShown: false }} />
         </Stack>
       </ThemeProvider>
       </CartProvider>

@@ -14,12 +14,15 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { Avatar } from "../components/avatar";
 import {
   fetchSkeeSeasons,
   fetchStandings,
+  fetchWeeklyAwards,
   seasonWeekNumber,
   type SkeeSeason,
   type StandingRow,
+  type WeeklyAwards,
 } from "../lib/skeeball-stats";
 
 type Season = { id: string; name: string; game_type: string; start_date: string; end_date: string; status: "planning" | "active" | "completed" };
@@ -45,6 +48,7 @@ export default function LeaguesScreen() {
   const [skeeLoading, setSkeeLoading] = useState(false);
   const [skeeSeasons, setSkeeSeasons] = useState<SkeeSeason[]>([]);
   const [skeeSeasonId, setSkeeSeasonId] = useState<string | "all">("all");
+  const [skeeAwards, setSkeeAwards] = useState<WeeklyAwards | null>(null);
 
   async function loadLeagues() {
     if (!user) return;
@@ -116,10 +120,12 @@ export default function LeaguesScreen() {
       matchQuery = matchQuery.gte("week_of", season.start_week).lte("week_of", season.end_week);
     }
 
-    const [standings, matchRes] = await Promise.all([
+    const [standings, matchRes, awards] = await Promise.all([
       fetchStandings(season),
       matchQuery,
+      fetchWeeklyAwards(season),
     ]);
+    setSkeeAwards(awards);
 
     setSkeeStandings(
       standings.map((r: StandingRow) => ({
@@ -258,6 +264,48 @@ export default function LeaguesScreen() {
                 );
               })()}
 
+              {/* Live league night */}
+              <Pressable style={styles.liveCard} onPress={() => router.push("/skeeball-live" as any)}>
+                <View style={styles.liveCardIcon}>
+                  <Ionicons name="radio-outline" size={18} color="#ef4444" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.liveCardTitle}>League Night Live</Text>
+                  <Text style={styles.liveCardSub}>Watch all lanes update in real time</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color="#444" />
+              </Pressable>
+
+              {/* Player of the Week */}
+              {skeeAwards?.top && (
+                <View style={styles.potwCard}>
+                  <View style={styles.potwHeader}>
+                    <Ionicons name="star" size={13} color="#f59e0b" />
+                    <Text style={styles.potwLabel}>
+                      Player of the Week · {skeeAwards.week_of ? fmtDate(skeeAwards.week_of) : ""}
+                    </Text>
+                  </View>
+                  <View style={styles.potwRow}>
+                    <Avatar uri={skeeAwards.top.avatar_url} name={skeeAwards.top.username} size={40} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.potwName}>{skeeAwards.top.username}</Text>
+                      <Text style={styles.potwMeta}>
+                        {skeeAwards.top.avg} avg over {skeeAwards.top.games} {skeeAwards.top.games === 1 ? "game" : "games"}
+                      </Text>
+                    </View>
+                    <Text style={styles.potwEmoji}>👑</Text>
+                  </View>
+                  {skeeAwards.most_improved && skeeAwards.most_improved.user_id !== skeeAwards.top.user_id && (
+                    <View style={styles.improvedRow}>
+                      <Ionicons name="trending-up" size={13} color="#22c55e" />
+                      <Text style={styles.improvedText}>
+                        Most improved: {skeeAwards.most_improved.username} (+{skeeAwards.most_improved.delta_pct}% vs last week)
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
               {skeeLoading ? (
                 <ActivityIndicator color="#06b6d4" style={{ marginVertical: 40 }} />
               ) : (
@@ -301,6 +349,53 @@ export default function LeaguesScreen() {
                       <Text style={styles.tapHint}>Tap a team to see full performance, players &amp; charts</Text>
                     </View>
                   )}
+
+                  {/* Title race projections (live season only) */}
+                  {(() => {
+                    const sel = skeeSeasons.find((sn) => sn.id === skeeSeasonId);
+                    if (!sel || sel.status !== "active" || skeeStandings.length < 2) return null;
+                    const wk = seasonWeekNumber(sel);
+                    if (wk == null) return null;
+                    const remaining = Math.max(8 - wk, 0);
+                    const maxPerWeek = 4;
+                    const leader = skeeStandings[0];
+                    const rows = skeeStandings.map((t, i) => {
+                      const maxPossible = t.total_points + remaining * maxPerWeek;
+                      // Clinched #1 if no other team can reach this team's current points
+                      const clinched = i === 0 && skeeStandings.slice(1).every(
+                        (o) => o.total_points + remaining * maxPerWeek < t.total_points
+                      );
+                      const eliminated = i > 0 && maxPossible < leader.total_points;
+                      return { ...t, maxPossible, clinched, eliminated };
+                    });
+                    return (
+                      <View style={styles.raceCard}>
+                        <View style={styles.raceHeader}>
+                          <Ionicons name="flag-outline" size={13} color="#a855f7" />
+                          <Text style={styles.raceTitle}>Title Race · {remaining} {remaining === 1 ? "week" : "weeks"} left</Text>
+                        </View>
+                        {rows.map((t) => (
+                          <View key={t.team_id} style={styles.raceRow}>
+                            <Text style={styles.raceTeam} numberOfLines={1}>{t.team_name}</Text>
+                            <Text style={styles.raceMax}>max {t.maxPossible}</Text>
+                            {t.clinched ? (
+                              <View style={[styles.raceTag, { backgroundColor: "rgba(245,158,11,0.12)" }]}>
+                                <Text style={[styles.raceTagText, { color: "#f59e0b" }]}>CLINCHED 1ST</Text>
+                              </View>
+                            ) : t.eliminated ? (
+                              <View style={[styles.raceTag, { backgroundColor: "rgba(100,100,100,0.12)" }]}>
+                                <Text style={[styles.raceTagText, { color: "#666" }]}>OUT OF 1ST</Text>
+                              </View>
+                            ) : (
+                              <View style={[styles.raceTag, { backgroundColor: "rgba(34,197,94,0.1)" }]}>
+                                <Text style={[styles.raceTagText, { color: "#22c55e" }]}>IN THE HUNT</Text>
+                              </View>
+                            )}
+                          </View>
+                        ))}
+                      </View>
+                    );
+                  })()}
 
                   <View style={styles.leaguePointsKey}>
                     <Text style={styles.leaguePointsKeyTitle}>LEAGUE POINTS PER MATCH</Text>
@@ -534,6 +629,43 @@ const styles = StyleSheet.create({
   leaguePointsEmoji: { fontSize: 18, width: 26 },
   leaguePointsPlace: { color: "#666", fontSize: 13, fontWeight: "700", flex: 1 },
   leaguePointsPts: { color: "#06b6d4", fontSize: 13, fontWeight: "900" },
+
+  liveCard: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 12,
+    borderWidth: 1, borderColor: "rgba(239,68,68,0.2)",
+  },
+  liveCardIcon: {
+    width: 36, height: 36, borderRadius: 12,
+    backgroundColor: "rgba(239,68,68,0.08)", alignItems: "center", justifyContent: "center",
+  },
+  liveCardTitle: { color: "#fff", fontSize: 14, fontWeight: "800" },
+  liveCardSub: { color: "#555", fontSize: 11.5, marginTop: 1 },
+
+  potwCard: {
+    backgroundColor: "rgba(245,158,11,0.04)", borderRadius: 16, padding: 14, marginBottom: 12,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.2)", gap: 10,
+  },
+  potwHeader: { flexDirection: "row", alignItems: "center", gap: 6 },
+  potwLabel: { color: "#f59e0b", fontSize: 10.5, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8 },
+  potwRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  potwName: { color: "#fff", fontSize: 16, fontWeight: "900" },
+  potwMeta: { color: "#777", fontSize: 12.5, marginTop: 1 },
+  potwEmoji: { fontSize: 24 },
+  improvedRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  improvedText: { color: "#22c55e", fontSize: 12, fontWeight: "600", flex: 1 },
+
+  raceCard: {
+    backgroundColor: "#0d0d0d", borderRadius: 16, padding: 14, marginTop: -16, marginBottom: 28,
+    borderWidth: 1, borderColor: "#1a1a1a", gap: 8,
+  },
+  raceHeader: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 2 },
+  raceTitle: { color: "#a855f7", fontSize: 10.5, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8 },
+  raceRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  raceTeam: { flex: 1, color: "#ccc", fontSize: 13, fontWeight: "700" },
+  raceMax: { color: "#444", fontSize: 11.5, fontWeight: "600" },
+  raceTag: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3 },
+  raceTagText: { fontSize: 9, fontWeight: "900", letterSpacing: 0.4 },
 
   weekProgressCard: {
     flexDirection: "row", alignItems: "center", gap: 12,

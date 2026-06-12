@@ -326,6 +326,112 @@ export async function fetchTeamWeekHistory(
   };
 }
 
+// ── Player insights (lanes, clutch, consistency, hundos, records, badges) ────
+
+export type PlayerInsights = {
+  games: number;
+  lanes: { lane_number: number; games: number; avg: number }[];
+  clutch: { first_avg: number | null; last_avg: number | null } | null;
+  consistency: { stddev: number; avg: number } | null;
+  hundos: { count: number; total_balls: number; rate_pct: number; pct_40_plus: number; best_streak: number; max_in_game: number } | null;
+  records: { best_game: number; best_week_avg: number | null; best_week_of: string | null } | null;
+  percentile: number | null;
+  badges: string[];
+};
+
+export async function fetchPlayerInsights(
+  userId: string,
+  season?: SkeeSeason | null,
+): Promise<PlayerInsights | null> {
+  const { data, error } = await supabase.rpc("rpc_skeeball_player_insights", {
+    p_user_id: userId,
+    p_start: season?.start_week ?? null,
+    p_end: season?.end_week ?? null,
+  });
+  if (error || !data || (data as any).error) return null;
+  const d = data as any;
+  return {
+    games: d.games ?? 0,
+    lanes: d.lanes ?? [],
+    clutch: d.clutch ?? null,
+    consistency: d.consistency ?? null,
+    hundos: d.hundos ?? null,
+    records: d.records ?? null,
+    percentile: d.percentile ?? null,
+    badges: d.badges ?? [],
+  };
+}
+
+export const BADGES: Record<string, { label: string; icon: string; color: string }> = {
+  first_hundo:     { label: "First Hundo", icon: "flame", color: "#ef4444" },
+  hundo_hat_trick: { label: "Hat Trick", icon: "flame", color: "#f97316" },
+  club_120:        { label: "120 Club", icon: "ribbon", color: "#06b6d4" },
+  club_150:        { label: "150 Club", icon: "trophy", color: "#f59e0b" },
+  sharpshooter:    { label: "Sharpshooter", icon: "locate", color: "#22c55e" },
+  iron_player:     { label: "Iron Player", icon: "barbell", color: "#94a3b8" },
+  hot_streak:      { label: "Hot Streak", icon: "flash", color: "#a855f7" },
+};
+
+/** "Closer" / "Fast Starter" / "Even Keel" from first-vs-final ball averages. */
+export function clutchLabel(clutch: PlayerInsights["clutch"]): { label: string; pct: number; color: string } | null {
+  if (!clutch || clutch.first_avg == null || clutch.last_avg == null || clutch.first_avg <= 0) return null;
+  const pct = Math.round(((clutch.last_avg - clutch.first_avg) / clutch.first_avg) * 100);
+  if (pct >= 10) return { label: "Closer", pct, color: "#22c55e" };
+  if (pct <= -10) return { label: "Fast Starter", pct, color: "#f59e0b" };
+  return { label: "Even Keel", pct, color: "#94a3b8" };
+}
+
+/** "Steady" / "Balanced" / "Streaky" from the coefficient of variation. */
+export function consistencyLabel(c: PlayerInsights["consistency"]): { label: string; color: string } | null {
+  if (!c || !c.avg || c.avg <= 0) return null;
+  const cv = c.stddev / c.avg;
+  if (cv < 0.15) return { label: "Steady", color: "#22c55e" };
+  if (cv < 0.3) return { label: "Balanced", color: "#06b6d4" };
+  return { label: "Streaky", color: "#a855f7" };
+}
+
+// ── Head-to-head ─────────────────────────────────────────────────────────────
+
+export type HeadToHead = {
+  meetings: number;
+  wins: number;
+  losses: number;
+  avg_margin: number;
+  last_week: string | null;
+};
+
+export async function fetchHeadToHead(
+  teamId: string,
+  opponentId: string,
+  season?: SkeeSeason | null,
+): Promise<HeadToHead | null> {
+  const { data, error } = await supabase.rpc("rpc_skeeball_head_to_head", {
+    p_team_id: teamId,
+    p_opponent_id: opponentId,
+    p_start: season?.start_week ?? null,
+    p_end: season?.end_week ?? null,
+  });
+  if (error || !data || (data as any).error) return null;
+  return data as HeadToHead;
+}
+
+// ── Weekly awards ────────────────────────────────────────────────────────────
+
+export type WeeklyAwards = {
+  week_of: string | null;
+  top: { user_id: string; username: string; avatar_url: string | null; avg: number; games: number } | null;
+  most_improved: { user_id: string; username: string; avatar_url: string | null; delta_pct: number; avg: number } | null;
+};
+
+export async function fetchWeeklyAwards(season?: SkeeSeason | null): Promise<WeeklyAwards | null> {
+  const { data, error } = await supabase.rpc("rpc_skeeball_weekly_awards", {
+    p_start: season?.start_week ?? null,
+    p_end: season?.end_week ?? null,
+  });
+  if (error || !data || (data as any).error) return null;
+  return data as WeeklyAwards;
+}
+
 /** Up/down trend between the last two weeks with data. Null if fewer than 2. */
 export function weeklyTrend(
   weeks: { avg: number }[],

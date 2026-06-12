@@ -33,7 +33,7 @@ import { AppTour } from "../components/app-tour";
 import { useTour } from "../hooks/use-tour";
 import { getTourSteps } from "../../lib/tour-steps";
 import { PlayerLeagueCard } from "../components/skeeball-stats";
-import { fetchPlayerStats, fetchSkeeSeasons, type PlayerStats, type SkeeSeason } from "../lib/skeeball-stats";
+import { fetchPlayerInsights, fetchPlayerStats, fetchSkeeSeasons, type PlayerInsights, type PlayerStats, type SkeeSeason } from "../lib/skeeball-stats";
 
 type GameOption = { id: string; name: string; type: string; count: number };
 type TournPlacement = { tournament_id: string; title: string; placement: number; proposed_date: string | null };
@@ -74,6 +74,7 @@ export default function ProfileScreen() {
 
   // Skee-ball league stats
   const [leagueStats, setLeagueStats] = useState<PlayerStats | null>(null);
+  const [leagueInsights, setLeagueInsights] = useState<PlayerInsights | null>(null);
   const [skeeSeason, setSkeeSeason] = useState<SkeeSeason | null>(null);
   const [showSkeeStats, setShowSkeeStats] = useState(true);
   const [savingSkeeToggle, setSavingSkeeToggle] = useState(false);
@@ -159,7 +160,12 @@ export default function ProfileScreen() {
     const seasons = await fetchSkeeSeasons();
     const active = seasons.find((s) => s.status === "active") ?? null;
     setSkeeSeason(active);
-    setLeagueStats(await fetchPlayerStats(user.id, active));
+    const [stats, insights] = await Promise.all([
+      fetchPlayerStats(user.id, active),
+      fetchPlayerInsights(user.id, active),
+    ]);
+    setLeagueStats(stats);
+    setLeagueInsights(insights);
     setEmail(user.email ?? null);
     setPendingCount(pendingRes.count ?? 0);
 
@@ -555,7 +561,7 @@ export default function ProfileScreen() {
               <Text style={styles.sectionLabel}>
                 {skeeSeason ? skeeSeason.name : "Skee-Ball League"}
               </Text>
-              <PlayerLeagueCard stats={leagueStats} season={skeeSeason} />
+              <PlayerLeagueCard stats={leagueStats} season={skeeSeason} insights={leagueInsights} />
             </View>
           )}
 

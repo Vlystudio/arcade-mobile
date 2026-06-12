@@ -17,7 +17,7 @@ import type { AppRole } from "../components/role-badge";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { PlayerLeagueCard } from "../components/skeeball-stats";
-import { fetchPlayerStats, fetchSkeeSeasons, type PlayerStats, type SkeeSeason } from "../lib/skeeball-stats";
+import { fetchPlayerInsights, fetchPlayerStats, fetchSkeeSeasons, type PlayerInsights, type PlayerStats, type SkeeSeason } from "../lib/skeeball-stats";
 
 type UserProfile = {
   id: string;
@@ -48,6 +48,7 @@ export default function UserProfileScreen() {
   const [placements, setPlacements] = useState<Placement[]>([]);
   const [totalScores, setTotalScores] = useState(0);
   const [leagueStats, setLeagueStats] = useState<PlayerStats | null>(null);
+  const [leagueInsights, setLeagueInsights] = useState<PlayerInsights | null>(null);
   const [skeeSeason, setSkeeSeason] = useState<SkeeSeason | null>(null);
 
   async function load() {
@@ -134,7 +135,12 @@ export default function UserProfileScreen() {
         const seasons = await fetchSkeeSeasons();
         const active = seasons.find((sn) => sn.status === "active") ?? null;
         setSkeeSeason(active);
-        setLeagueStats(await fetchPlayerStats(userId, active));
+        const [lstats, linsights] = await Promise.all([
+          fetchPlayerStats(userId, active),
+          fetchPlayerInsights(userId, active),
+        ]);
+        setLeagueStats(lstats);
+        setLeagueInsights(linsights);
       }
     }
 
@@ -288,7 +294,7 @@ export default function UserProfileScreen() {
                 <Text style={[s.sectionLabel, { marginTop: 22 }]}>
                   {skeeSeason ? skeeSeason.name : "Skee-Ball League"}
                 </Text>
-                <PlayerLeagueCard stats={leagueStats} season={skeeSeason} />
+                <PlayerLeagueCard stats={leagueStats} season={skeeSeason} insights={leagueInsights} />
               </>
             )}
 

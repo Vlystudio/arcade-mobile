@@ -1,6 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 import {
+  BADGES,
+  clutchLabel,
+  consistencyLabel,
+  type PlayerInsights,
   type PlayerStats,
   type RingCounts,
   type SkeeSeason,
@@ -131,6 +135,75 @@ export function RingBreakdown({ rings, compact }: { rings: RingCounts; compact?:
   );
 }
 
+/** Small labeled chips: percentile, clutch style, consistency. */
+export function InsightChips({ insights }: { insights: PlayerInsights }) {
+  const clutch = clutchLabel(insights.clutch);
+  const consistency = consistencyLabel(insights.consistency);
+  const chips: { label: string; color: string; icon: string }[] = [];
+  if (insights.percentile != null) {
+    chips.push({
+      label: `Top ${Math.max(100 - insights.percentile, 1)}%`,
+      color: insights.percentile >= 80 ? "#f59e0b" : "#06b6d4",
+      icon: "podium-outline",
+    });
+  }
+  if (clutch) chips.push({ label: clutch.label, color: clutch.color, icon: "timer-outline" });
+  if (consistency) chips.push({ label: consistency.label, color: consistency.color, icon: "pulse-outline" });
+  if (insights.hundos && insights.hundos.count > 0) {
+    chips.push({ label: `${insights.hundos.count} hundo${insights.hundos.count === 1 ? "" : "s"}`, color: "#ef4444", icon: "flame-outline" });
+  }
+  if (chips.length === 0) return null;
+  return (
+    <View style={s.chipsRow}>
+      {chips.map((c) => (
+        <View key={c.label} style={[s.insightChip, { backgroundColor: `${c.color}14`, borderColor: `${c.color}38` }]}>
+          <Ionicons name={c.icon as any} size={11} color={c.color} />
+          <Text style={[s.insightChipText, { color: c.color }]}>{c.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** Earned badge row. */
+export function BadgeRow({ badges }: { badges: string[] }) {
+  const earned = badges.filter((b) => BADGES[b]);
+  if (earned.length === 0) return null;
+  return (
+    <View style={s.chipsRow}>
+      {earned.map((key) => {
+        const b = BADGES[key];
+        return (
+          <View key={key} style={[s.badge, { borderColor: `${b.color}40`, backgroundColor: `${b.color}10` }]}>
+            <Ionicons name={b.icon as any} size={12} color={b.color} />
+            <Text style={[s.badgeText, { color: b.color }]}>{b.label}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/** Per-lane average rows ("you shoot best on Lane 2"). */
+export function LaneStats({ lanes }: { lanes: PlayerInsights["lanes"] }) {
+  if (lanes.length < 2) return null;
+  const max = Math.max(...lanes.map((l) => l.avg), 1);
+  return (
+    <View style={{ gap: 5 }}>
+      {lanes.map((l, i) => (
+        <View key={l.lane_number} style={s.ringRow}>
+          <Text style={[s.laneLabel, i === 0 && { color: "#22c55e" }]}>L{l.lane_number}</Text>
+          <View style={s.ringTrack}>
+            <View style={[s.ringFill, { width: `${Math.round((l.avg / max) * 100)}%` as any, backgroundColor: i === 0 ? "#22c55e" : "#334155" }]} />
+          </View>
+          <Text style={s.ringPct}>{l.avg}</Text>
+          <Text style={s.ringCount}>({l.games})</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 /**
  * The full league stats card used on profiles: this week vs season
  * averages, trend, weekly chart, and ring breakdown.
@@ -139,10 +212,12 @@ export function PlayerLeagueCard({
   stats,
   season,
   title = "Skee-Ball League",
+  insights,
 }: {
   stats: PlayerStats;
   season?: SkeeSeason | null;
   title?: string;
+  insights?: PlayerInsights | null;
 }) {
   if (stats.totals.games === 0) return null;
   const lastWeek = stats.weeks[stats.weeks.length - 1];
@@ -176,6 +251,8 @@ export function PlayerLeagueCard({
         </View>
       </View>
 
+      {insights && <InsightChips insights={insights} />}
+
       {stats.weeks.length > 0 && (
         <>
           <Text style={s.subLabel}>Weekly Average</Text>
@@ -185,6 +262,24 @@ export function PlayerLeagueCard({
 
       <Text style={s.subLabel}>Shot Breakdown</Text>
       <RingBreakdown rings={stats.totals.rings} />
+
+      {insights && insights.lanes.length >= 2 && (
+        <>
+          <Text style={s.subLabel}>Lane Averages</Text>
+          <LaneStats lanes={insights.lanes} />
+        </>
+      )}
+
+      {insights && insights.records && (
+        <Text style={s.recordsLine}>
+          Records: best game {insights.records.best_game}
+          {insights.records.best_week_avg != null && insights.records.best_week_of
+            ? ` · best week ${insights.records.best_week_avg} avg (${weekLabel(insights.records.best_week_of, season)})`
+            : ""}
+        </Text>
+      )}
+
+      {insights && <BadgeRow badges={insights.badges} />}
     </View>
   );
 }
@@ -225,6 +320,20 @@ const s = StyleSheet.create({
   barValue: { fontSize: 9, fontWeight: "800", marginBottom: 2 },
   chartLabel: { color: "#444", fontSize: 9, fontWeight: "600", marginTop: 4 },
   chartEmpty: { color: "#444", fontSize: 12.5, paddingVertical: 8 },
+
+  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  insightChip: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1,
+  },
+  insightChipText: { fontSize: 11, fontWeight: "800" },
+  badge: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    borderRadius: 9, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1,
+  },
+  badgeText: { fontSize: 11, fontWeight: "800" },
+  laneLabel: { width: 30, fontSize: 12, fontWeight: "900", textAlign: "right", color: "#666" },
+  recordsLine: { color: "#555", fontSize: 11.5, lineHeight: 16 },
 
   ringRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   ringLabel: { width: 30, fontSize: 12, fontWeight: "900", textAlign: "right" },
