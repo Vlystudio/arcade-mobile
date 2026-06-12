@@ -17,6 +17,7 @@ import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { reportError } from "../lib/report-error";
 import { fetchPlayerStats } from "../lib/skeeball-stats";
+import { API_BASE } from "../../lib/api-base";
 
 const LANE_COUNT = 6;
 const TOTAL_BALLS = 9;
@@ -555,7 +556,28 @@ export default function SkeeballTrackerScreen({
       league_points: result.league_points ?? prev.league_points,
     } : prev);
 
-    // Try to finalize the league match — awards placement + league_points to all teams
+    // If this completion finalized the whole round, push results to every team.
+    // Server dedupes via notified_at, so racing clients can't double-send.
+    if (result.placement != null && mySession.league_match_id) {
+      notifyRoundFinal(mySession.league_match_id);
+    }
+  }
+
+  async function notifyRoundFinal(matchId: string) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      await fetch(`${API_BASE}/api/push/league`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ action: "round_final", matchId }),
+      });
+    } catch {
+      // push is best-effort
+    }
   }
 
   function togglePlayer(uid: string) {

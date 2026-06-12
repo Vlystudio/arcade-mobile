@@ -25,7 +25,8 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "versionCode": 2
     },
     "web": {
       "output": "static",
@@ -34,6 +35,13 @@
     "plugins": [
       "expo-router",
       "expo-media-library",
+      [
+        "expo-notifications",
+        {
+          "color": "#06b6d4",
+          "defaultChannel": "default"
+        }
+      ],
       [
         "expo-splash-screen",
         {

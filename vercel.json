@@ -1,5 +1,8 @@
 {
   "buildCommand": "EXPO_PUBLIC_GIT_BRANCH=$VERCEL_GIT_COMMIT_REF npx expo export --platform web",
+  "crons": [
+    { "path": "/api/push/league", "schedule": "0 21 * * 1" }
+  ],
   "ignoreCommand": "echo $VERCEL_GIT_COMMIT_REF | grep -qi '^dependabot/'",
   "outputDirectory": "dist",
   "framework": null,

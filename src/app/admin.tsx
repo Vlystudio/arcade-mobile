@@ -30,6 +30,7 @@ import {
 } from "../components/admin/admin-feature-panels";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
+import { API_BASE } from "../../lib/api-base";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1127,8 +1128,28 @@ export default function AdminScreen() {
     const inserts = Object.entries(schedule).flatMap(([slot, ids]) =>
       ids.map((tid) => ({ team_id: tid, slot_time: slot, week_label: label, week_of: weekOf }))
     );
-    if (inserts.length) await supabase.from("team_schedule").insert(inserts);
+    if (inserts.length) {
+      await supabase.from("team_schedule").insert(inserts);
+      notifyScheduleSaved(); // fire-and-forget push to scheduled teams
+    }
     setSavingSchedule(false);
+  }
+
+  async function notifyScheduleSaved() {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      await fetch(`${API_BASE}/api/push/league`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ action: "schedule_saved" }),
+      });
+    } catch {
+      // push is best-effort
+    }
   }
 
   // ── Tournaments ────────────────────────────────────────────────────────────
@@ -1746,7 +1767,25 @@ export default function AdminScreen() {
       setSkeeAdminError((data as any)?.message ?? (data as any)?.error ?? error?.message ?? "Failed to finalize.");
       return;
     }
+    notifyRoundFinal(skeeOpenMatch.id); // fire-and-forget push (server dedupes)
     await loadSkeeAdminSessions();
+  }
+
+  async function notifyRoundFinal(matchId: string) {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      await fetch(`${API_BASE}/api/push/league`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ action: "round_final", matchId }),
+      });
+    } catch {
+      // push is best-effort
+    }
   }
 
   async function handleSkeeAdjust() {

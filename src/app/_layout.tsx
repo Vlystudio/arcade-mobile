@@ -13,11 +13,23 @@ Sentry.init({
   integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
 });
 import { AdminProvider } from "../context/admin-context";
-import { AuthProvider } from "../context/auth-context";
+import { AuthProvider, useAuth } from "../context/auth-context";
 import { CartProvider } from "../context/cart-context";
 import { LocationProvider } from "../context/location-context";
 import { EnvBanner } from "../components/env-banner";
 import { ScreenshotButton } from "../components/screenshot-button";
+import { configureNotificationHandler, registerForPush } from "../lib/push";
+
+configureNotificationHandler();
+
+/** Registers the device for push once a user is signed in. Renders nothing. */
+function PushRegistrar() {
+  const { user } = useAuth();
+  React.useEffect(() => {
+    if (user) registerForPush(user.id);
+  }, [user?.id]);
+  return null;
+}
 
 export default function RootLayout() {
   return (
@@ -28,6 +40,7 @@ export default function RootLayout() {
       <CartProvider>
       <ThemeProvider value={DarkTheme}>
         <EnvBanner />
+        <PushRegistrar />
         <ScreenshotButton />
         <Stack
           screenOptions={{
