@@ -575,7 +575,7 @@ export default function LeaguesScreen() {
                               </View>
                             ) : t.eliminated ? (
                               <View style={[styles.raceTag, { backgroundColor: "rgba(100,100,100,0.12)" }]}>
-                                <Text style={[styles.raceTagText, { color: "#666" }]}>OUT OF 1ST</Text>
+                                <Text style={[styles.raceTagText, { color: "#7a7a7a" }]}>OUT OF 1ST</Text>
                               </View>
                             ) : (
                               <View style={[styles.raceTag, { backgroundColor: "rgba(34,197,94,0.1)" }]}>
@@ -712,7 +712,7 @@ function StatusBadge({ status }: { status: string }) {
   const map: Record<string, { bg: string; color: string }> = {
     active: { bg: "rgba(34,197,94,0.12)", color: "#22c55e" },
     planning: { bg: "rgba(245,158,11,0.12)", color: "#f59e0b" },
-    completed: { bg: "rgba(100,100,100,0.15)", color: "#666" },
+    completed: { bg: "rgba(100,100,100,0.15)", color: "#7a7a7a" },
   };
   const c = map[status] ?? map.planning;
   return (
@@ -762,7 +762,7 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: "#111", borderRadius: 20, paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   pillActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.08)" },
   pillText: { color: "#8a8a8a", fontWeight: "600", fontSize: 13 },
@@ -772,7 +772,7 @@ const styles = StyleSheet.create({
   seasonBanner: {
     backgroundColor: "#111", borderRadius: 16, padding: 16,
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 24,
   },
   seasonName: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 4 },
   seasonDates: { color: "#8a8a8a", fontSize: 13 },
@@ -784,9 +784,9 @@ const styles = StyleSheet.create({
   emptyInline: { paddingVertical: 16 },
   emptyInlineText: { color: "#777", fontSize: 14 },
 
-  table: { backgroundColor: "#111", borderRadius: 16, borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden", marginBottom: 28 },
+  table: { backgroundColor: "#111", borderRadius: 16, borderWidth: 1, borderColor: "#1a1a1a", overflow: "hidden", marginBottom: 28 },
   tableHead: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#0a0a0a" },
-  tableRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 13, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1e1e1e" },
+  tableRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 13, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a" },
   tableRowMe: { backgroundColor: "rgba(6,182,212,0.05)" },
   tableCell: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
   rankCol: { width: 28 },
@@ -800,7 +800,7 @@ const styles = StyleSheet.create({
   matchRow: {
     backgroundColor: "#111", borderRadius: 14, padding: 14,
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 8,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 8,
   },
   matchTeams: { flex: 1, gap: 2 },
   matchTeam: { color: "#fff", fontSize: 14, fontWeight: "700" },
@@ -809,7 +809,7 @@ const styles = StyleSheet.create({
   matchDate: { color: "#8a8a8a", fontSize: 13 },
 
   tabRow: { flexDirection: "row", gap: 8, marginBottom: 24 },
-  tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 14, backgroundColor: "#111", borderWidth: 1, borderColor: "#1e1e1e", alignItems: "center" },
+  tabBtn: { flex: 1, paddingVertical: 10, borderRadius: 14, backgroundColor: "#111", borderWidth: 1, borderColor: "#1a1a1a", alignItems: "center" },
   tabBtnActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.08)" },
   tabText: { color: "#8a8a8a", fontWeight: "700", fontSize: 13 },
   tabTextActive: { color: "#06b6d4", fontWeight: "900" },
@@ -818,7 +818,7 @@ const styles = StyleSheet.create({
   leaguePointsKeyTitle: { color: "#333", fontSize: 10, fontWeight: "800", letterSpacing: 1, marginBottom: 10 },
   leaguePointsRow: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 6 },
   leaguePointsEmoji: { fontSize: 18, width: 26 },
-  leaguePointsPlace: { color: "#666", fontSize: 13, fontWeight: "700", flex: 1 },
+  leaguePointsPlace: { color: "#7a7a7a", fontSize: 13, fontWeight: "700", flex: 1 },
   leaguePointsPts: { color: "#06b6d4", fontSize: 13, fontWeight: "900" },
 
   liveCard: {
@@ -886,7 +886,7 @@ const styles = StyleSheet.create({
   },
   pickemChipActive: { backgroundColor: "#a855f7", borderColor: "#a855f7" },
   pickemChipText: { color: "#ccc", fontSize: 12.5, fontWeight: "700" },
-  pickemBoardLabel: { color: "#555", fontSize: 10.5, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6 },
+  pickemBoardLabel: { color: "#6e6e6e", fontSize: 10.5, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6 },
   pickemBoardRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 4 },
   pickemBoardRank: { width: 18, color: "#a855f7", fontSize: 12, fontWeight: "900" },
   pickemBoardName: { flex: 1, color: "#ccc", fontSize: 13, fontWeight: "600" },
@@ -904,7 +904,7 @@ const styles = StyleSheet.create({
   weekDotDone: { backgroundColor: "#22c55e" },
   tapHint: { color: "#333", fontSize: 11, textAlign: "center", paddingVertical: 9, fontStyle: "italic" },
 
-  skeeMatchCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: "#1e1e1e" },
+  skeeMatchCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: "#1a1a1a" },
   skeeMatchDate: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 },
   skeeMatchRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a" },
   skeeMatchEmoji: { fontSize: 20, width: 28 },

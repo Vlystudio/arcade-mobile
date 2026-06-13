@@ -513,9 +513,9 @@ const s = StyleSheet.create({
   lockText: { flex: 1, color: "#fbbf24", fontSize: 12.5, lineHeight: 17 },
 
   section: { marginBottom: 18 },
-  sectionTitle: { color: "#666", fontSize: 11, fontWeight: "800", letterSpacing: 1, marginBottom: 6 },
+  sectionTitle: { color: "#7a7a7a", fontSize: 11, fontWeight: "800", letterSpacing: 1, marginBottom: 6 },
   sectionSub: { color: "#888", fontSize: 12.5, lineHeight: 18, marginBottom: 10 },
-  emptyText: { color: "#666", fontSize: 13, paddingVertical: 14, textAlign: "center" },
+  emptyText: { color: "#7a7a7a", fontSize: 13, paddingVertical: 14, textAlign: "center" },
 
   myPickRow: {
     flexDirection: "row", alignItems: "center", gap: 10,
@@ -593,7 +593,7 @@ const s = StyleSheet.create({
   sheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 24, paddingTop: 14, paddingBottom: 36,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
     width: "100%", maxWidth: 560, alignSelf: "center",
   },
   sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 14 },

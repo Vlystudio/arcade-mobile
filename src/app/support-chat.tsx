@@ -380,7 +380,7 @@ const s = StyleSheet.create({
   },
   input: {
     flex: 1, backgroundColor: "#111", borderRadius: 20,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     color: "#fff", fontSize: 15, paddingHorizontal: 16,
     paddingVertical: Platform.OS === "ios" ? 12 : 8,
     maxHeight: 120,

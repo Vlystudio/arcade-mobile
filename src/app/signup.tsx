@@ -320,14 +320,14 @@ const styles = StyleSheet.create({
   appName:  { color: "#fff", fontSize: 26, fontWeight: "900", letterSpacing: -0.5, marginBottom: 6 },
   tagline:  { color: "#777", fontSize: 14 },
 
-  form: { backgroundColor: "#111", borderRadius: 24, padding: 24, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24 },
+  form: { backgroundColor: "#111", borderRadius: 24, padding: 24, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 24 },
   formTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
   formSub:   { color: "#8a8a8a", fontSize: 14, marginBottom: 20 },
 
   inputWrap: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#0a0a0a", borderRadius: 14,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 12,
     paddingHorizontal: 14,
   },
   inputIcon: { marginRight: 10 },
@@ -338,7 +338,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "flex-start", gap: 10,
     backgroundColor: "#0a0a0a", borderRadius: 12,
     padding: 14, marginBottom: 12,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   checkbox: {
     width: 18, height: 18, borderRadius: 4, marginTop: 1,
@@ -375,7 +375,7 @@ const styles = StyleSheet.create({
   sheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
   },
   sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
 
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: "#0d0d0d", borderRadius: 16,
     paddingHorizontal: 18, paddingVertical: 16,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   suggestionChipPressed: { borderColor: "#06b6d4", backgroundColor: "rgba(6,182,212,0.05)" },
   suggestionAt:   { color: "#777", fontSize: 16, fontWeight: "700" },

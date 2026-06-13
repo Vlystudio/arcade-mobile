@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
   pickerSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
-    borderTopWidth: 1, borderColor: "#1e1e1e", gap: 10,
+    borderTopWidth: 1, borderColor: "#1a1a1a", gap: 10,
   },
   pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 4 },
   pickerTitle: { color: "#fff", fontSize: 16, fontWeight: "900", textAlign: "center", marginBottom: 4 },

@@ -94,7 +94,7 @@ export function WeeklyBarChart({
                 {compareWeeks && (
                   b != null ? (
                     <View style={s.barWrap}>
-                      <Text style={[s.barValue, { color: "#666" }]}>{b}</Text>
+                      <Text style={[s.barValue, { color: "#7a7a7a" }]}>{b}</Text>
                       <View style={[s.bar, {
                         height: Math.max((b / max) * (height - 26), 3),
                         backgroundColor: compareColor,
@@ -287,7 +287,7 @@ export function PlayerLeagueCard({
 const s = StyleSheet.create({
   card: {
     backgroundColor: "#111", borderRadius: 18, padding: 16,
-    borderWidth: 1, borderColor: "#1e1e1e", gap: 12,
+    borderWidth: 1, borderColor: "#1a1a1a", gap: 12,
   },
   cardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   cardTitleRow: { flexDirection: "row", alignItems: "center", gap: 7 },
@@ -332,7 +332,7 @@ const s = StyleSheet.create({
     borderRadius: 9, paddingHorizontal: 9, paddingVertical: 5, borderWidth: 1,
   },
   badgeText: { fontSize: 11, fontWeight: "800" },
-  laneLabel: { width: 30, fontSize: 12, fontWeight: "900", textAlign: "right", color: "#666" },
+  laneLabel: { width: 30, fontSize: 12, fontWeight: "900", textAlign: "right", color: "#7a7a7a" },
   recordsLine: { color: "#8a8a8a", fontSize: 11.5, lineHeight: 16 },
 
   ringRow: { flexDirection: "row", alignItems: "center", gap: 8 },

@@ -358,7 +358,7 @@ const s = StyleSheet.create({
   nextUpLabel: { color: "#a855f7", fontSize: 12, fontWeight: "900", letterSpacing: 1.5 },
   nextUpThumb: { width: 120, height: 80, borderRadius: 10 },
   nextUpTitle: { color: "#fff", fontSize: 18, fontWeight: "800", textAlign: "center", maxWidth: 360 },
-  nextUpBy: { color: "#666", fontSize: 14 },
+  nextUpBy: { color: "#7a7a7a", fontSize: 14 },
 
   nowBar: { position: "absolute" as any, bottom: 0, left: 0, right: 0, zIndex: 5 },
   nowBarGradient: { position: "absolute" as any, top: -60, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0)" },

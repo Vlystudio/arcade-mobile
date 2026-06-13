@@ -416,7 +416,7 @@ const styles = StyleSheet.create({
   methodCard: {
     flexDirection: "row", alignItems: "center", gap: 14,
     backgroundColor: "#111", borderRadius: 20, padding: 18,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   methodIcon: {
     width: 46, height: 46, borderRadius: 14, borderWidth: 1,
@@ -427,7 +427,7 @@ const styles = StyleSheet.create({
 
   stepCard: {
     backgroundColor: "#111", borderRadius: 20, padding: 20,
-    borderWidth: 1, borderColor: "#1e1e1e", gap: 10,
+    borderWidth: 1, borderColor: "#1a1a1a", gap: 10,
   },
   stepNum: { color: "#06b6d4", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1 },
   stepTitle: { color: "#fff", fontSize: 16, fontWeight: "900" },
@@ -450,14 +450,14 @@ const styles = StyleSheet.create({
   secretBox: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     backgroundColor: "#0a0a0a", borderRadius: 10, padding: 12,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   secretCode: { color: "#888", fontSize: 13, fontFamily: Platform.OS === "ios" ? "Courier New" : "monospace", letterSpacing: 1 },
 
   phoneInputWrap: {
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: "#0a0a0a", borderRadius: 14,
-    borderWidth: 1, borderColor: "#1e1e1e", paddingHorizontal: 14,
+    borderWidth: 1, borderColor: "#1a1a1a", paddingHorizontal: 14,
   },
   phoneInput: { flex: 1, color: "#fff", paddingVertical: 15, fontSize: 16 },
 
@@ -465,7 +465,7 @@ const styles = StyleSheet.create({
     fontSize: 28, fontWeight: "900", letterSpacing: 16,
     color: "#fff", backgroundColor: "#0a0a0a",
     borderRadius: 14, paddingVertical: 18,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
 
   resendBtn: { alignItems: "center", paddingVertical: 6 },

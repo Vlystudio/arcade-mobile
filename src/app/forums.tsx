@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#141414", borderWidth: 1, borderColor: "#222",
   },
   filterChipActive: { backgroundColor: "rgba(6,182,212,0.12)", borderColor: "#06b6d4" },
-  filterChipText: { color: "#666", fontSize: 13, fontWeight: "600" },
+  filterChipText: { color: "#7a7a7a", fontSize: 13, fontWeight: "600" },
   filterChipTextActive: { color: "#06b6d4", fontWeight: "700" },
   filterDot: { width: 7, height: 7, borderRadius: 4 },
 

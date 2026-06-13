@@ -20,7 +20,7 @@ const CATEGORIES = [
   { key: "bug",     label: "Bug Report",       icon: "bug-outline" as const,       color: "#ef4444" },
   { key: "feature", label: "Feature Request",  icon: "bulb-outline" as const,      color: "#f59e0b" },
   { key: "general", label: "General Feedback", icon: "chatbubble-outline" as const, color: "#06b6d4" },
-  { key: "other",   label: "Other",            icon: "ellipsis-horizontal-outline" as const, color: "#666" },
+  { key: "other",   label: "Other",            icon: "ellipsis-horizontal-outline" as const, color: "#7a7a7a" },
 ] as const;
 
 type Category = typeof CATEGORIES[number]["key"];
@@ -218,7 +218,7 @@ const s = StyleSheet.create({
 
   textAreaWrap: {
     backgroundColor: "#111", borderRadius: 16,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     padding: 16, minHeight: 160,
   },
   textArea: { color: "#fff", fontSize: 15, lineHeight: 22, flex: 1 },

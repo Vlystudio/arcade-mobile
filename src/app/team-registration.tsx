@@ -361,7 +361,7 @@ function PrizeRow({ label, amount, color, icon, last }: { place: number; label: 
 
 const pr = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12 },
-  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
+  rowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   label: { flex: 1, color: "#aaa", fontSize: 14, fontWeight: "600" },
   amount: { fontSize: 18, fontWeight: "900" },
 });
@@ -396,12 +396,12 @@ const s = StyleSheet.create({
 
   prizeCard: {
     backgroundColor: "#0d0d0d", borderRadius: 18, paddingHorizontal: 18, paddingVertical: 4,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
 
   optCard: {
     backgroundColor: "#0d0d0d", borderRadius: 18, padding: 18,
-    borderWidth: 1.5, borderColor: "#1e1e1e",
+    borderWidth: 1.5, borderColor: "#1a1a1a",
   },
   optCardSelected: { borderColor: "#06b6d4", backgroundColor: "rgba(6,182,212,0.04)" },
   optTop: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 10 },

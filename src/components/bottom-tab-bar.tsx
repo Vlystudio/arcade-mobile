@@ -153,6 +153,8 @@ export default function BottomTabBar() {
     : BASE_TABS;
 
   const isWideWeb = Platform.OS === "web" && windowWidth >= 1100;
+  // Monday = league night: pulse a LIVE dot on the Teams tab
+  const isLeagueNight = new Date().getDay() === 1;
 
   const activeIndex = tabs.findIndex((t) => t.route === pathname);
   const tabWidth = windowWidth / tabs.length;
@@ -230,6 +232,7 @@ export default function BottomTabBar() {
                     color={active ? (isAdminTab ? "#f59e0b" : "#fff") : "#777"}
                   />
                 )}
+                {tab.route === "/teams" && isLeagueNight && <View style={styles.liveDot} />}
                 {badge > 0 && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>{badge > 9 ? "9+" : badge}</Text>
@@ -293,7 +296,8 @@ export default function BottomTabBar() {
                   color={active ? (isAdminTab ? "#f59e0b" : "#fff") : "#5a5a5a"}
                 />
               )}
-              {badge > 0 && (
+              {tab.route === "/teams" && isLeagueNight && <View style={styles.liveDot} />}
+                {badge > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{badge > 9 ? "9+" : badge}</Text>
                 </View>
@@ -311,7 +315,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: "#0a0a0a",
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#1e1e1e",
+    borderTopColor: "#1a1a1a",
     paddingTop: 10,
   },
   dot: {
@@ -340,6 +344,11 @@ const styles = StyleSheet.create({
     borderColor: "#0a0a0a",
   },
   badgeText: { color: "#fff", fontSize: 9.5, fontWeight: "900" },
+  liveDot: {
+    position: "absolute", top: -3, left: -7,
+    width: 8, height: 8, borderRadius: 4, backgroundColor: "#ef4444",
+    borderWidth: 1.5, borderColor: "#0a0a0a",
+  },
 
   avatarRing: {
     width: 27,

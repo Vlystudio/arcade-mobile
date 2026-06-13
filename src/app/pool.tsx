@@ -479,7 +479,7 @@ const styles = StyleSheet.create({
   tableCard: {
     width: "47%", backgroundColor: "#111",
     borderRadius: 20, padding: 16,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     gap: 6,
   },
   tableCardOccupied: { borderColor: "rgba(239,68,68,0.2)", backgroundColor: "#110808" },
@@ -519,7 +519,7 @@ const styles = StyleSheet.create({
   recentCard: {
     backgroundColor: "#111", borderRadius: 16, padding: 14,
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
+    marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a",
   },
   recentLeft: { flexDirection: "row", alignItems: "center", gap: 12 },
   recentGameTypeBadge: { backgroundColor: "rgba(168,85,247,0.12)", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
   modalSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 36,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
   },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 2 },
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
   fieldLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 10 },
 
   gameTypeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 20 },
-  gameTypeCard: { width: "47%", backgroundColor: "#0d0d0d", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#1e1e1e" },
+  gameTypeCard: { width: "47%", backgroundColor: "#0d0d0d", borderRadius: 14, padding: 12, borderWidth: 1, borderColor: "#1a1a1a" },
   gameTypeCardActive: { borderColor: "rgba(168,85,247,0.5)", backgroundColor: "rgba(168,85,247,0.1)" },
   gameTypeLabel: { color: "#888", fontWeight: "800", fontSize: 14, marginBottom: 2 },
   gameTypeLabelActive: { color: "#a855f7" },
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
   opponentChip: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(168,85,247,0.12)", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: "rgba(168,85,247,0.25)" },
   opponentChipText: { color: "#a855f7", fontSize: 13, fontWeight: "700" },
 
-  searchWrap: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#0a0a0a", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 6 },
+  searchWrap: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#0a0a0a", borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 6 },
   searchInput: { flex: 1, color: "#fff", fontSize: 15 },
   resultRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   resultName: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
   modalConfirmText: { color: "#fff", fontWeight: "900" },
 
   winnerList: { gap: 8, marginBottom: 8 },
-  winnerRow: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#0d0d0d", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#1e1e1e" },
+  winnerRow: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#0d0d0d", borderRadius: 14, padding: 14, borderWidth: 1, borderColor: "#1a1a1a" },
   winnerRowSelected: { borderColor: "rgba(245,158,11,0.4)", backgroundColor: "rgba(245,158,11,0.06)" },
   winnerRadio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: "#2a2a2a", alignItems: "center", justifyContent: "center" },
   winnerRadioActive: { borderColor: "#f59e0b" },

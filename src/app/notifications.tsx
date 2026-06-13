@@ -121,7 +121,7 @@ const s = StyleSheet.create({
   },
   title: { color: "#fff", fontSize: 14, fontWeight: "700", lineHeight: 19 },
   body: { color: "#8a8a8a", fontSize: 12.5, marginTop: 2, lineHeight: 17 },
-  time: { color: "#555", fontSize: 11.5, fontWeight: "600" },
+  time: { color: "#6e6e6e", fontSize: 11.5, fontWeight: "600" },
 
   empty: { alignItems: "center", gap: 10, paddingVertical: 80, paddingHorizontal: 32 },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },

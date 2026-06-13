@@ -356,7 +356,7 @@ const s = StyleSheet.create({
 
   teamCard: {
     backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: "#1e1e1e", gap: 10,
+    borderWidth: 1, borderColor: "#1a1a1a", gap: 10,
   },
   teamCardActive: { borderColor: "rgba(6,182,212,0.3)" },
   teamRow: { flexDirection: "row", alignItems: "center", gap: 12 },

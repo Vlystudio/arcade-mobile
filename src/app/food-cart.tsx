@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
 
   cartItem: {
     backgroundColor: "#111", borderRadius: 18, padding: 16,
-    marginBottom: 10, borderWidth: 1, borderColor: "#1e1e1e",
+    marginBottom: 10, borderWidth: 1, borderColor: "#1a1a1a",
   },
   cartItemInfo: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 },
   cartItemName: { color: "#fff", fontSize: 15, fontWeight: "800", flex: 1 },
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
 
   inputCard: {
     backgroundColor: "#111", borderRadius: 18,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     marginBottom: 20, overflow: "hidden",
   },
   inputRow: { flexDirection: "row", alignItems: "flex-start", gap: 12, padding: 16 },
@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
 
   summaryCard: {
     backgroundColor: "#111", borderRadius: 18,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     padding: 18, marginBottom: 20,
   },
   summaryRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },

@@ -490,14 +490,14 @@ const s = StyleSheet.create({
 
   content: { padding: 20, paddingBottom: 48 },
 
-  nowCard: { backgroundColor: "#111", borderRadius: 20, padding: 16, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24 },
+  nowCard: { backgroundColor: "#111", borderRadius: 20, padding: 16, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 24 },
   nowBadge: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#a855f7", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, alignSelf: "flex-start", marginBottom: 12 },
   nowBadgeText: { color: "#000", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
   nowRow: { flexDirection: "row", gap: 12 },
   nowThumb: { width: 72, height: 72, borderRadius: 10 },
   nowInfo: { flex: 1 },
   nowTitle: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 4 },
-  nowChannel: { color: "#666", fontSize: 12, marginBottom: 4 },
+  nowChannel: { color: "#7a7a7a", fontSize: 12, marginBottom: 4 },
   nowRequester: { color: "#a855f7", fontSize: 12, fontWeight: "700" },
 
   emptyNow: { alignItems: "center", paddingVertical: 36, marginBottom: 8 },
@@ -506,10 +506,10 @@ const s = StyleSheet.create({
 
   sectionLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
 
-  emptyQueue: { backgroundColor: "#111", borderRadius: 16, padding: 24, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e" },
+  emptyQueue: { backgroundColor: "#111", borderRadius: 16, padding: 24, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a" },
   emptyQueueText: { color: "#777", fontSize: 14 },
 
-  queueItem: { flexDirection: "row", alignItems: "center", backgroundColor: "#111", borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e", gap: 10 },
+  queueItem: { flexDirection: "row", alignItems: "center", backgroundColor: "#111", borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a", gap: 10 },
   queuePos: { color: "#8a8a8a", fontSize: 13, fontWeight: "900", minWidth: 20, textAlign: "center" },
   queueThumb: { width: 52, height: 52, borderRadius: 8 },
   thumbPlaceholder: { backgroundColor: "#1a1a1a", alignItems: "center", justifyContent: "center" },
@@ -524,7 +524,7 @@ const s = StyleSheet.create({
   // Modal
   modalBg: { flex: 1, justifyContent: "flex-end" },
   modalDismiss: { ...StyleSheet.absoluteFillObject, backgroundColor: "rgba(0,0,0,0.6)" },
-  modalSheet: { backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1e1e1e", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24, maxHeight: "85%" },
+  modalSheet: { backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1a1a1a", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24, maxHeight: "85%" },
   modalHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 16 },
   modalTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
   limitNote: {
@@ -535,10 +535,10 @@ const s = StyleSheet.create({
   },
   limitNoteText: { flex: 1, color: "#7dd3e0", fontSize: 12, lineHeight: 17 },
 
-  input: { backgroundColor: "#0d0d0d", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: "#fff", fontSize: 14, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12 },
+  input: { backgroundColor: "#0d0d0d", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, color: "#fff", fontSize: 14, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 12 },
 
   tabs: { flexDirection: "row", gap: 8, marginBottom: 14 },
-  tabBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 12, backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#1e1e1e" },
+  tabBtn: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 9, borderRadius: 12, backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#1a1a1a" },
   tabBtnActive: { backgroundColor: "#a855f7", borderColor: "#a855f7" },
   tabText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
   tabTextActive: { color: "#000" },
@@ -553,7 +553,7 @@ const s = StyleSheet.create({
   },
   ytAttributionText: { color: "#888", fontSize: 12.5, fontWeight: "700" },
   legalFooter: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingBottom: 20, flexWrap: "wrap" },
-  legalFooterLink: { color: "#666", fontSize: 11.5, fontWeight: "600", textDecorationLine: "underline" },
+  legalFooterLink: { color: "#7a7a7a", fontSize: 11.5, fontWeight: "600", textDecorationLine: "underline" },
   legalFooterDot: { color: "#333", fontSize: 11.5 },
   recentRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
   recentChip: {

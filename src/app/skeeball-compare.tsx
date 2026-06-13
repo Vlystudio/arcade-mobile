@@ -334,7 +334,7 @@ const s = StyleSheet.create({
   slot: {
     flex: 1, alignItems: "center", gap: 6,
     backgroundColor: "#111", borderRadius: 18, padding: 16,
-    borderWidth: 1.5, borderColor: "#1e1e1e",
+    borderWidth: 1.5, borderColor: "#1a1a1a",
   },
   slotName: { fontSize: 14, fontWeight: "800" },
   slotChange: { color: "#777", fontSize: 11, fontWeight: "600" },
@@ -351,7 +351,7 @@ const s = StyleSheet.create({
   scopeChip: {
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: "#111", borderRadius: 18, paddingHorizontal: 13, paddingVertical: 7,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   scopeChipActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.08)" },
   scopeChipText: { color: "#8a8a8a", fontSize: 12.5, fontWeight: "600" },
@@ -372,7 +372,7 @@ const s = StyleSheet.create({
 
   card: {
     backgroundColor: "#111", borderRadius: 16, padding: 14,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 14, gap: 8,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 14, gap: 8,
   },
 
   compareRow: { flexDirection: "row", alignItems: "center", paddingVertical: 10 },
@@ -384,7 +384,7 @@ const s = StyleSheet.create({
   trendRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
   trendCol: {
     flex: 1, backgroundColor: "#111", borderRadius: 14, padding: 12, gap: 8,
-    alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e",
+    alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a",
   },
   trendName: { fontSize: 13, fontWeight: "800" },
   trendNone: { color: "#6b6b6b", fontSize: 11 },
@@ -404,7 +404,7 @@ const s = StyleSheet.create({
     width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 32,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
   },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 14 },
   modalTitle: { color: "#fff", fontSize: 17, fontWeight: "900", marginBottom: 14, textAlign: "center" },
@@ -412,7 +412,7 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: "#0a0a0a", borderRadius: 14,
     paddingHorizontal: 14, paddingVertical: 11,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 10,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 10,
   },
   searchInput: { flex: 1, color: "#fff", fontSize: 15 },
   suggestLabel: {

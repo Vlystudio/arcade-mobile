@@ -434,7 +434,7 @@ const styles = StyleSheet.create({
   cartBtn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: "#111", alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   cartBadge: {
     position: "absolute", top: -4, right: -4,
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: "#0d0d0d", borderRadius: 14,
     paddingHorizontal: 14, paddingVertical: 12,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 16,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 16,
   },
   searchInput: { flex: 1, color: "#fff", fontSize: 15 },
 
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: "#0d0d0d", borderRadius: 20,
     paddingHorizontal: 14, paddingVertical: 8,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   pillText: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
 
@@ -504,7 +504,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: "#111", borderRadius: 18, flexDirection: "row",
     alignItems: "center", gap: 14, marginBottom: 10, padding: 12,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   cardPhoto: { width: 72, height: 72, borderRadius: 14 },
   cardPhotoPlaceholder: {
@@ -530,7 +530,7 @@ const styles = StyleSheet.create({
   sheetDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   sheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    borderTopWidth: 1, borderColor: "#1e1e1e", overflow: "hidden",
+    borderTopWidth: 1, borderColor: "#1a1a1a", overflow: "hidden",
   },
   sheetHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginTop: 12, marginBottom: 0, position: "absolute", top: 0, zIndex: 1 },
   sheetPhoto: { width: "100%", height: 220 },

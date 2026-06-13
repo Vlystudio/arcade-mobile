@@ -208,7 +208,7 @@ const styles = StyleSheet.create({
   inputWrap: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#0a0a0a", borderRadius: 14,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     paddingHorizontal: 14,
   },
   inputIcon: { marginRight: 10 },

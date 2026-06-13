@@ -642,7 +642,7 @@ const styles = StyleSheet.create({
   testBtn: {
     backgroundColor: "#111", borderRadius: 10,
     paddingHorizontal: 16, paddingVertical: 10,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   testBtnText: { color: "#888", fontWeight: "700", fontSize: 13 },
   manualBox: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", paddingTop: 14, marginTop: 4 },
@@ -652,7 +652,7 @@ const styles = StyleSheet.create({
   manualBtnOff: { opacity: 0.45 },
   manualBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
 
-  permCard: { backgroundColor: "#111", borderRadius: 24, padding: 28, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", width: "100%" },
+  permCard: { backgroundColor: "#111", borderRadius: 24, padding: 28, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a", width: "100%" },
   permIcon: { width: 64, height: 64, borderRadius: 18, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 16 },
   permTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 8, textAlign: "center" },
   permSub: { color: "#8a8a8a", fontSize: 14, textAlign: "center", marginBottom: 24, lineHeight: 20 },
@@ -663,7 +663,7 @@ const styles = StyleSheet.create({
   successRoot: { flex: 1, backgroundColor: "#000", justifyContent: "center", padding: 28 },
   successCard: {
     backgroundColor: "#111", borderRadius: 28, padding: 32,
-    alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24,
+    alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 24,
   },
   successIconWrap: {
     width: 88, height: 88, borderRadius: 44,
@@ -684,7 +684,7 @@ const styles = StyleSheet.create({
   submitScoreBtnText: { color: "#000", fontWeight: "900", fontSize: 17 },
   notNowBtn: {
     backgroundColor: "#111", borderRadius: 18, paddingVertical: 16,
-    alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e",
+    alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a",
   },
   notNowText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 

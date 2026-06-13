@@ -154,7 +154,7 @@ const s = StyleSheet.create({
   sheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 22, paddingTop: 14, paddingBottom: 32,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
     width: "100%", maxWidth: 560, alignSelf: "center",
   },
   handle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 14 },

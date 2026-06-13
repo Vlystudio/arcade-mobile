@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
     borderRadius: 22, paddingHorizontal: 16, paddingVertical: 11,
     color: "#fff", fontSize: 15, lineHeight: 20,
     maxHeight: 120,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   sendBtn: {
     width: 44, height: 44, borderRadius: 22,

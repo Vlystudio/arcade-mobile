@@ -1657,7 +1657,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", gap: 8,
     marginBottom: 16, padding: 4,
     backgroundColor: "#0d0d0d", borderRadius: 12,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   postDestBtn: {
     flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
@@ -1702,13 +1702,13 @@ const styles = StyleSheet.create({
   interSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 22, paddingTop: 14, paddingBottom: 32,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
     width: "100%", maxWidth: 560, alignSelf: "center",
   },
   interHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 12 },
   interTitle: { color: "#fff", fontSize: 18, fontWeight: "900", textAlign: "center", marginBottom: 10 },
   interEmpty: { color: "#777", fontSize: 13.5, textAlign: "center", paddingVertical: 26 },
-  interSection: { color: "#666", fontSize: 11, fontWeight: "800", letterSpacing: 1, marginTop: 10, marginBottom: 6 },
+  interSection: { color: "#7a7a7a", fontSize: 11, fontWeight: "800", letterSpacing: 1, marginTop: 10, marginBottom: 6 },
   interRow: {
     flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 8,
     borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
@@ -1727,7 +1727,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16, marginBottom: 10,
     borderWidth: 1, borderColor: "#1a1a1a",
   },
-  quickComposerText: { flex: 1, color: "#555", fontSize: 14 },
+  quickComposerText: { flex: 1, color: "#6e6e6e", fontSize: 14 },
   onboardCard: {
     backgroundColor: "rgba(6,182,212,0.04)", borderRadius: 16,
     padding: 14, marginHorizontal: 16, marginBottom: 10,
@@ -1737,7 +1737,7 @@ const styles = StyleSheet.create({
   onboardTitle: { color: "#fff", fontSize: 14, fontWeight: "800" },
   onboardRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 7 },
   onboardLabel: { flex: 1, color: "#ccc", fontSize: 13.5, fontWeight: "600" },
-  onboardLabelDone: { color: "#555", textDecorationLine: "line-through" },
+  onboardLabelDone: { color: "#6e6e6e", textDecorationLine: "line-through" },
 
   broadcastBanner: {
     flexDirection: "row", alignItems: "flex-start", gap: 10,
@@ -1776,7 +1776,7 @@ const styles = StyleSheet.create({
   cmtTopRow: { flexDirection: "row", alignItems: "center", gap: 8 },
 
   cmtRow: { flexDirection: "row", gap: 10, paddingHorizontal: 4, marginBottom: 14, alignItems: "flex-start" },
-  cmtBubble: { flex: 1, backgroundColor: "#161616", borderRadius: 14, padding: 10, borderWidth: 1, borderColor: "#1e1e1e" },
+  cmtBubble: { flex: 1, backgroundColor: "#161616", borderRadius: 14, padding: 10, borderWidth: 1, borderColor: "#1a1a1a" },
   cmtAuthor: { color: "#06b6d4", fontSize: 12, fontWeight: "800", marginBottom: 3 },
   cmtContent: { color: "#ccc", fontSize: 14, lineHeight: 20 },
   cmtInputRow: { flexDirection: "row", alignItems: "center", gap: 10, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#222" },

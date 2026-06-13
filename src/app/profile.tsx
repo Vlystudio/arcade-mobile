@@ -1412,13 +1412,13 @@ const styles = StyleSheet.create({
   statBox: {
     flex: 1, backgroundColor: "#111", borderRadius: 18,
     padding: 16, alignItems: "center",
-    borderWidth: 1, borderColor: "#1e1e1e", gap: 4,
+    borderWidth: 1, borderColor: "#1a1a1a", gap: 4,
   },
   statBoxValue: { fontSize: 26, fontWeight: "900", letterSpacing: -0.5 },
   statBoxLabel: { color: "#777", fontSize: 11, fontWeight: "600" },
 
   noGameCard: {
-    backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e",
+    backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1a1a1a",
     padding: 24, alignItems: "center", gap: 8, marginBottom: 22,
   },
   noGameText: { color: "#fff", fontSize: 15, fontWeight: "800" },
@@ -1434,7 +1434,7 @@ const styles = StyleSheet.create({
   // ── Tournament history ──
   placementsCard: {
     backgroundColor: "#111", borderRadius: 18,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     overflow: "hidden", marginBottom: 22,
   },
   placementRow:     { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
@@ -1459,7 +1459,7 @@ const styles = StyleSheet.create({
     width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#0d0d0d", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 18, paddingTop: 14, paddingBottom: 12,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
     maxHeight: "88%",
   },
   settingsTitle: { color: "#fff", fontSize: 17, fontWeight: "900", textAlign: "center", marginBottom: 16 },
@@ -1470,7 +1470,7 @@ const styles = StyleSheet.create({
   },
   settingsGroup: {
     backgroundColor: "#141414", borderRadius: 16,
-    borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden",
+    borderWidth: 1, borderColor: "#1a1a1a", overflow: "hidden",
   },
   settingsRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 14, paddingVertical: 12, gap: 12 },
   settingsIcon: {
@@ -1511,9 +1511,9 @@ const styles = StyleSheet.create({
   },
   editAvatarAction: { color: "#06b6d4", fontSize: 14, fontWeight: "800", marginBottom: 24 },
   editField: { width: "100%", marginBottom: 18 },
-  editFieldLabel: { color: "#666", fontSize: 12, fontWeight: "700", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.6 },
+  editFieldLabel: { color: "#7a7a7a", fontSize: 12, fontWeight: "700", marginBottom: 7, textTransform: "uppercase", letterSpacing: 0.6 },
   editFieldInput: {
-    backgroundColor: "#111", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
+    backgroundColor: "#111", borderRadius: 14, borderWidth: 1, borderColor: "#1a1a1a",
     color: "#fff", fontSize: 15, paddingHorizontal: 16, paddingVertical: 13,
   },
   editBioInput: { minHeight: 88, maxHeight: 130, textAlignVertical: "top", paddingTop: 13 },
@@ -1525,7 +1525,7 @@ const styles = StyleSheet.create({
     width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
-    borderTopWidth: 1, borderColor: "#1e1e1e", gap: 10,
+    borderTopWidth: 1, borderColor: "#1a1a1a", gap: 10,
     maxHeight: "75%",
   },
   pickerTitle: { color: "#fff", fontSize: 16, fontWeight: "900", textAlign: "center" },
@@ -1561,7 +1561,7 @@ const styles = StyleSheet.create({
   noGamesSub: { color: "#777", fontSize: 12, textAlign: "center" },
 
   searchSectionLabel: {
-    color: "#555", fontSize: 10.5, fontWeight: "800",
+    color: "#6e6e6e", fontSize: 10.5, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1, marginTop: 10, marginBottom: 4,
   },
   searchTeamIcon: {
@@ -1575,7 +1575,7 @@ const styles = StyleSheet.create({
   unblockBtnText: { color: "#06b6d4", fontSize: 12.5, fontWeight: "800" },
 
   pwInput: {
-    backgroundColor: "#0a0a0a", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
+    backgroundColor: "#0a0a0a", borderRadius: 14, borderWidth: 1, borderColor: "#1a1a1a",
     color: "#fff", fontSize: 15, paddingHorizontal: 16, paddingVertical: 13,
   },
   pwError: { color: "#ef4444", fontSize: 13 },
@@ -1584,7 +1584,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: "#0a0a0a", borderRadius: 14,
     paddingHorizontal: 14, paddingVertical: 12,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 12,
   },
   searchTextInput: { flex: 1, color: "#fff", fontSize: 15 },
   searchResultRow: {

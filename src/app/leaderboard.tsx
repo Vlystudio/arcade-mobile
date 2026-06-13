@@ -26,6 +26,7 @@ import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { showToast } from "../components/toast";
 import { openUserProfile } from "../lib/open-profile";
+import { ScoreText } from "../components/score-text";
 
 type LeaderEntry = {
   rank: number;
@@ -260,7 +261,7 @@ export default function LeaderboardScreen() {
     }
 
     const whose = shareEntry.user_id === user.id ? "my" : `${shareEntry.username}'s`;
-    const content = `🏆 Check out ${whose} leaderboard score!\n#${shareEntry.rank} · ${shareEntry.score.toLocaleString()} pts\n${shareEntry.game_name}\n${process.env.EXPO_PUBLIC_SITE_URL ?? "https://www.vlystudios.com"}/score-share?id=${shareEntry.id}`;
+    const content = `🏆 Check out ${whose} leaderboard score!\n#${shareEntry.rank} · ${shareEntry.score.toLocaleString()} pts\n${shareEntry.game_name}\n${process.env.EXPO_PUBLIC_SITE_URL ?? "https://www.vlystudios.com"}/s/${shareEntry.id}`;
     await supabase.from("messages").insert({ conversation_id: convId, sender_id: user.id, content });
     await supabase.from("conversations").update({
       last_message: `🏆 Shared a score`,
@@ -273,7 +274,7 @@ export default function LeaderboardScreen() {
 
   async function shareScore(entry: LeaderEntry) {
     const mine = entry.user_id === user?.id;
-    const url = `${process.env.EXPO_PUBLIC_SITE_URL ?? "https://www.vlystudios.com"}/score-share?id=${entry.id}`;
+    const url = `${process.env.EXPO_PUBLIC_SITE_URL ?? "https://www.vlystudios.com"}/s/${entry.id}`;
     const msg = mine
       ? `I ranked #${entry.rank} on the ${entry.game_name} leaderboard with ${entry.score.toLocaleString()} pts! 🎯`
       : `${entry.username} ranks #${entry.rank} on the ${entry.game_name} leaderboard with ${entry.score.toLocaleString()} pts! 🎯`;
@@ -648,7 +649,7 @@ function RankRow({ entry, isLast, isMe, onShare }: { entry: LeaderEntry; isLast:
         </Text>
         <Text style={styles.listGame}>{entry.game_name}</Text>
       </Pressable>
-      <Text style={styles.listScore}>{entry.score.toLocaleString()}</Text>
+      <ScoreText value={entry.score} style={styles.listScore} />
       <Pressable style={styles.listShareBtn} onPress={onShare}>
         <Ionicons name="share-outline" size={16} color="#06b6d4" />
       </Pressable>
@@ -694,7 +695,7 @@ function PodiumCard({ entry, isMe, delay, onShare }: { entry: LeaderEntry; isMe:
         <Text style={[styles.podiumAvatarText, { fontSize: avatarSize * 0.38 }]}>{entry.username[0].toUpperCase()}</Text>
       </Pressable>
       <Text style={styles.podiumUsername} numberOfLines={1}>{entry.username}</Text>
-      <Text style={[styles.podiumScore, { color: accent }]}>{entry.score.toLocaleString()}</Text>
+      <ScoreText value={entry.score} animate style={[styles.podiumScore, { color: accent }]} />
       <Text style={styles.podiumGame} numberOfLines={1}>{entry.game_name}</Text>
       <Pressable style={styles.shareBtn} onPress={onShare}>
         <Ionicons name="share-outline" size={14} color="#06b6d4" />
@@ -750,13 +751,13 @@ const styles = StyleSheet.create({
   myScoreLabel: { color: "#777", fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 4 },
   myScoreValue: { color: "#22c55e", fontSize: 24, fontWeight: "900" },
 
-  emptyCard: { backgroundColor: "#111", borderRadius: 22, padding: 40, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", gap: 10 },
+  emptyCard: { backgroundColor: "#111", borderRadius: 22, padding: 40, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a", gap: 10 },
   emptyIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: "#161616", borderWidth: 1, borderColor: "#222", alignItems: "center", justifyContent: "center", marginBottom: 4 },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
   emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center" },
 
   podium: { flexDirection: "row", gap: 10, marginBottom: 10, alignItems: "flex-end" },
-  podiumCard: { flex: 1, backgroundColor: "#111", borderRadius: 20, padding: 14, alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#1e1e1e" },
+  podiumCard: { flex: 1, backgroundColor: "#111", borderRadius: 20, padding: 14, alignItems: "center", gap: 6, borderWidth: 1, borderColor: "#1a1a1a" },
   podiumCardFirst: { backgroundColor: "#131208", borderColor: "rgba(245,158,11,0.35)", paddingTop: 18 },
   podiumCardMe: { borderColor: "rgba(6,182,212,0.35)" },
   crownRow: { position: "absolute", top: -14 },
@@ -769,8 +770,8 @@ const styles = StyleSheet.create({
   podiumGame: { color: "#777", fontSize: 10, textAlign: "center" },
 
   // Rankings list (FlashList items wrap in a card via outer margins)
-  listCard: { backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden", marginBottom: 0 },
-  listHeader: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
+  listCard: { backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1a1a1a", overflow: "hidden", marginBottom: 0 },
+  listHeader: { paddingHorizontal: 16, paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   listHeaderText: { color: "#333", fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1.2 },
 
   listRowWrap: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 14, gap: 10, backgroundColor: "#111" },
@@ -793,7 +794,7 @@ const styles = StyleSheet.create({
   pickerSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
-    borderTopWidth: 1, borderColor: "#1e1e1e", gap: 12, maxHeight: "80%",
+    borderTopWidth: 1, borderColor: "#1a1a1a", gap: 12, maxHeight: "80%",
   },
   pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 4 },
   pickerTitle: { color: "#fff", fontSize: 16, fontWeight: "900", textAlign: "center" },
@@ -801,7 +802,7 @@ const styles = StyleSheet.create({
   searchWrap: {
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: "#0d0d0d", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   searchInput: { flex: 1, color: "#fff", fontSize: 14 },
 
@@ -833,12 +834,12 @@ const styles = StyleSheet.create({
   shareSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
-    borderTopWidth: 1, borderColor: "#1e1e1e", maxHeight: "80%",
+    borderTopWidth: 1, borderColor: "#1a1a1a", maxHeight: "80%",
   },
   shareScorePreview: {
     flexDirection: "row", alignItems: "center", gap: 16,
     backgroundColor: "#0d0d0d", borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 20,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 20,
   },
   shareScoreRank: { color: "#06b6d4", fontSize: 28, fontWeight: "900", letterSpacing: -1 },
   shareScoreVal: { color: "#fff", fontSize: 18, fontWeight: "900" },
@@ -852,7 +853,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: "#0d0d0d", borderRadius: 12,
     paddingHorizontal: 12, paddingVertical: 10,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 10,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 10,
   },
   shareFriendSearchInput: { flex: 1, color: "#fff", fontSize: 14 },
   shareFriendList: { maxHeight: 260 },
@@ -887,7 +888,7 @@ const styles = StyleSheet.create({
   shareExternalBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
     marginTop: 16, backgroundColor: "#0d0d0d", borderRadius: 14,
-    paddingVertical: 14, borderWidth: 1, borderColor: "#1e1e1e",
+    paddingVertical: 14, borderWidth: 1, borderColor: "#1a1a1a",
   },
   shareExternalBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 14 },
 });

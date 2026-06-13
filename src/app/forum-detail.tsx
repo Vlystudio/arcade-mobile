@@ -511,7 +511,7 @@ export default function ForumDetailScreen() {
                 hitSlop={6}
               >
                 <Ionicons name="stats-chart-outline" size={15} color={pollOptions.length ? "#06b6d4" : "#555"} />
-                <Text style={[styles.pollAddText, !pollOptions.length && { color: "#555" }]}>Poll</Text>
+                <Text style={[styles.pollAddText, !pollOptions.length && { color: "#6e6e6e" }]}>Poll</Text>
                 </Pressable>
                 <Text style={styles.charCount}>{newPost.length}/{POST_LIMIT}</Text>
                 <Pressable
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
 
   postCard: {
     backgroundColor: "#111", borderRadius: 16,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     padding: 14, marginBottom: 10,
   },
   postHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
@@ -620,7 +620,7 @@ const styles = StyleSheet.create({
   pollOptionRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 9, gap: 8 },
   pollOptionText: { flex: 1, color: "#ccc", fontSize: 13.5, fontWeight: "600" },
   pollPct: { color: "#8a8a8a", fontSize: 12.5, fontWeight: "800" },
-  pollTotal: { color: "#555", fontSize: 11, marginTop: 2 },
+  pollTotal: { color: "#6e6e6e", fontSize: 11, marginTop: 2 },
   pollInputRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   pollInput: {
     flex: 1, backgroundColor: "#0c0c0c", borderRadius: 10,
@@ -639,7 +639,7 @@ const styles = StyleSheet.create({
   replyInput: {
     color: "#fff", fontSize: 15, lineHeight: 22,
     maxHeight: 100, textAlignVertical: "top",
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e",
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
     paddingBottom: 10, marginBottom: 8,
   },
   replyActions: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 12 },

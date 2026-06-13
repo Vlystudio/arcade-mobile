@@ -551,13 +551,13 @@ const styles = StyleSheet.create({
   appName:  { color: "#fff", fontSize: 26, fontWeight: "900", letterSpacing: -0.5, marginBottom: 6 },
   tagline:  { color: "#777", fontSize: 14 },
 
-  form: { backgroundColor: "#111", borderRadius: 24, padding: 24, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24 },
+  form: { backgroundColor: "#111", borderRadius: 24, padding: 24, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 24 },
   formTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 20 },
 
   inputWrap: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#0a0a0a", borderRadius: 14,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 12,
     paddingHorizontal: 14,
   },
   inputIcon: { marginRight: 10 },
@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
   sheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40,
-    borderTopWidth: 1, borderColor: "#1e1e1e", gap: 12,
+    borderTopWidth: 1, borderColor: "#1a1a1a", gap: 12,
   },
   sheetHandle:  { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center" },
   sheetIconRow: { alignItems: "center" },
@@ -656,7 +656,7 @@ const styles = StyleSheet.create({
   tosUpdated: { color: "#333", fontSize: 11, marginBottom: 20 },
   tosSection: { marginBottom: 24 },
   tosSectionTitle: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 8 },
-  tosSectionBody: { color: "#666", fontSize: 13, lineHeight: 21 },
+  tosSectionBody: { color: "#7a7a7a", fontSize: 13, lineHeight: 21 },
 
   tosModalFooter: {
     paddingHorizontal: 18, paddingTop: 12, paddingBottom: 20,
@@ -672,7 +672,7 @@ const styles = StyleSheet.create({
   tosLockedBtn: {
     backgroundColor: "#0d0d0d", borderRadius: 14, paddingVertical: 16,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   tosLockedBtnText: { color: "#333", fontWeight: "700", fontSize: 15 },
   tosDeclineBtn: {

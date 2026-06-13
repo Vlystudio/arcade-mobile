@@ -472,7 +472,7 @@ const styles = StyleSheet.create({
   iconBtnGray: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: "#0d0d0d", alignItems: "center", justifyContent: "center",
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
 
   reqActions: { flexDirection: "row", gap: 8 },
@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: "#0a0a0a", borderRadius: 14,
     paddingHorizontal: 14, paddingVertical: 12,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 12,
   },
   searchInput: { flex: 1, color: "#fff", fontSize: 15 },
   addBtn: {

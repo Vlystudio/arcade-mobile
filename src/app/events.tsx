@@ -274,7 +274,7 @@ const s = StyleSheet.create({
   modalDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   modalSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
-    padding: 22, paddingBottom: 36, borderTopWidth: 1, borderColor: "#1e1e1e",
+    padding: 22, paddingBottom: 36, borderTopWidth: 1, borderColor: "#1a1a1a",
     width: "100%", maxWidth: 560, alignSelf: "center", gap: 10,
   },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center" },

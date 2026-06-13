@@ -435,7 +435,7 @@ const styles = StyleSheet.create({
 
   summaryStrip: {
     flexDirection: "row", backgroundColor: "#111",
-    borderRadius: 16, borderWidth: 1, borderColor: "#1e1e1e",
+    borderRadius: 16, borderWidth: 1, borderColor: "#1a1a1a",
     paddingVertical: 16, marginBottom: 22,
   },
   summaryItem: { flex: 1, alignItems: "center" },
@@ -459,7 +459,7 @@ const styles = StyleSheet.create({
 
   emptyCard: {
     backgroundColor: "#111", borderRadius: 22, padding: 44, alignItems: "center",
-    borderWidth: 1, borderColor: "#1e1e1e", gap: 10,
+    borderWidth: 1, borderColor: "#1a1a1a", gap: 10,
   },
   emptyIconWrap: {
     width: 64, height: 64, borderRadius: 32,
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   // Group cards (Arcade / Pinball)
   groupCard: {
     backgroundColor: "#111", borderRadius: 20,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     flexDirection: "row", alignItems: "center", padding: 18, gap: 14,
   },
   groupIconWrap: { width: 50, height: 50, borderRadius: 14, alignItems: "center", justifyContent: "center" },
@@ -514,7 +514,7 @@ const styles = StyleSheet.create({
   // Other games
   otherCard: {
     backgroundColor: "#111", borderRadius: 18,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     flexDirection: "row", alignItems: "center", padding: 14, gap: 12, marginBottom: 8,
   },
   otherIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
     width: "30%", flexGrow: 1,
     backgroundColor: "#0d0d0d", borderRadius: 18,
     padding: 14, alignItems: "center", gap: 7,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   laneTop: { flexDirection: "row", alignItems: "center", gap: 7 },
   laneNumber: { color: "#fff", fontSize: 30, fontWeight: "900", letterSpacing: -1 },
@@ -584,7 +584,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center",
     paddingVertical: 14, gap: 12,
   },
-  groupRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
+  groupRowBorder: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   groupRowInfo: { flex: 1 },
   groupRowName: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 3 },
   groupRowBest: { fontSize: 12, fontWeight: "600" },

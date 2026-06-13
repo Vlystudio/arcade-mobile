@@ -15,6 +15,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../components/avatar";
 import { supabase } from "../../lib/supabase";
 import { showToast } from "../components/toast";
+import { PressableScale } from "../components/pressable-scale";
+import { ScoreText } from "../components/score-text";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { reportError } from "../lib/report-error";
 import { fetchPlayerStats } from "../lib/skeeball-stats";
@@ -901,15 +903,13 @@ export default function SkeeballTrackerScreen({
                   </Text>
                   <View style={s.ringGrid}>
                     {SKEE_RINGS.map((pts) => (
-                      <Pressable
+                      <PressableScale
                         key={pts}
-                        style={[s.ringBtn, pts === 100 && s.ringBtnCenter, { borderColor: RING_COLORS[pts] + "55" }]}
+                        style={[s.ringBtn, pts === 100 && s.ringBtnCenter, { borderColor: RING_COLORS[pts] + "66" }]}
                         onPress={() => addBall(pts)}
                       >
-                        <Text style={[s.ringBtnText, { color: RING_COLORS[pts] }, pts === 100 && s.ringBtnTextCenter]}>
-                          {pts}
-                        </Text>
-                      </Pressable>
+                        <ScoreText value={pts} style={[s.ringBtnText, { color: RING_COLORS[pts] }, pts === 100 && s.ringBtnTextCenter]} />
+                      </PressableScale>
                     ))}
                   </View>
                   {currentBalls.length > 0 && (
@@ -975,7 +975,7 @@ export default function SkeeballTrackerScreen({
           {sessionPlayers.length > 1 && (
             <View style={s.totalRow}>
               <Text style={s.totalLabel}>Team total</Text>
-              <Text style={s.totalValue}>{grandTotal} pts</Text>
+              <ScoreText value={grandTotal} animate suffix=" pts" style={s.totalValue} />
             </View>
           )}
 
@@ -1140,7 +1140,7 @@ const s = StyleSheet.create({
   placementPts: { color: "#8a8a8a", fontSize: 13, fontWeight: "600", marginTop: 2 },
   waitWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 24 },
 
-  resultCard: { width: "100%", backgroundColor: "#111", borderRadius: 20, padding: 20, marginTop: 24, borderWidth: 1, borderColor: "#1e1e1e" },
+  resultCard: { width: "100%", backgroundColor: "#111", borderRadius: 20, padding: 20, marginTop: 24, borderWidth: 1, borderColor: "#1a1a1a" },
   resultRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   resultName: { color: "#fff", fontSize: 15, fontWeight: "800" },
   resultBalls: { color: "#777", fontSize: 12, marginTop: 2 },
@@ -1186,7 +1186,7 @@ const s = StyleSheet.create({
   pbTitle: { color: "#22c55e", fontSize: 15, fontWeight: "900" },
   pbSub: { color: "#777", fontSize: 12.5, marginTop: 2 },
 
-  playerSection: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#1e1e1e" },
+  playerSection: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#1a1a1a" },
   playerSectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
   playerSectionName: { color: "#fff", fontSize: 14, fontWeight: "800", flex: 1 },
   playerSectionTotal: { color: "#06b6d4", fontSize: 16, fontWeight: "900" },
@@ -1206,7 +1206,7 @@ const s = StyleSheet.create({
   errorBox: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(239,68,68,0.08)", borderRadius: 12, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: "rgba(239,68,68,0.2)" },
   errorText: { color: "#ef4444", fontSize: 13, flex: 1 },
 
-  memberRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e" },
+  memberRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a" },
   memberRowSel: { backgroundColor: "rgba(6,182,212,0.08)", borderColor: "rgba(6,182,212,0.3)" },
   memberRowDim: { opacity: 0.4 },
   memberName: { color: "#777", fontSize: 15, fontWeight: "700" },
@@ -1215,15 +1215,15 @@ const s = StyleSheet.create({
   checkboxSel: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
 
   laneGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 28 },
-  laneBtn: { width: "31%", height: 72, backgroundColor: "#111", borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "#1e1e1e", gap: 2, paddingHorizontal: 6 },
+  laneBtn: { width: "31%", height: 72, backgroundColor: "#111", borderRadius: 14, alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderColor: "#1a1a1a", gap: 2, paddingHorizontal: 6 },
   laneBtnSel: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
-  laneBtnTaken: { backgroundColor: "#0d0d0d", borderColor: "#1e1e1e" },
+  laneBtnTaken: { backgroundColor: "#0d0d0d", borderColor: "#1a1a1a" },
   laneBtnNum: { color: "#fff", fontSize: 22, fontWeight: "900" },
   laneBtnStatus: { color: "#777", fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
   laneTeamName: { color: "#8a8a8a", fontSize: 10, textAlign: "center", paddingHorizontal: 2 },
 
   progressRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
-  progressCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e", borderBottomWidth: 0 },
+  progressCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a", borderBottomWidth: 0 },
   progressName: { color: "#fff", fontSize: 14, fontWeight: "800" },
   progressSub: { color: "#777", fontSize: 12, marginTop: 1 },
   youChip: { backgroundColor: "rgba(6,182,212,0.12)", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
@@ -1235,12 +1235,13 @@ const s = StyleSheet.create({
 
   // Ring-tap scoring
   ringHint: { color: "#8a8a8a", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 12 },
-  ringGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 12 },
+  ringGrid: { flexDirection: "row", flexWrap: "wrap", gap: 14, justifyContent: "center" },
   ringBtn: {
-    width: "30%", paddingVertical: 18, borderRadius: 14, backgroundColor: "#111",
-    borderWidth: 1.5, alignItems: "center", justifyContent: "center",
+    width: 88, height: 88, borderRadius: 44, backgroundColor: "#111",
+    borderWidth: 2, alignItems: "center", justifyContent: "center",
+    alignSelf: "center",
   },
-  ringBtnCenter: { width: "100%", paddingVertical: 14 },
+  ringBtnCenter: { width: "100%", height: 60, borderRadius: 30 },
   ringBtnText: { fontSize: 22, fontWeight: "900" },
   ringBtnTextCenter: { fontSize: 20 },
 
@@ -1260,7 +1261,7 @@ const s = StyleSheet.create({
   warningCard: { width: "100%", backgroundColor: "#111", borderRadius: 24, padding: 28, alignItems: "center", borderWidth: 1.5, borderColor: "rgba(239,68,68,0.4)" },
   warningIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: "rgba(239,68,68,0.12)", alignItems: "center", justifyContent: "center", marginBottom: 20, borderWidth: 1, borderColor: "rgba(239,68,68,0.3)" },
   warningTitle: { color: "#ef4444", fontSize: 22, fontWeight: "900", marginBottom: 10, textAlign: "center" },
-  warningSub: { color: "#666", fontSize: 14, textAlign: "center", marginBottom: 16, lineHeight: 20 },
+  warningSub: { color: "#7a7a7a", fontSize: 14, textAlign: "center", marginBottom: 16, lineHeight: 20 },
   warningCountdown: { color: "#ef4444", fontSize: 56, fontWeight: "900", letterSpacing: 2, marginBottom: 28 },
   warningBtn: { backgroundColor: "#06b6d4", borderRadius: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 16, paddingHorizontal: 32 },
   warningBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },

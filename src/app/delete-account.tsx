@@ -204,7 +204,7 @@ const s = StyleSheet.create({
   proceedBtnText: { color: "#ef4444", fontWeight: "800", fontSize: 15 },
   cancelBtn: {
     backgroundColor: "#111", borderRadius: 14, paddingVertical: 15,
-    alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12,
+    alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 12,
   },
   cancelBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 
@@ -212,7 +212,7 @@ const s = StyleSheet.create({
   passwordSub: { color: "#8a8a8a", fontSize: 14, lineHeight: 21, marginBottom: 20 },
   input: {
     backgroundColor: "#0a0a0a", color: "#fff", padding: 16,
-    borderRadius: 14, fontSize: 16, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 10,
+    borderRadius: 14, fontSize: 16, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 10,
   },
   errorRow: {
     flexDirection: "row", alignItems: "center", gap: 6,

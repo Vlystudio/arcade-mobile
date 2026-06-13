@@ -2090,7 +2090,7 @@ const styles = StyleSheet.create({
   },
   heroStat: { flex: 1, alignItems: "center", gap: 2 },
   heroStatValue: { color: "#fff", fontSize: 17, fontWeight: "900" },
-  heroStatLabel: { color: "#666", fontSize: 10.5, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  heroStatLabel: { color: "#7a7a7a", fontSize: 10.5, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
   heroStatDivider: { width: 1, height: 26, backgroundColor: "#1e1e1e" },
   trackActions: { flexDirection: "row", gap: 10, marginTop: 16, flexWrap: "wrap", justifyContent: "center" },
   trackBtn: {
@@ -2106,7 +2106,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 10,
     backgroundColor: "#111", borderRadius: 18,
     paddingHorizontal: 18, paddingVertical: 12,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     marginHorizontal: 20, marginBottom: 32,
   },
   seasonPillLabel: { color: "#fff", fontSize: 14, fontWeight: "800" },
@@ -2126,7 +2126,7 @@ const styles = StyleSheet.create({
     flex: 1, minWidth: "45%",
     backgroundColor: "#111", borderRadius: 20,
     padding: 20, alignItems: "center",
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   statValue: { fontSize: 32, fontWeight: "900", letterSpacing: -0.5 },
   statSub: { color: "#777", fontSize: 11, fontWeight: "600", marginTop: -2 },
@@ -2144,7 +2144,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#111", borderRadius: 18, padding: 16,
     flexDirection: "row", alignItems: "center",
     marginHorizontal: 20, marginBottom: 10,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   playerLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
   rankNum: { color: "#2a2a2a", fontSize: 12, fontWeight: "900", width: 22, textAlign: "center" },
@@ -2174,7 +2174,7 @@ const styles = StyleSheet.create({
     width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
   },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
@@ -2200,7 +2200,7 @@ const styles = StyleSheet.create({
   leagueSeasonPillText: { color: "#f59e0b", fontSize: 12, fontWeight: "800" },
   leagueCard: {
     backgroundColor: "#111", borderRadius: 18, padding: 16,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     marginHorizontal: 20, marginBottom: 28, gap: 10,
   },
   leagueSummaryRow: { flexDirection: "row", gap: 8 },
@@ -2239,9 +2239,9 @@ const styles = StyleSheet.create({
   liveSeasonChipText: { color: "#22c55e", fontSize: 9, fontWeight: "900" },
 
   // Lineup optimizer
-  posTableHead: { flexDirection: "row", paddingBottom: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
+  posTableHead: { flexDirection: "row", paddingBottom: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   posTableRow: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#181818" },
-  posTableCell: { flex: 1, color: "#666", fontSize: 12.5, fontWeight: "700", textAlign: "center" },
+  posTableCell: { flex: 1, color: "#7a7a7a", fontSize: 12.5, fontWeight: "700", textAlign: "center" },
   posTableName: { color: "#fff", fontSize: 13.5, fontWeight: "800" },
   suggestRow: { flexDirection: "row", gap: 8, marginTop: 4, marginBottom: 6 },
   suggestChip: {
@@ -2266,7 +2266,7 @@ const styles = StyleSheet.create({
   opponentSelect: {
     flexDirection: "row", alignItems: "center", gap: 8,
     backgroundColor: "#0c0c0c", borderRadius: 12, padding: 11, marginTop: 6,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   opponentSelectText: { flex: 1, color: "#888", fontSize: 13, fontWeight: "600" },
   coachBtn: {
@@ -2371,7 +2371,7 @@ const styles = StyleSheet.create({
   reqDenyBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, borderColor: "#2a2a2a", alignItems: "center", justifyContent: "center" },
   renameInput: {
     backgroundColor: "#0a0a0a", color: "#fff", padding: 15, borderRadius: 14,
-    fontSize: 16, borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 12,
+    fontSize: 16, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 12,
   },
   renameSaveBtn: {
     backgroundColor: "#06b6d4", borderRadius: 14, padding: 15, alignItems: "center",
@@ -2384,7 +2384,7 @@ const styles = StyleSheet.create({
     width: "100%", maxWidth: 560, alignSelf: "center",
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36,
-    borderTopWidth: 1, borderColor: "#1e1e1e", gap: 10,
+    borderTopWidth: 1, borderColor: "#1a1a1a", gap: 10,
   },
   photoPickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 12 },
   photoPickerTitle: { color: "#fff", fontSize: 16, fontWeight: "900", textAlign: "center", marginBottom: 4 },
@@ -2448,7 +2448,7 @@ const styles = StyleSheet.create({
     flexDirection: "row", gap: 12, alignItems: "flex-start",
     backgroundColor: "#111", borderRadius: 16, padding: 14,
     marginHorizontal: 20, marginBottom: 8,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   annCardHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 },
   annUsername: { color: "#fff", fontSize: 13, fontWeight: "800" },
@@ -2478,7 +2478,7 @@ const styles = StyleSheet.create({
   bannedRow: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: "#111", borderRadius: 16, padding: 14,
-    marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
+    marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a",
   },
   bannedUsername: { color: "#888", fontSize: 14, fontWeight: "700" },
   bannedDate: { color: "#333", fontSize: 12, marginTop: 2 },

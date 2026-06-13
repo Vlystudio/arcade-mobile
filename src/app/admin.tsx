@@ -4818,7 +4818,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
       <Modal visible={!!bracketTournId} transparent animationType="slide" onRequestClose={() => setBracketTournId(null)}>
         <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
           <Pressable style={styles.confirmDismiss} onPress={() => setBracketTournId(null)} />
-          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderColor: "#1e1e1e", height: "90%" }}>
+          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderColor: "#1a1a1a", height: "90%" }}>
             {/* Header */}
             <View style={styles.bracketModalHeader}>
               <Text style={styles.bracketModalTitle}>Bracket</Text>
@@ -5022,7 +5022,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
             <Text style={[styles.confirmTitle, { fontSize: 22, marginBottom: 4 }]}>Tournament Complete!</Text>
             <Text style={[styles.confirmBody, { marginBottom: 20 }]}>Final standings for this event</Text>
             {(bracketWinners ?? []).map(w => (
-              <View key={w.seed} style={{ flexDirection: "row", alignItems: "center", gap: 14, width: "100%", paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" }}>
+              <View key={w.seed} style={{ flexDirection: "row", alignItems: "center", gap: 14, width: "100%", paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" }}>
                 <Text style={{ fontSize: 28, width: 40, textAlign: "center" }}>
                   {w.final_rank === 1 ? "🥇" : w.final_rank === 2 ? "🥈" : w.final_rank === 3 ? "🥉" : "4️⃣"}
                 </Text>
@@ -5109,7 +5109,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
       <Modal visible={!!manageTeamTarget} transparent animationType="slide" onRequestClose={() => setManageTeamTarget(null)}>
         <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
           <Pressable style={styles.confirmDismiss} onPress={() => setManageTeamTarget(null)} />
-          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1e1e1e", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24, maxHeight: "85%" }}>
+          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1a1a1a", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24, maxHeight: "85%" }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
               <Text style={{ color: "#fff", fontSize: 18, fontWeight: "900" }}>{manageTeamTarget?.name}</Text>
               <Pressable onPress={() => setManageTeamTarget(null)}>
@@ -5136,7 +5136,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
                   <Text style={{ color: "#777", fontSize: 14, marginBottom: 16 }}>No members yet.</Text>
                 ) : (
                   manageTeamMembers.map((m) => (
-                    <View key={m.user_id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
+                    <View key={m.user_id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1a1a1a" }}>
                       <Ionicons name={m.role === "captain" ? "star" : "person-outline"} size={14} color={m.role === "captain" ? "#f59e0b" : "#06b6d4"} />
                       <Text style={{ flex: 1, color: "#ccc", fontSize: 14, fontWeight: "700", marginLeft: 8 }} numberOfLines={1}>
                         {m.username}
@@ -5188,7 +5188,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
                     return <Text style={{ color: "#777", fontSize: 13, marginBottom: 16 }}>No matching users.</Text>;
                   }
                   return matches.map((u) => (
-                    <View key={u.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
+                    <View key={u.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1a1a1a" }}>
                       <Ionicons name="person-outline" size={14} color="#06b6d4" />
                       <Text style={{ flex: 1, color: "#ccc", fontSize: 14, fontWeight: "700", marginLeft: 8 }} numberOfLines={1}>{u.username}</Text>
                       <Pressable
@@ -5212,7 +5212,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
                   <Text style={{ color: "#777", fontSize: 14 }}>No pending requests.</Text>
                 ) : (
                   manageTeamRequests.map((r) => (
-                    <View key={r.request_id} style={{ backgroundColor: "#0d0d0d", borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
+                    <View key={r.request_id} style={{ backgroundColor: "#0d0d0d", borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: "#1a1a1a" }}>
                       <View style={{ flexDirection: "row", alignItems: "center" }}>
                         <Ionicons name="person-outline" size={14} color="#06b6d4" />
                         <Text style={{ flex: 1, color: "#ccc", fontSize: 14, fontWeight: "700", marginLeft: 8 }} numberOfLines={1}>{r.username}</Text>
@@ -5292,7 +5292,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
       <Modal visible={playerListTarget !== null} transparent animationType="slide" onRequestClose={() => setPlayerListTarget(null)}>
         <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
           <Pressable style={styles.confirmDismiss} onPress={() => setPlayerListTarget(null)} />
-          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1e1e1e", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24, maxHeight: "70%" }}>
+          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1a1a1a", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24, maxHeight: "70%" }}>
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
               <Text style={{ color: "#fff", fontSize: 18, fontWeight: "900" }}>Registered Players</Text>
               <Pressable onPress={() => setPlayerListTarget(null)}>
@@ -5314,7 +5314,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
             ) : (
               <ScrollView showsVerticalScrollIndicator={false}>
                 {playerList.map(p => (
-                  <View key={p.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
+                  <View key={p.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, marginBottom: 6, borderWidth: 1, borderColor: "#1a1a1a" }}>
                     <Ionicons
                       name={p.guest_name ? "person-outline" : "person"}
                       size={14}
@@ -5352,7 +5352,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
         <View style={[styles.confirmBg, { justifyContent: "flex-end", padding: 0 }]}>
           <Pressable style={styles.confirmDismiss} onPress={() => setGuestTargetId(null)} />
           <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-            <View style={{ backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1e1e1e", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24 }}>
+            <View style={{ backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: "#1a1a1a", padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24 }}>
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
                 <Text style={{ color: "#fff", fontSize: 18, fontWeight: "900" }}>Add Guest Players</Text>
                 <Pressable onPress={() => setGuestTargetId(null)}>
@@ -5367,7 +5367,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
               ) : guestList.length > 0 ? (
                 <View style={{ marginBottom: 16 }}>
                   {guestList.map(g => (
-                    <View key={g.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 6, borderWidth: 1, borderColor: "#1e1e1e" }}>
+                    <View key={g.id} style={{ flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 6, borderWidth: 1, borderColor: "#1a1a1a" }}>
                       <Ionicons name="person-outline" size={14} color="#22c55e" />
                       <Text style={{ flex: 1, color: "#ccc", fontSize: 14, fontWeight: "700", marginLeft: 8 }}>{g.guest_name}</Text>
                       <Pressable onPress={() => handleRemoveGuest(g.id)} hitSlop={8}>
@@ -5720,7 +5720,7 @@ const styles = StyleSheet.create({
   // Generic card
   card: {
     backgroundColor: "#111", borderRadius: 18,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     marginBottom: 10, overflow: "hidden",
   },
 
@@ -5791,7 +5791,7 @@ const styles = StyleSheet.create({
   // Confirm modal
   confirmBg:       { flex: 1, backgroundColor: "rgba(0,0,0,0.82)", justifyContent: "center", padding: 24 },
   confirmDismiss:  { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  confirmSheet:    { backgroundColor: "#111", borderRadius: 28, padding: 28, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e" },
+  confirmSheet:    { backgroundColor: "#111", borderRadius: 28, padding: 28, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a" },
   confirmIconWrap: { width: 72, height: 72, borderRadius: 36, borderWidth: 1, alignItems: "center", justifyContent: "center", marginBottom: 16 },
   confirmTitle:    { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 8, textAlign: "center" },
   confirmBody:     { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20, marginBottom: 24 },
@@ -5807,7 +5807,7 @@ const styles = StyleSheet.create({
   teamsCountText:      { color: "#777", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1 },
   createTeamBtn:       { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(6,182,212,0.08)", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
   createTeamBtnText:   { color: "#06b6d4", fontSize: 12, fontWeight: "800" },
-  adminTeamCard:       { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "#1e1e1e" },
+  adminTeamCard:       { flexDirection: "row", alignItems: "center", gap: 14, backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: "#1a1a1a" },
   adminTeamAvatar:     { width: 44, height: 44, borderRadius: 13, backgroundColor: "rgba(6,182,212,0.08)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.15)" },
   adminTeamAvatarText: { color: "#06b6d4", fontSize: 13, fontWeight: "900" },
   adminTeamName:       { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 3 },
@@ -5818,7 +5818,7 @@ const styles = StyleSheet.create({
 
   // Teams sub-tab toggle
   subTabRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
-  subTab: { flex: 1, paddingVertical: 9, borderRadius: 12, backgroundColor: "#111", borderWidth: 1, borderColor: "#1e1e1e", alignItems: "center" },
+  subTab: { flex: 1, paddingVertical: 9, borderRadius: 12, backgroundColor: "#111", borderWidth: 1, borderColor: "#1a1a1a", alignItems: "center" },
   subTabActive: { backgroundColor: "rgba(6,182,212,0.12)", borderColor: "#06b6d4" },
   subTabText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
   subTabTextActive: { color: "#06b6d4" },
@@ -5839,13 +5839,13 @@ const styles = StyleSheet.create({
   // Tournament request cards
   tournCard: {
     backgroundColor: "#111", borderRadius: 18,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     padding: 16, marginBottom: 10,
   },
   tournCardTop:       { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 8 },
   tournTitle:         { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 2 },
   tournMeta:          { color: "#8a8a8a", fontSize: 12 },
-  tournDesc:          { color: "#666", fontSize: 13, lineHeight: 18, marginBottom: 10 },
+  tournDesc:          { color: "#7a7a7a", fontSize: 13, lineHeight: 18, marginBottom: 10 },
   tournGameChip: {
     paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20,
     backgroundColor: "rgba(245,158,11,0.12)", borderWidth: 1, borderColor: "rgba(245,158,11,0.25)",
@@ -5881,7 +5881,7 @@ const styles = StyleSheet.create({
   manageHeaderTitle: { color: "#fff", fontSize: 15, fontWeight: "800" },
   firstFridayBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#06b6d4", borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
   firstFridayBtnText: { color: "#000", fontWeight: "800", fontSize: 12 },
-  manageTournCard: { backgroundColor: "#111", borderRadius: 16, borderWidth: 1, borderColor: "#1e1e1e", padding: 14, marginBottom: 10 },
+  manageTournCard: { backgroundColor: "#111", borderRadius: 16, borderWidth: 1, borderColor: "#1a1a1a", padding: 14, marginBottom: 10 },
   manageTournInnerRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   manageTournTopRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4, flexShrink: 1 },
   manageTournTitle: { color: "#fff", fontSize: 14, fontWeight: "800", flex: 1 },
@@ -5897,7 +5897,7 @@ const styles = StyleSheet.create({
   manageTournCompletedText: { color: "#777", fontSize: 11, fontWeight: "700" },
 
   // First Friday QR section
-  ffQrSection: { marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1e1e1e", paddingTop: 12 },
+  ffQrSection: { marginTop: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", paddingTop: 12 },
   ffQrHeaderRow: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 10 },
   ffQrLabel: { color: "#8a8a8a", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, flex: 1 },
   ffQrCount: { color: "#777", fontSize: 12, fontWeight: "600" },
@@ -5917,7 +5917,7 @@ const styles = StyleSheet.create({
   modalBg:     { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   modalDismiss:{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   modalHandle: { width: 36, height: 4, backgroundColor: "#2a2a2a", borderRadius: 2, alignSelf: "center", marginBottom: 16 },
-  resultsSheet: { backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 0, borderTopWidth: 1, borderColor: "#1e1e1e", maxHeight: "85%" },
+  resultsSheet: { backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 0, borderTopWidth: 1, borderColor: "#1a1a1a", maxHeight: "85%" },
   resultsTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
   resultsSub:   { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
   resultRow:    { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
@@ -5931,22 +5931,22 @@ const styles = StyleSheet.create({
 
   // Photo modal
   photoModalBg:     { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", justifyContent: "center", padding: 20 },
-  photoModalInner:  { backgroundColor: "#111", borderRadius: 24, borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden" },
-  photoModalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
+  photoModalInner:  { backgroundColor: "#111", borderRadius: 24, borderWidth: 1, borderColor: "#1a1a1a", overflow: "hidden" },
+  photoModalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   photoModalTitle:  { color: "#fff", fontSize: 16, fontWeight: "800" },
   photoModalImage:  { width: "100%", height: 420 },
 
   // Users tab
   usersCountLine: { color: "#777", fontSize: 12, lineHeight: 17, marginBottom: 12 },
   userSearchInput: {
-    backgroundColor: "#111", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
+    backgroundColor: "#111", borderRadius: 14, borderWidth: 1, borderColor: "#1a1a1a",
     color: "#fff", fontSize: 14, paddingHorizontal: 16, paddingVertical: 12,
     marginBottom: 12,
   },
   userCard: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#111", borderRadius: 16, padding: 14,
-    marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
+    marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a",
   },
   userCardName: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 2 },
   userCardEmail: { color: "#8a8a8a", fontSize: 11, marginBottom: 4 },
@@ -5966,7 +5966,7 @@ const styles = StyleSheet.create({
   // Scheduler
   schedHeader: { marginBottom: 20 },
   schedWeekInput: {
-    backgroundColor: "#111", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
+    backgroundColor: "#111", borderRadius: 14, borderWidth: 1, borderColor: "#1a1a1a",
     color: "#fff", fontSize: 14, paddingHorizontal: 16, paddingVertical: 13,
     marginBottom: 10,
   },
@@ -6001,7 +6001,7 @@ const styles = StyleSheet.create({
   schedTeamCard: {
     flexDirection: "row", alignItems: "center",
     backgroundColor: "#111", borderRadius: 14, padding: 12,
-    marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
+    marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a",
   },
   schedTeamLeft: { flex: 1 },
   schedTeamName: { color: "#fff", fontSize: 14, fontWeight: "800", marginBottom: 4 },
@@ -6022,7 +6022,7 @@ const styles = StyleSheet.create({
   modalSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
   },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
   modalSub:   { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
@@ -6058,7 +6058,7 @@ const styles = StyleSheet.create({
   suppTicketCard: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: "#111", borderRadius: 16, padding: 14,
-    marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e",
+    marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a",
   },
   suppTicketAvatar: {
     width: 38, height: 38, borderRadius: 19,
@@ -6109,7 +6109,7 @@ const styles = StyleSheet.create({
   },
   suppReplyInput: {
     flex: 1, backgroundColor: "#111", borderRadius: 20,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     color: "#fff", fontSize: 14, paddingHorizontal: 14,
     paddingVertical: Platform.OS === "ios" ? 10 : 7, maxHeight: 100,
   },
@@ -6129,15 +6129,15 @@ const styles = StyleSheet.create({
   editTournSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
   },
   editTournTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
   editTournSub:   { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
-  textInput: { backgroundColor: "#111", borderRadius: 12, borderWidth: 1, borderColor: "#1e1e1e", color: "#fff", fontSize: 15, paddingHorizontal: 14, paddingVertical: 12 },
+  textInput: { backgroundColor: "#111", borderRadius: 12, borderWidth: 1, borderColor: "#1a1a1a", color: "#fff", fontSize: 15, paddingHorizontal: 14, paddingVertical: 12 },
   editTournLabel: { color: "#888", fontSize: 12, fontWeight: "700", marginBottom: 6, marginTop: 12 },
   editTournInput: {
     backgroundColor: "#0a0a0a", borderRadius: 12,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     color: "#fff", fontSize: 15,
     paddingHorizontal: 14, paddingVertical: 12,
   },
@@ -6173,7 +6173,7 @@ const styles = StyleSheet.create({
   ffBracketHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
   ffBracketLabel: { color: "#a855f7", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
   ffBracketCount: { color: "#fff", fontSize: 13, fontWeight: "700" },
-  ffBracketHint:  { color: "#666", fontSize: 11, marginBottom: 8 },
+  ffBracketHint:  { color: "#7a7a7a", fontSize: 11, marginBottom: 8 },
   ffAddGuestBtn: { flexDirection: "row", alignItems: "center", gap: 6, backgroundColor: "rgba(34,197,94,0.07)", borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: "rgba(34,197,94,0.2)", marginBottom: 8 },
   ffAddGuestBtnText: { color: "#22c55e", fontSize: 12, fontWeight: "700" },
 
@@ -6199,7 +6199,7 @@ const styles = StyleSheet.create({
   bracketModalHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 20, paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e",
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
   },
   bracketModalTitle: { color: "#fff", fontSize: 18, fontWeight: "900" },
 
@@ -6219,14 +6219,14 @@ const styles = StyleSheet.create({
   bracketGroupCard: {
     marginHorizontal: 16, marginBottom: 14,
     backgroundColor: "#111", borderRadius: 14,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     overflow: "hidden",
   },
   bracketGroupHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 14, paddingVertical: 10,
     backgroundColor: "rgba(168,85,247,0.08)",
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e",
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
   },
   bracketGroupTitle: { color: "#a855f7", fontSize: 13, fontWeight: "900" },
   bracketGroupStatus: {
@@ -6263,7 +6263,7 @@ const styles = StyleSheet.create({
   scoreEntrySheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40,
-    borderTopWidth: 1, borderColor: "#1e1e1e",
+    borderTopWidth: 1, borderColor: "#1a1a1a",
   },
   scoreEntryTitle: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 4 },
   scoreEntryHint:  { color: "#8a8a8a", fontSize: 12, marginBottom: 16 },
@@ -6274,7 +6274,7 @@ const styles = StyleSheet.create({
   scoreEntryName: { flex: 1, color: "#ccc", fontSize: 14 },
   scoreEntryInput: {
     width: 90, backgroundColor: "#0a0a0a", borderRadius: 10,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     color: "#fff", fontSize: 15,
     paddingHorizontal: 12, paddingVertical: 9,
     textAlign: "center",
@@ -6284,7 +6284,7 @@ const styles = StyleSheet.create({
   // ── Karaoke ──────────────────────────────────────────────────────────────
   karaokeToolbar: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   karaokeQueueCount: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
-  karaokeHistoryBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#1e1e1e" },
+  karaokeHistoryBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#1a1a1a" },
   karaokeHistoryBtnText: { color: "#8a8a8a", fontSize: 12, fontWeight: "700" },
 
   karaokeNowCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, borderWidth: 1, borderColor: "rgba(168,85,247,0.3)", marginBottom: 20 },
@@ -6301,7 +6301,7 @@ const styles = StyleSheet.create({
   karaokeSkipBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#ef4444", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, alignSelf: "flex-start" },
   karaokeSkipBtnText: { color: "#fff", fontSize: 12, fontWeight: "900" },
 
-  karaokeQueueItem: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#111", borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e" },
+  karaokeQueueItem: { flexDirection: "row", alignItems: "center", gap: 10, backgroundColor: "#111", borderRadius: 14, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a" },
   karaokeQueuePos: { color: "#8a8a8a", fontSize: 12, fontWeight: "900", minWidth: 18, textAlign: "center" },
   karaokeQueueThumb: { width: 48, height: 34, borderRadius: 6 },
   karaokeQueueInfo: { flex: 1 },
@@ -6314,17 +6314,17 @@ const styles = StyleSheet.create({
 
   // ── Trivia ───────────────────────────────────────────────────────────────────
   triviaTabRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
-  triviaTabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12, paddingVertical: 10, borderWidth: 1, borderColor: "#1e1e1e", backgroundColor: "#0d0d0d" },
+  triviaTabBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 12, paddingVertical: 10, borderWidth: 1, borderColor: "#1a1a1a", backgroundColor: "#0d0d0d" },
   triviaTabBtnActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.07)" },
   triviaTabBtnText: { color: "#8a8a8a", fontWeight: "800", fontSize: 13 },
 
   triviaCreateBtn: { flexDirection: "row", alignItems: "center", gap: 8, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 16, borderWidth: 1, borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.06)", marginBottom: 12 },
   triviaCreateBtnText: { color: "#06b6d4", fontWeight: "800", fontSize: 14 },
 
-  triviaFormCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: "#1e1e1e" },
+  triviaFormCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: "#1a1a1a" },
   triviaFormTitle: { color: "#fff", fontSize: 15, fontWeight: "900", marginBottom: 12 },
   triviaFormLabel: { color: "#8a8a8a", fontSize: 12, fontWeight: "700", marginBottom: 5, marginTop: 10 },
-  triviaFormInput: { backgroundColor: "#0a0a0a", borderRadius: 10, borderWidth: 1, borderColor: "#1e1e1e", color: "#fff", fontSize: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 2 },
+  triviaFormInput: { backgroundColor: "#0a0a0a", borderRadius: 10, borderWidth: 1, borderColor: "#1a1a1a", color: "#fff", fontSize: 14, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 2 },
   triviaFormRow: { flexDirection: "row", gap: 10 },
 
   triviaToggleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 10, marginBottom: 4 },
@@ -6334,7 +6334,7 @@ const styles = StyleSheet.create({
   triviaToggleThumbOn: { backgroundColor: "#06b6d4", alignSelf: "flex-end" },
 
   triviaTypeRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
-  triviaTypeBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", backgroundColor: "#0d0d0d" },
+  triviaTypeBtn: { flex: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a", backgroundColor: "#0d0d0d" },
   triviaTypeBtnActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.07)" },
   triviaTypeBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 13 },
 
@@ -6352,11 +6352,11 @@ const styles = StyleSheet.create({
 
   triviaSaveBtn: { backgroundColor: "#06b6d4", borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 12 },
   triviaSaveBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
-  triviaDiscardBtn: { borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 12, borderWidth: 1, borderColor: "#1e1e1e", paddingHorizontal: 16 },
+  triviaDiscardBtn: { borderRadius: 12, paddingVertical: 13, alignItems: "center", marginTop: 12, borderWidth: 1, borderColor: "#1a1a1a", paddingHorizontal: 16 },
   triviaDiscardBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 14 },
   triviaEmpty: { color: "#777", fontSize: 13, textAlign: "center", paddingVertical: 16 },
 
-  triviaGameCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#1e1e1e" },
+  triviaGameCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: "#1a1a1a" },
   triviaGameCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 12, marginBottom: 12 },
   triviaGameTitle: { color: "#fff", fontSize: 15, fontWeight: "900" },
   triviaGameMeta: { color: "#8a8a8a", fontSize: 12, marginTop: 3 },
@@ -6368,9 +6368,9 @@ const styles = StyleSheet.create({
   triviaPlayersToggle: {
     flexDirection: "row", alignItems: "center", gap: 7,
     paddingVertical: 9, paddingHorizontal: 2, marginBottom: 2,
-    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1e1e1e",
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a",
   },
-  triviaPlayersToggleText: { flex: 1, color: "#666", fontSize: 12, fontWeight: "700" },
+  triviaPlayersToggleText: { flex: 1, color: "#7a7a7a", fontSize: 12, fontWeight: "700" },
   triviaPlayersList: {
     backgroundColor: "#0a0a0a", borderRadius: 12,
     borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 10, overflow: "hidden",
@@ -6399,7 +6399,7 @@ const styles = StyleSheet.create({
   triviaActionBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1 },
   triviaActionBtnText: { fontSize: 12, fontWeight: "800" },
 
-  triviaQCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#1e1e1e" },
+  triviaQCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#1a1a1a" },
   triviaQCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   triviaQCategory: { color: "#a855f7", fontSize: 10, fontWeight: "800", marginBottom: 3 },
   triviaQText: { color: "#fff", fontSize: 13, fontWeight: "700", lineHeight: 19, marginBottom: 4 },
@@ -6414,7 +6414,7 @@ const styles = StyleSheet.create({
   skeeAdminSubtitle: { color: "#8a8a8a", fontSize: 13, lineHeight: 19, marginBottom: 16 },
   reportCard: {
     backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: "#1e1e1e", gap: 8,
+    borderWidth: 1, borderColor: "#1a1a1a", gap: 8,
   },
   reportTopRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   reportTypeChip: {
@@ -6422,7 +6422,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(6,182,212,0.08)", borderWidth: 1, borderColor: "rgba(6,182,212,0.25)",
   },
   reportTypeChipText: { color: "#06b6d4", fontSize: 10.5, fontWeight: "800" },
-  reportTime: { color: "#555", fontSize: 11, marginLeft: "auto" },
+  reportTime: { color: "#6e6e6e", fontSize: 11, marginLeft: "auto" },
   reportMeta: { color: "#8a8a8a", fontSize: 12 },
   reportPreview: { backgroundColor: "#0a0a0a", borderRadius: 10, padding: 10, borderWidth: 1, borderColor: "#1c1c1c" },
   reportPreviewText: { color: "#ccc", fontSize: 13, lineHeight: 18 },
@@ -6454,7 +6454,7 @@ const styles = StyleSheet.create({
   skeeRoundCard: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   skeeForceBtn: {
     flexDirection: "row", alignItems: "center", gap: 6,
@@ -6465,7 +6465,7 @@ const styles = StyleSheet.create({
   skeeForceBtnText: { color: "#f59e0b", fontWeight: "800", fontSize: 12.5 },
   skeeMatchGroup: { marginBottom: 20 },
   skeeMatchGroupLabel: { color: "#06b6d4", fontSize: 12, fontWeight: "900", letterSpacing: 0.5, textTransform: "uppercase", marginBottom: 8 },
-  skeeAdminCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1e1e1e" },
+  skeeAdminCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a" },
   skeeAdminCardTop: { flexDirection: "row", alignItems: "flex-start", gap: 10 },
   skeeAdminTeamName: { color: "#fff", fontSize: 15, fontWeight: "900", marginBottom: 3 },
   skeeAdminMeta: { color: "#8a8a8a", fontSize: 12, marginBottom: 2 },

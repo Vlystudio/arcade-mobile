@@ -351,7 +351,7 @@ const s = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     borderWidth: 1,
-    borderColor: "#1e1e1e",
+    borderColor: "#1a1a1a",
     borderStyle: "dashed",
   },
   attachBtnText: {
@@ -375,7 +375,7 @@ const s = StyleSheet.create({
     backgroundColor: "#111",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#1e1e1e",
+    borderColor: "#1a1a1a",
     color: "#fff",
     fontSize: 14,
     padding: 14,

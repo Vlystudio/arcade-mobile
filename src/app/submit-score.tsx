@@ -490,7 +490,7 @@ const styles = StyleSheet.create({
 
   headerCard: {
     backgroundColor: "#111", borderRadius: 22, padding: 20,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 24,
   },
   headerTop: {
     flexDirection: "row", justifyContent: "space-between",
@@ -552,7 +552,7 @@ const styles = StyleSheet.create({
   finalRow: {
     backgroundColor: "#111", borderRadius: 18, padding: 18,
     flexDirection: "row", justifyContent: "space-between", alignItems: "center",
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 14,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 14,
   },
   finalLabel: { color: "#8a8a8a", fontSize: 14, fontWeight: "700" },
   finalScore: { color: "#22c55e", fontSize: 36, fontWeight: "900" },
@@ -568,7 +568,7 @@ const styles = StyleSheet.create({
 
   restartBtn: {
     backgroundColor: "transparent", borderRadius: 14, paddingVertical: 14,
-    alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e",
+    alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a",
   },
   restartText: { color: "#777", fontWeight: "700" },
 
@@ -577,13 +577,13 @@ const styles = StyleSheet.create({
   arcadeInput: {
     backgroundColor: "#111", color: "#fff", padding: 24, borderRadius: 20,
     fontSize: 40, fontWeight: "900", textAlign: "center",
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 10,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 10,
   },
   arcadePreview: { color: "#06b6d4", fontSize: 18, fontWeight: "700", textAlign: "center", marginBottom: 28 },
 
   proofSection: {
     backgroundColor: "#0f0f0f", borderRadius: 22, padding: 18,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 20,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 20,
   },
   proofHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 },
   proofTitle: { color: "#fff", fontSize: 15, fontWeight: "800", flex: 1 },
@@ -601,7 +601,7 @@ const styles = StyleSheet.create({
   },
   proofPickerEmpty: {
     borderRadius: 16, borderWidth: 2,
-    borderColor: "#1e1e1e", borderStyle: "dashed",
+    borderColor: "#1a1a1a", borderStyle: "dashed",
     paddingVertical: 24, alignItems: "center", gap: 16,
   },
   proofThumb: { width: "100%", height: "100%" },

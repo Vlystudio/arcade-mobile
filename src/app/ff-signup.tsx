@@ -212,7 +212,7 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center", gap: 7,
     backgroundColor: "#111", borderRadius: 12,
     paddingHorizontal: 16, paddingVertical: 10,
-    borderWidth: 1, borderColor: "#1e1e1e", marginBottom: 24,
+    borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 24,
   },
   countText: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
   primaryBtn: {
@@ -223,7 +223,7 @@ const s = StyleSheet.create({
   primaryBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
   secondaryBtn: {
     borderRadius: 16, paddingVertical: 14, paddingHorizontal: 40,
-    alignItems: "center", borderWidth: 1, borderColor: "#1e1e1e", width: "100%",
+    alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a", width: "100%",
   },
   secondaryBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 15 },
 });

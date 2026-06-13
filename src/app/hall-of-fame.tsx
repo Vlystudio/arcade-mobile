@@ -155,5 +155,5 @@ const s = StyleSheet.create({
   empty: { alignItems: "center", gap: 10, paddingVertical: 72, paddingHorizontal: 32 },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
   emptySub: { color: "#8a8a8a", fontSize: 13.5, textAlign: "center", lineHeight: 19 },
-  note: { color: "#555", fontSize: 11.5, textAlign: "center", marginTop: 8 },
+  note: { color: "#6e6e6e", fontSize: 11.5, textAlign: "center", marginTop: 8 },
 });

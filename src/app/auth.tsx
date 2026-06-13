@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   registerBtn: {
     backgroundColor: "#111", borderRadius: 18, paddingVertical: 18,
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   registerBtnText: { color: "#fff", fontWeight: "800", fontSize: 17 },
 

@@ -149,7 +149,7 @@ const s = StyleSheet.create({
     width: "100%",
     maxWidth: 420,
     borderWidth: 1,
-    borderColor: "#1e1e1e",
+    borderColor: "#1a1a1a",
     alignItems: "center",
     // Prevent dismiss tap from passing through
     pointerEvents: "box-none" as any,

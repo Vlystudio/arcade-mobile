@@ -334,7 +334,7 @@ const s = StyleSheet.create({
   weekChip: {
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: "#111", borderRadius: 18, paddingHorizontal: 13, paddingVertical: 8,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   weekChipActive: { borderColor: "rgba(6,182,212,0.4)", backgroundColor: "rgba(6,182,212,0.08)" },
   weekChipText: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
@@ -375,7 +375,7 @@ const s = StyleSheet.create({
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 16, paddingVertical: 12,
     backgroundColor: "#111",
-    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e",
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
   },
   slotTimeWrap: { flexDirection: "row", alignItems: "center", gap: 7 },
   slotTime: { color: "#06b6d4", fontSize: 16, fontWeight: "900", letterSpacing: -0.3 },

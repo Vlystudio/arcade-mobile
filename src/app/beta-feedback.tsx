@@ -348,7 +348,7 @@ const s = StyleSheet.create({
   content: { paddingHorizontal: 18 },
   intro: { color: "#999", fontSize: 13, lineHeight: 19, marginBottom: 16 },
 
-  fieldLabel: { color: "#666", fontSize: 11, fontWeight: "800", letterSpacing: 1, marginBottom: 8, marginTop: 4 },
+  fieldLabel: { color: "#7a7a7a", fontSize: 11, fontWeight: "800", letterSpacing: 1, marginBottom: 8, marginTop: 4 },
   optional: { color: "#444", fontWeight: "600", letterSpacing: 0 },
 
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 16 },
@@ -366,10 +366,10 @@ const s = StyleSheet.create({
     borderRadius: 12, paddingVertical: 10, borderWidth: 1, borderColor: "#222",
   },
   sevBtnText: { color: "#888", fontSize: 12.5, fontWeight: "800" },
-  sevHint: { color: "#555", fontSize: 11.5, marginTop: 6, marginBottom: 16 },
+  sevHint: { color: "#6e6e6e", fontSize: 11.5, marginTop: 6, marginBottom: 16 },
 
   input: {
-    backgroundColor: "#0d0d0d", borderRadius: 14, borderWidth: 1, borderColor: "#1e1e1e",
+    backgroundColor: "#0d0d0d", borderRadius: 14, borderWidth: 1, borderColor: "#1a1a1a",
     color: "#fff", fontSize: 14, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 16,
   },
   multiline: { minHeight: 90, lineHeight: 20 },
@@ -389,7 +389,7 @@ const s = StyleSheet.create({
     backgroundColor: "#0a0a0a", borderRadius: 10, padding: 10, marginBottom: 16,
     borderWidth: 1, borderColor: "#161616",
   },
-  contextText: { flex: 1, color: "#555", fontSize: 11.5, lineHeight: 16 },
+  contextText: { flex: 1, color: "#6e6e6e", fontSize: 11.5, lineHeight: 16 },
 
   submitBtn: {
     flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
@@ -402,7 +402,7 @@ const s = StyleSheet.create({
     paddingVertical: 10, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#161616",
   },
   reportTitle: { color: "#ddd", fontSize: 13.5, fontWeight: "700" },
-  reportMeta: { color: "#666", fontSize: 11.5, marginTop: 2 },
+  reportMeta: { color: "#7a7a7a", fontSize: 11.5, marginTop: 2 },
   statusPill: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 9, paddingVertical: 4 },
   statusPillText: { fontSize: 10.5, fontWeight: "800" },
 });

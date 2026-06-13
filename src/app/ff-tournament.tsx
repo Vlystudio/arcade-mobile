@@ -389,7 +389,7 @@ export default function FFTournamentScreen() {
       <Modal visible={viewBracketId !== null} transparent animationType="slide" onRequestClose={() => setViewBracketId(null)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" }}>
           <Pressable style={{ flex: 1 }} onPress={() => setViewBracketId(null)} />
-          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderColor: "#1e1e1e", height: "92%" }}>
+          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderColor: "#1a1a1a", height: "92%" }}>
             <View style={st.bvHeader}>
               <View>
                 <Text style={st.bvTitle}>Bracket</Text>
@@ -515,7 +515,7 @@ const st = StyleSheet.create({
   loader: { flex: 1, backgroundColor: "#000", alignItems: "center", justifyContent: "center" },
 
   header: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 18, paddingTop: 8, paddingBottom: 16 },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#111", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#1e1e1e" },
+  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#111", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#1a1a1a" },
   headerIcon: { width: 40, height: 40, borderRadius: 12, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
   headerTitle: { color: "#fff", fontSize: 17, fontWeight: "900" },
   headerSub: { color: "#777", fontSize: 12, marginTop: 1 },
@@ -568,7 +568,7 @@ const st = StyleSheet.create({
   champName: { color: "#ccc", fontSize: 15, fontWeight: "800" },
   champLastWin: { color: "#777", fontSize: 11, marginTop: 2 },
   champStats: { flexDirection: "row", gap: 6, alignItems: "center" },
-  champStatBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#111", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: "#1e1e1e" },
+  champStatBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "#111", borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: "#1a1a1a" },
   champStatNum: { color: "#8a8a8a", fontSize: 12, fontWeight: "800" },
 
   // History cards
@@ -603,7 +603,7 @@ const st = StyleSheet.create({
   bvWinnerMedal: { fontSize: 24, width: 36, textAlign: "center" },
   bvWinnerName: { color: "#fff", fontSize: 15, fontWeight: "700", flex: 1 },
   bvGroupCard: { backgroundColor: "#0d0d0d", borderRadius: 16, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 12, overflow: "hidden" },
-  bvGroupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#111", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
+  bvGroupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#111", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   bvGroupTitle: { color: "#fff", fontSize: 13, fontWeight: "800" },
   bvGroupBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   bvSlotRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#141414" },
@@ -612,5 +612,5 @@ const st = StyleSheet.create({
   bvSlotElim: { color: "#333", fontSize: 10, fontWeight: "700" },
   bvGameResult: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: "rgba(0,0,0,0.2)", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#141414" },
   bvGameResultLabel: { color: "#a855f7", fontSize: 10, fontWeight: "800", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.6 },
-  bvGameScore: { color: "#666", fontSize: 12, marginVertical: 1 },
+  bvGameScore: { color: "#7a7a7a", fontSize: 12, marginVertical: 1 },
 });

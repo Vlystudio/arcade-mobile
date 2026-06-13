@@ -716,7 +716,7 @@ export default function TournamentsScreen() {
       <Modal visible={viewBracketId !== null} transparent animationType="slide" onRequestClose={() => setViewBracketId(null)}>
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "flex-end" }}>
           <Pressable style={{ flex: 1 }} onPress={() => setViewBracketId(null)} />
-          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderColor: "#1e1e1e", height: "92%" }}>
+          <View style={{ backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderTopWidth: 1, borderColor: "#1a1a1a", height: "92%" }}>
             {/* Header */}
             <View style={s.bvHeader}>
               <View>
@@ -984,7 +984,7 @@ const s = StyleSheet.create({
   emptyBtn: { backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 22, paddingVertical: 12 },
   emptyBtnText: { color: "#000", fontWeight: "900", fontSize: 14 },
 
-  card: { backgroundColor: "#111", borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: "#1e1e1e" },
+  card: { backgroundColor: "#111", borderRadius: 20, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: "#1a1a1a" },
   cardOfficial: { borderColor: "rgba(245,158,11,0.3)", backgroundColor: "#110f0a" },
   cardTitleRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
   officialBadge: { flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(245,158,11,0.1)", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: "rgba(245,158,11,0.25)" },
@@ -1056,13 +1056,13 @@ const s = StyleSheet.create({
 
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   modalDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
-  modalSheet: { backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingTop: 16, paddingBottom: Platform.OS === "ios" ? 36 : 24, borderTopWidth: 1, borderColor: "#1e1e1e", maxHeight: "90%" },
+  modalSheet: { backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 24, paddingTop: 16, paddingBottom: Platform.OS === "ios" ? 36 : 24, borderTopWidth: 1, borderColor: "#1a1a1a", maxHeight: "90%" },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
   modalTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900" },
   modalSub: { color: "#8a8a8a", fontSize: 13, marginTop: 2 },
   fieldLabel: { color: "#777", fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 14 },
-  input: { backgroundColor: "#0a0a0a", color: "#fff", padding: 15, borderRadius: 14, fontSize: 15, borderWidth: 1, borderColor: "#1e1e1e" },
+  input: { backgroundColor: "#0a0a0a", color: "#fff", padding: 15, borderRadius: 14, fontSize: 15, borderWidth: 1, borderColor: "#1a1a1a" },
   textArea: { height: 80, textAlignVertical: "top", paddingTop: 12 },
   chipRow: { gap: 8, paddingVertical: 4 },
   chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 4 },
@@ -1111,14 +1111,14 @@ const s = StyleSheet.create({
   noRequestsText: { color: "#333", fontSize: 13, fontWeight: "600" },
 
   // Danger zone
-  dangerZone: { marginTop: 28, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1e1e1e", paddingTop: 20 },
+  dangerZone: { marginTop: 28, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", paddingTop: 20 },
   dangerZoneLabel: { color: "#333", fontSize: 10, fontWeight: "900", letterSpacing: 1.4, marginBottom: 12 },
   cancelTournBtn: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, backgroundColor: "rgba(239,68,68,0.06)", borderRadius: 13, paddingVertical: 13, borderWidth: 1, borderColor: "rgba(239,68,68,0.2)" },
   cancelTournText: { color: "#ef4444", fontWeight: "800", fontSize: 14 },
 
   // Cancel confirmation modal
   confirmBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", alignItems: "center", justifyContent: "center", padding: 24 },
-  confirmCard: { backgroundColor: "#111", borderRadius: 24, padding: 28, width: "100%", maxWidth: 360, borderWidth: 1, borderColor: "#1e1e1e", alignItems: "center" },
+  confirmCard: { backgroundColor: "#111", borderRadius: 24, padding: 28, width: "100%", maxWidth: 360, borderWidth: 1, borderColor: "#1a1a1a", alignItems: "center" },
   confirmIconWrap: { width: 60, height: 60, borderRadius: 30, backgroundColor: "rgba(239,68,68,0.08)", alignItems: "center", justifyContent: "center", marginBottom: 16, borderWidth: 1, borderColor: "rgba(239,68,68,0.15)" },
   confirmTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 10 },
   confirmBody: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 21, marginBottom: 24 },
@@ -1132,7 +1132,7 @@ const s = StyleSheet.create({
   ffViewBracketBtn: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12, backgroundColor: "rgba(168,85,247,0.08)", borderRadius: 12, paddingVertical: 11, paddingHorizontal: 14, borderWidth: 1, borderColor: "rgba(168,85,247,0.2)" },
   ffViewBracketText: { flex: 1, color: "#a855f7", fontSize: 13, fontWeight: "800" },
   ffLiveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#ef4444" },
-  ffResultsViewBtn: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "#0d0d0d", borderRadius: 8, borderWidth: 1, borderColor: "#1e1e1e", marginTop: 6 },
+  ffResultsViewBtn: { flexDirection: "row", alignItems: "center", gap: 3, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: "#0d0d0d", borderRadius: 8, borderWidth: 1, borderColor: "#1a1a1a", marginTop: 6 },
   ffResultsViewBtnText: { color: "#8a8a8a", fontSize: 11, fontWeight: "700" },
 
   // Bracket viewer modal
@@ -1150,7 +1150,7 @@ const s = StyleSheet.create({
   bvWinnerMedal: { fontSize: 24, width: 36, textAlign: "center" },
   bvWinnerName: { color: "#fff", fontSize: 15, fontWeight: "700", flex: 1 },
   bvGroupCard: { backgroundColor: "#0d0d0d", borderRadius: 16, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 12, overflow: "hidden" },
-  bvGroupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#111", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1e1e1e" },
+  bvGroupHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10, backgroundColor: "#111", borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   bvGroupTitle: { color: "#fff", fontSize: 13, fontWeight: "800" },
   bvGroupBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
   bvSlotRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 14, paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#141414" },
@@ -1159,5 +1159,5 @@ const s = StyleSheet.create({
   bvSlotElim: { color: "#333", fontSize: 10, fontWeight: "700" },
   bvGameResult: { paddingHorizontal: 14, paddingVertical: 8, backgroundColor: "rgba(0,0,0,0.2)", borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#141414" },
   bvGameResultLabel: { color: "#a855f7", fontSize: 10, fontWeight: "800", marginBottom: 4, textTransform: "uppercase", letterSpacing: 0.6 },
-  bvGameScore: { color: "#666", fontSize: 12, marginVertical: 1 },
+  bvGameScore: { color: "#7a7a7a", fontSize: 12, marginVertical: 1 },
 });

@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "../../lib/supabase";
+import { ScoreText } from "../components/score-text";
 
 type Card = {
   username: string; avatar_url: string | null; game_name: string;
@@ -54,7 +55,7 @@ export default function ScoreShareScreen() {
               </View>
             )}
             <Text style={s.username}>{card.username}</Text>
-            <Text style={s.score}>{card.score.toLocaleString()}</Text>
+            <ScoreText value={card.score} animate style={s.score} />
             <Text style={s.game}>{card.game_name}</Text>
             <Text style={s.date}>
               {new Date(card.created_at).toLocaleDateString([], { month: "long", day: "numeric", year: "numeric" })}
@@ -89,7 +90,7 @@ const s = StyleSheet.create({
   username: { color: "#fff", fontSize: 20, fontWeight: "900" },
   score: { color: "#06b6d4", fontSize: 44, fontWeight: "900", letterSpacing: -1 },
   game: { color: "#aaa", fontSize: 15, fontWeight: "700" },
-  date: { color: "#555", fontSize: 12, marginTop: 4 },
+  date: { color: "#6e6e6e", fontSize: 12, marginTop: 4 },
 
   cta: {
     flexDirection: "row", alignItems: "center", gap: 8,

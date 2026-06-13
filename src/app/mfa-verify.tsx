@@ -213,7 +213,7 @@ const styles = StyleSheet.create({
     fontSize: 28, fontWeight: "900", letterSpacing: 16,
     color: "#fff", backgroundColor: "#0a0a0a",
     borderRadius: 14, paddingVertical: 18,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
     marginTop: 8,
   },
 

@@ -176,7 +176,7 @@ const s = StyleSheet.create({
 
   standingsCard: {
     backgroundColor: "#0d0d0d", borderRadius: 20, padding: 18, marginVertical: 16,
-    borderWidth: 1, borderColor: "#1e1e1e",
+    borderWidth: 1, borderColor: "#1a1a1a",
   },
   standingsHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 },
   liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#22c55e" },

@@ -640,7 +640,7 @@ const s = StyleSheet.create({
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   statCard: {
     flex: 1, minWidth: "45%", backgroundColor: "#111", borderRadius: 18,
-    padding: 18, borderWidth: 1, borderColor: "#1e1e1e",
+    padding: 18, borderWidth: 1, borderColor: "#1a1a1a",
   },
   statIcon: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center", marginBottom: 12 },
   statValue: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5, marginBottom: 2 },
@@ -648,7 +648,7 @@ const s = StyleSheet.create({
 
   chartCard: {
     flexDirection: "row", alignItems: "flex-end", justifyContent: "space-around",
-    backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e",
+    backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1a1a1a",
     padding: 16, height: 130,
   },
   barCol: { flex: 1, alignItems: "center", height: "100%", justifyContent: "flex-end" },
@@ -658,7 +658,7 @@ const s = StyleSheet.create({
   barColLabel: { color: "#777", fontSize: 10, fontWeight: "700", marginTop: 6 },
 
   listCard: {
-    backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e",
+    backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1a1a1a",
     overflow: "hidden",
   },
   listRow: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingVertical: 13, gap: 10 },

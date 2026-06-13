@@ -532,13 +532,13 @@ const s = StyleSheet.create({
   statBox: {
     flex: 1, backgroundColor: "#111", borderRadius: 18,
     padding: 16, alignItems: "center",
-    borderWidth: 1, borderColor: "#1e1e1e", gap: 4,
+    borderWidth: 1, borderColor: "#1a1a1a", gap: 4,
   },
   statValue: { fontSize: 26, fontWeight: "900", letterSpacing: -0.5 },
   statLabel: { color: "#777", fontSize: 11, fontWeight: "600", textAlign: "center" },
   featuredLabel: { color: "#777", fontSize: 12, marginTop: 8, textAlign: "center" },
 
-  listCard: { backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1e1e1e", overflow: "hidden" },
+  listCard: { backgroundColor: "#111", borderRadius: 18, borderWidth: 1, borderColor: "#1a1a1a", overflow: "hidden" },
   listRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 16, paddingVertical: 14 },
   listDivider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   medal: { fontSize: 22, minWidth: 28, textAlign: "center" },
