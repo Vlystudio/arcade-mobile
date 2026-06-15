@@ -86,10 +86,25 @@ DECLARE
   v_keys text[] := '{}';
   v_balls int;
   v_sig int;
+  v_role text;
+  v_beta boolean;
 BEGIN
   -- stored grants (beta_founder, any future manual grants)
   SELECT COALESCE(array_agg(title_key), '{}') INTO v_keys
     FROM user_titles WHERE user_id = p_uid;
+
+  -- role flair (computed from current role / beta-tester flag, so it
+  -- appears and disappears with the role and can never be self-assigned)
+  SELECT role, COALESCE(is_beta_tester, false) INTO v_role, v_beta
+    FROM profiles WHERE id = p_uid;
+  v_keys := v_keys || CASE v_role
+    WHEN 'architect' THEN 'the_creator'
+    WHEN 'owner'     THEN 'the_house'
+    WHEN 'admin'     THEN 'arcade_warden'
+    ELSE NULL END;
+  IF v_beta THEN
+    v_keys := v_keys || 'vanguard'::text;
+  END IF;
 
   -- signature ring (needs a minimum sample to mean anything)
   SELECT count(*) INTO v_balls FROM skeeball_ball_scores WHERE player_user_id = p_uid;
@@ -112,7 +127,7 @@ BEGIN
 
   -- tournament champion (any 1st place)
   IF EXISTS (SELECT 1 FROM tournament_placements WHERE user_id = p_uid AND placement = 1) THEN
-    v_keys := v_keys || 'tournament_champion';
+    v_keys := v_keys || 'tournament_champion'::text;
   END IF;
 
   -- season champion: current member of the top-points team in any completed season
@@ -132,7 +147,7 @@ BEGIN
             )
        )
   ) THEN
-    v_keys := v_keys || 'season_champion';
+    v_keys := v_keys || 'season_champion'::text;
   END IF;
 
   -- drop nulls/dupes

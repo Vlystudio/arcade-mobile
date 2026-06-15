@@ -13,6 +13,12 @@ export const TITLES: Record<string, TitleInfo> = {
   warming_up:          { label: "Warming Up",          color: "#9aa0a6", icon: "thermometer",   how: "The 10 ring is your most-hit shot." },
   tournament_champion: { label: "Tournament Champion", color: "#f59e0b", icon: "trophy",        how: "Won an arcade tournament." },
   season_champion:     { label: "Season Champion",     color: "#fbbf24", icon: "medal",         how: "On the winning team of a league season." },
+
+  // Role flair — granted by your role, not earned through play.
+  the_creator:         { label: "The Creator",         color: "#c084fc", icon: "color-wand",    how: "Built ArcadeApp. There's only one." },
+  the_house:           { label: "The House",           color: "#fbbf24", icon: "diamond",       how: "Owns the arcade. The house always wins." },
+  arcade_warden:       { label: "Arcade Warden",       color: "#8b5cf6", icon: "shield-half",   how: "Keeps order on the floor as an admin." },
+  vanguard:            { label: "Vanguard",            color: "#34d399", icon: "flag",          how: "A front-line beta tester." },
 };
 
 export function titleInfo(key: string | null | undefined): TitleInfo | null {
