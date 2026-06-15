@@ -3,6 +3,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  BackHandler,
   Modal,
   Pressable,
   ScrollView,
@@ -630,12 +631,50 @@ export default function SkeeballTrackerScreen({
     );
   }
 
+  function leaveScreen() {
+    if (onBack) { onBack(); return; }
+    router.canGoBack() ? router.back() : router.replace("/teams" as any);
+  }
+
+  async function checkOutAndLeave(force: boolean) {
+    if (mySession?.id) {
+      try {
+        await supabase.rpc("rpc_skeeball_cancel_session", { p_session_id: mySession.id, p_force: force });
+      } catch { /* leave anyway */ }
+    }
+    leaveScreen();
+  }
+
+  // Android hardware back routes through the same check-out logic.
+  useEffect(() => {
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => { goBack(); return true; });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mySession, playerBalls, ballScores, sessionPlayers]);
+
+  // Back = check the team out of the lane. Silent if nothing's been entered;
+  // confirm first (and discard) if balls are already recorded.
   function goBack() {
-    if (onBack) {
-      onBack();
+    if (mySession?.status === "active") {
+      const enteredLocal = sessionPlayers.reduce(
+        (s, sp) => s + (playerBalls[sp.player_user_id] ?? []).length, 0
+      );
+      const entered = enteredLocal + ballScores.length;
+      if (entered > 0) {
+        Alert.alert(
+          "Discard this game?",
+          `You've recorded ${entered} ball${entered === 1 ? "" : "s"}. Going back checks ${mySession.team_name ?? "your team"} out of Lane ${mySession.lane_number} and discards these scores — they won't be saved.`,
+          [
+            { text: "Keep Playing", style: "cancel" },
+            { text: "Discard & Exit", style: "destructive", onPress: () => checkOutAndLeave(true) },
+          ]
+        );
+        return;
+      }
+      checkOutAndLeave(false);
       return;
     }
-    router.canGoBack() ? router.back() : router.replace("/teams" as any);
+    leaveScreen();
   }
 
   // ─── Inactivity warning modal (shown over any active session view) ───────────
