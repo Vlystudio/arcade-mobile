@@ -35,7 +35,6 @@ import { showActionToast, showToast } from "../components/toast";
 import { WhatsNewSheet } from "../components/whats-new";
 import { fetchInbox, unseenInboxCount } from "../lib/inbox";
 import { validateCommentContent, validatePostContent } from "../../lib/validation";
-import { useTour } from "../hooks/use-tour";
 import type { AppRole } from "../components/role-badge";
 
 type Post = {
@@ -133,7 +132,6 @@ export default function FeedScreen() {
   const [onboarding, setOnboarding] = useState<{ photo: boolean; team: boolean; rsvp: boolean; pick: boolean } | null>(null);
 
   const [userRole, setUserRole] = useState<AppRole>("user");
-  useTour(user?.id, userRole);
 
   async function loadFeed(feedTab: FeedTab) {
     if (!user) return;
