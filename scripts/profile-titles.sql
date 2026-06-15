@@ -75,6 +75,23 @@ CREATE TRIGGER trig_grant_beta_founder
 
 
 -- ── 4. Earned-title computation ──────────────────────────────
+
+-- Canonical list of EVERY title key. Single source of truth on the server —
+-- keep in sync with the TITLES catalog in lib/titles.ts. The architect is
+-- granted this whole set (god-mode), so any title added here is automatically
+-- equippable by them with no further change.
+CREATE OR REPLACE FUNCTION public.all_title_keys()
+RETURNS text[] LANGUAGE sql IMMUTABLE AS $$
+  SELECT ARRAY[
+    'beta_founder',
+    'centurion', 'monarch_50', 'smooth_roller', 'steady_hand', 'on_the_board', 'warming_up',
+    'tournament_champion', 'season_champion',
+    'the_creator', 'the_house', 'arcade_warden', 'vanguard'
+  ];
+$$;
+REVOKE ALL ON FUNCTION public.all_title_keys() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.all_title_keys() TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.user_earned_title_keys(p_uid uuid)
 RETURNS text[]
 LANGUAGE plpgsql
@@ -89,14 +106,20 @@ DECLARE
   v_role text;
   v_beta boolean;
 BEGIN
+  SELECT role, COALESCE(is_beta_tester, false) INTO v_role, v_beta
+    FROM profiles WHERE id = p_uid;
+
+  -- Architect: god-mode — every title in the catalog is equippable.
+  IF v_role = 'architect' THEN
+    RETURN public.all_title_keys();
+  END IF;
+
   -- stored grants (beta_founder, any future manual grants)
   SELECT COALESCE(array_agg(title_key), '{}') INTO v_keys
     FROM user_titles WHERE user_id = p_uid;
 
   -- role flair (computed from current role / beta-tester flag, so it
   -- appears and disappears with the role and can never be self-assigned)
-  SELECT role, COALESCE(is_beta_tester, false) INTO v_role, v_beta
-    FROM profiles WHERE id = p_uid;
   v_keys := v_keys || CASE v_role
     WHEN 'architect' THEN 'the_creator'
     WHEN 'owner'     THEN 'the_house'
