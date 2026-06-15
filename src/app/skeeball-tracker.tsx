@@ -107,6 +107,14 @@ export default function SkeeballTrackerScreen({
 
   // Scoring state — keyed by player_user_id, value is array of ring scores tapped so far
   const [playerBalls, setPlayerBalls] = useState<Record<string, number[]>>({});
+  const [isHundoWeek, setIsHundoWeek] = useState(false);
+
+  // Week 7 = Hundo Week: only 100-ring balls decide the round winner.
+  useEffect(() => {
+    supabase.rpc("rpc_skeeball_week_scoring_mode").then(({ data }) => {
+      setIsHundoWeek(!!(data as any)?.is_hundo_week);
+    });
+  }, []);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savingOrder, setSavingOrder] = useState(false);
@@ -806,6 +814,9 @@ export default function SkeeballTrackerScreen({
     const grandTotal = sessionPlayers.reduce(
       (sum, sp) => sum + (playerBalls[sp.player_user_id] ?? []).reduce((s, b) => s + b, 0), 0
     );
+    const hundoTotal = sessionPlayers.reduce(
+      (sum, sp) => sum + (playerBalls[sp.player_user_id] ?? []).filter((b) => b === 100).length, 0
+    );
 
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
@@ -816,6 +827,21 @@ export default function SkeeballTrackerScreen({
           <View style={{ width: 40 }} />
         </View>
         <ScrollView contentContainerStyle={s.scroll}>
+
+          {/* ── Hundo Week banner (week 7: only 100s decide the winner) ── */}
+          {isHundoWeek && (
+            <View style={s.hundoBanner}>
+              <Text style={s.hundoBannerEmoji}>💯</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={s.hundoBannerTitle}>HUNDO WEEK</Text>
+                <Text style={s.hundoBannerSub}>Only 100-ring balls decide the win. Most 100s takes the round — keep recording every ball.</Text>
+              </View>
+              <View style={s.hundoCount}>
+                <ScoreText value={hundoTotal} style={s.hundoCountNum} />
+                <Text style={s.hundoCountLabel}>100s</Text>
+              </View>
+            </View>
+          )}
 
           {/* ── Shooting order (editable until the first ball) ── */}
           {totalEntered === 0 && ballScores.length === 0 && sessionPlayers.length > 1 && (
@@ -1195,6 +1221,18 @@ const s = StyleSheet.create({
   ballLabel: { color: "#8a8a8a", fontSize: 14, fontWeight: "700", width: 48 },
   ballInput: { flex: 1, color: "#fff", fontSize: 28, fontWeight: "900", textAlign: "center" },
   ballUnit: { color: "#333", fontSize: 13, fontWeight: "700", width: 28, textAlign: "right" },
+  hundoBanner: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    backgroundColor: "rgba(245,158,11,0.08)", borderRadius: 16, padding: 14, marginBottom: 16,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.35)",
+  },
+  hundoBannerEmoji: { fontSize: 28 },
+  hundoBannerTitle: { color: "#f59e0b", fontSize: 14, fontWeight: "900", letterSpacing: 1 },
+  hundoBannerSub: { color: "#d6a850", fontSize: 11.5, lineHeight: 16, marginTop: 2 },
+  hundoCount: { alignItems: "center", minWidth: 48 },
+  hundoCountNum: { color: "#f59e0b", fontSize: 26, fontWeight: "900" },
+  hundoCountLabel: { color: "#8a7a4a", fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
+
   totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 12, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#1a1a1a" },
   totalLabel: { color: "#8a8a8a", fontSize: 14 },
   totalValue: { color: "#06b6d4", fontSize: 22, fontWeight: "900" },
