@@ -95,10 +95,18 @@ const USER_STEPS: TourStep[] = [
   {
     icon: "restaurant",
     iconColor: "#f97316",
-    tag: "Food & Karaoke",
-    title: "Order food & request songs",
-    body: "Browse the menu and order from your phone — no waiting in line. Karaoke runs from the Karaoke screen: search a song and add it to the queue (you can even do this as a guest).",
+    tag: "Food",
+    title: "Order food from your phone",
+    body: "Pick your location to load the menu, then browse and check out right here — no waiting in line. Your order goes straight to the kitchen.",
     route: "/food",
+  },
+  {
+    icon: "mic",
+    iconColor: "#a855f7",
+    tag: "Karaoke",
+    title: "Request a karaoke song",
+    body: "Search any song, preview the results, and add it to the live queue — you can even do it as a guest. The current queue and what's playing show right here.",
+    route: "/karaoke",
   },
   {
     icon: "create",

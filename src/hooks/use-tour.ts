@@ -1,8 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { getTourSteps, tourStorageKey } from "../../lib/tour-steps";
 import { startGuidedTour } from "../components/guided-tour";
 import type { AppRole } from "../components/role-badge";
+
+// Module-level guard: the first-launch auto-start must fire ONCE per app
+// session, not on every screen mount. Without this, the tour navigating onto
+// a screen that also calls useTour (e.g. /profile) would re-trigger the
+// auto-start and reset the tour to step 0.
+let autoStartHandled = false;
 
 /**
  * Drives the interactive walkthrough. Auto-starts once on first launch and
@@ -10,14 +16,12 @@ import type { AppRole } from "../components/role-badge";
  * so it survives the navigation the tour performs.
  */
 export function useTour(userId: string | undefined, role: AppRole = "user") {
-  const startedRef = useRef(false);
-
   useEffect(() => {
-    if (!userId || startedRef.current) return;
+    if (!userId || autoStartHandled) return;
+    autoStartHandled = true; // claim synchronously to prevent re-entry mid-tour
     const key = tourStorageKey(userId);
     AsyncStorage.getItem(key).then((val) => {
       if (!val) {
-        startedRef.current = true;
         startGuidedTour(getTourSteps(role), () => AsyncStorage.setItem(key, "done").catch(() => {}));
       }
     });
