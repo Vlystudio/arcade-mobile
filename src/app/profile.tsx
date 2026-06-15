@@ -24,6 +24,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar, { setTabBarAvatar } from "../components/bottom-tab-bar";
 import { Avatar } from "../components/avatar";
 import { BetaBadge, RoleBadge, isElevatedRole } from "../components/role-badge";
+import { TitleChip } from "../components/title-chip";
+import { TITLES, PRONOUN_PRESETS } from "../../lib/titles";
 import type { AppRole } from "../components/role-badge";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
@@ -121,6 +123,11 @@ export default function ProfileScreen() {
   const [editVisible, setEditVisible] = useState(false);
   const [draftUsername, setDraftUsername] = useState("");
   const [draftBio, setDraftBio] = useState("");
+  const [pronouns, setPronouns] = useState<string | null>(null);
+  const [equippedTitle, setEquippedTitle] = useState<string | null>(null);
+  const [draftPronouns, setDraftPronouns] = useState("");
+  const [draftTitle, setDraftTitle] = useState<string | null>(null);
+  const [earnedTitles, setEarnedTitles] = useState<string[]>([]);
   const [savingProfile, setSavingProfile] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [avatarPickerVisible, setAvatarPickerVisible] = useState(false);
@@ -160,7 +167,7 @@ export default function ProfileScreen() {
   async function loadProfile() {
     if (!user) return;
     const [profileRes, scoresRes, pendingRes, teamRes, placementsRes, friendsRes, trophiesRes, convRes] = await Promise.all([
-      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio, show_skeeball_stats, sub_available, is_beta_tester").eq("id", user.id).single(),
+      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio, show_skeeball_stats, sub_available, is_beta_tester, pronouns, equipped_title").eq("id", user.id).single(),
       supabase.from("scores").select("score, game_id, games(id, name, type)").eq("user_id", user.id).eq("status", "approved"),
       supabase.from("scores").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       supabase.from("team_members").select("role, teams(name)").eq("user_id", user.id).maybeSingle(),
@@ -203,6 +210,9 @@ export default function ProfileScreen() {
       setBio(profileRes.data.bio ?? null);
       setShowSkeeStats((profileRes.data as any).show_skeeball_stats ?? true);
       setSubAvailable((profileRes.data as any).sub_available ?? false);
+      setPronouns((profileRes.data as any).pronouns ?? null);
+      setEquippedTitle((profileRes.data as any).equipped_title ?? null);
+      supabase.rpc("rpc_get_my_titles").then(({ data }) => setEarnedTitles(Array.isArray(data) ? (data as string[]) : []));
     }
 
     // Skee-ball league stats, scoped to the active season when one exists
@@ -305,6 +315,8 @@ export default function ProfileScreen() {
   function openEditProfile() {
     setDraftUsername(username ?? "");
     setDraftBio(bio ?? "");
+    setDraftPronouns(pronouns ?? "");
+    setDraftTitle(equippedTitle ?? null);
     setEditVisible(true);
   }
 
@@ -346,7 +358,12 @@ export default function ProfileScreen() {
 
     const { error } = await supabase
       .from("profiles")
-      .update({ username: name, bio: newBio || null })
+      .update({
+        username: name,
+        bio: newBio || null,
+        pronouns: draftPronouns.trim() || null,
+        equipped_title: draftTitle,
+      })
       .eq("id", user.id);
 
     setSavingProfile(false);
@@ -354,6 +371,8 @@ export default function ProfileScreen() {
 
     setUsername(name);
     setBio(newBio || null);
+    setPronouns(draftPronouns.trim() || null);
+    setEquippedTitle(draftTitle);
     setEditVisible(false);
     showToast("Profile updated");
   }
@@ -609,7 +628,9 @@ export default function ProfileScreen() {
               <Text style={styles.displayName}>{username ?? "Player"}</Text>
               <RoleBadge role={role} size={15} />
               <BetaBadge visible={isBetaTester} size={15} />
+              {pronouns ? <Text style={styles.pronounText}>{pronouns}</Text> : null}
             </View>
+            {equippedTitle ? <View style={{ marginTop: 6 }}><TitleChip titleKey={equippedTitle} /></View> : null}
             {teamName && (
               <View style={styles.teamRow}>
                 {teamRole === "captain" && <Ionicons name="star" size={11} color="#f59e0b" />}
@@ -1005,6 +1026,65 @@ export default function ProfileScreen() {
                 <Text style={styles.editBioCount}>{draftBio.length}/{BIO_LIMIT}</Text>
               </View>
 
+              {/* Pronouns */}
+              <View style={styles.editField}>
+                <Text style={styles.editFieldLabel}>Pronouns</Text>
+                <View style={styles.pronounPresetRow}>
+                  {PRONOUN_PRESETS.map((p) => {
+                    const active = draftPronouns === p;
+                    return (
+                      <Pressable
+                        key={p}
+                        style={[styles.pronounPreset, active && styles.pronounPresetActive]}
+                        onPress={() => setDraftPronouns(active ? "" : p)}
+                      >
+                        <Text style={[styles.pronounPresetText, active && styles.pronounPresetTextActive]}>{p}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <TextInput
+                  style={styles.editFieldInput}
+                  value={draftPronouns}
+                  onChangeText={setDraftPronouns}
+                  autoCapitalize="none"
+                  maxLength={30}
+                  placeholder="or type your own"
+                  placeholderTextColor="#555"
+                />
+              </View>
+
+              {/* Title */}
+              <View style={styles.editField}>
+                <Text style={styles.editFieldLabel}>Title</Text>
+                <Text style={styles.titlePickerHint}>Pick a title you've earned to show on your profile.</Text>
+                <Pressable
+                  style={[styles.titleOption, !draftTitle && styles.titleOptionActive]}
+                  onPress={() => setDraftTitle(null)}
+                >
+                  <Ionicons name="remove-circle-outline" size={16} color={!draftTitle ? "#06b6d4" : "#666"} />
+                  <Text style={[styles.titleOptionLabel, { color: !draftTitle ? "#fff" : "#9aa0a6" }]}>No title</Text>
+                  {!draftTitle && <Ionicons name="checkmark" size={16} color="#06b6d4" />}
+                </Pressable>
+                {earnedTitles.length === 0 ? (
+                  <Text style={styles.titleEmpty}>No titles earned yet — win games, tournaments, and seasons to unlock them.</Text>
+                ) : earnedTitles.map((key) => {
+                  const info = TITLES[key];
+                  if (!info) return null;
+                  const active = draftTitle === key;
+                  return (
+                    <Pressable key={key} style={[styles.titleOption, active && styles.titleOptionActive]} onPress={() => setDraftTitle(key)}>
+                      <Ionicons name={info.icon as any} size={16} color={info.color} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.titleOptionLabel, { color: info.color }]}>{info.label}</Text>
+                        <Text style={styles.titleOptionHow}>{info.how}</Text>
+                      </View>
+                      {active && <Ionicons name="checkmark" size={16} color="#06b6d4" />}
+                    </Pressable>
+                  );
+                })}
+              </View>
+
               <Text style={styles.editHint}>
                 Username can contain letters, numbers, and underscores (3–20 characters).
               </Text>
@@ -1371,6 +1451,29 @@ const styles = StyleSheet.create({
   teamText: { color: "#06b6d4", fontSize: 13, fontWeight: "700" },
   bioText: { color: "#ccc", fontSize: 13.5, lineHeight: 19, marginTop: 1 },
   emailText: { color: "#6b6b6b", fontSize: 12, marginTop: 1 },
+  pronounText: { color: "#9aa0a6", fontSize: 12.5, fontWeight: "600" },
+
+  // ── Pronoun presets (edit sheet) ──
+  pronounPresetRow: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 10 },
+  pronounPreset: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+    borderWidth: 1, borderColor: "#262626", backgroundColor: "#0e0e0e",
+  },
+  pronounPresetActive: { borderColor: "#06b6d4", backgroundColor: "#06b6d422" },
+  pronounPresetText: { color: "#9aa0a6", fontSize: 12.5, fontWeight: "700" },
+  pronounPresetTextActive: { color: "#67e8f9" },
+
+  // ── Title picker (edit sheet) ──
+  titlePickerHint: { color: "#6b6b6b", fontSize: 12, marginBottom: 10, lineHeight: 16 },
+  titleOption: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 12, paddingVertical: 10, borderRadius: 12,
+    borderWidth: 1, borderColor: "#1f1f1f", backgroundColor: "#0e0e0e", marginBottom: 8,
+  },
+  titleOptionActive: { borderColor: "#06b6d4", backgroundColor: "#06b6d40f" },
+  titleOptionLabel: { fontSize: 14, fontWeight: "800" },
+  titleOptionHow: { color: "#7a7a7a", fontSize: 11.5, marginTop: 1, lineHeight: 15 },
+  titleEmpty: { color: "#6b6b6b", fontSize: 12.5, lineHeight: 17, fontStyle: "italic" },
 
   // ── Action buttons ──
   btnRow: { flexDirection: "row", gap: 7, marginTop: 14, marginBottom: 20 },

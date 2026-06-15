@@ -14,6 +14,7 @@ import {
 import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BetaBadge, RoleBadge } from "../components/role-badge";
+import { TitleChip } from "../components/title-chip";
 import type { AppRole } from "../components/role-badge";
 import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
@@ -31,6 +32,8 @@ type UserProfile = {
   role: AppRole;
   featured_game_id: string | null;
   is_beta_tester: boolean;
+  pronouns: string | null;
+  equipped_title: string | null;
 };
 
 type FriendStatus = "none" | "pending_sent" | "pending_received" | "friends";
@@ -105,6 +108,8 @@ export default function UserProfileScreen() {
       role: (p.badge_role ?? "user") as AppRole,
       featured_game_id: p.featured_game_id ?? null,
       is_beta_tester: !!p.is_beta_tester,
+      pronouns: p.pronouns ?? null,
+      equipped_title: p.equipped_title ?? null,
     });
 
     const fr = friendRes.data;
@@ -293,7 +298,14 @@ export default function UserProfileScreen() {
             <Text style={s.heroName}>{profile.username}</Text>
             <RoleBadge role={profile.role} size={16} />
             <BetaBadge visible={profile.is_beta_tester} size={16} />
+            {profile.pronouns ? <Text style={s.pronounText}>{profile.pronouns}</Text> : null}
           </View>
+
+          {profile.equipped_title ? (
+            <View style={{ marginTop: 6, alignItems: "center" }}>
+              <TitleChip titleKey={profile.equipped_title} />
+            </View>
+          ) : null}
 
           {teamInfo && (
             <View style={s.teamRow}>
@@ -473,6 +485,7 @@ const s = StyleSheet.create({
   avatarInitial: { color: "#000", fontSize: 34, fontWeight: "900" },
   nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   heroName: { color: "#fff", fontSize: 24, fontWeight: "900", letterSpacing: -0.4 },
+  pronounText: { color: "#9aa0a6", fontSize: 13, fontWeight: "600" },
   teamRow: { flexDirection: "row", alignItems: "center", gap: 5, marginTop: 4 },
   teamText: { color: "#06b6d4", fontSize: 13.5, fontWeight: "800" },
   countsRow: { flexDirection: "row", gap: 28, marginTop: 14, justifyContent: "center" },
