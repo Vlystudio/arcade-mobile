@@ -21,7 +21,6 @@ type Lane = { id: string; lane_number: number };
 type Generated = { lane_number: number; scanUrl: string; qr: string };
 
 const SITE = process.env.EXPO_PUBLIC_SITE_URL ?? "https://www.vlystudios.com";
-const TTL_HOURS = 87600; // ~10 years — printed signage shouldn't expire
 const qrUrl = (data: string, size = 600) =>
   `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&margin=2&data=${encodeURIComponent(data)}`;
 
@@ -57,7 +56,7 @@ export default function LaneQrCodesScreen() {
     const out: Generated[] = [];
     for (const lane of lanes) {
       const { data, error } = await supabase.rpc("rpc_admin_generate_lane_qr_token", {
-        p_lane_id: lane.id, p_ttl_hours: TTL_HOURS,
+        p_lane_id: lane.id, p_ttl_hours: null, // null = never expires; only replaced on regenerate
       });
       if (error || data?.error) {
         setGenerating(false);
@@ -136,8 +135,9 @@ export default function LaneQrCodesScreen() {
         <View style={s.intro}>
           <Text style={s.introTitle}>Check-in QR codes for all {lanes.length} skee-ball lanes</Text>
           <Text style={s.introBody}>
-            Generate fresh, long-lived codes and mount one at each lane. Players scan to check their team in.
-            {"\n\n"}⚠ Generating replaces any existing codes — previously printed QR codes stop working. Requires admin + 2FA.
+            Generate codes and mount one at each lane. Players scan to check their team in. These codes
+            <Text style={{ color: "#06b6d4", fontWeight: "800" }}> never expire</Text> — they stay valid until you generate new ones here.
+            {"\n\n"}⚠ Generating replaces the existing codes — any previously printed QR codes for these lanes stop working immediately. Requires admin + 2FA.
           </Text>
         </View>
 
