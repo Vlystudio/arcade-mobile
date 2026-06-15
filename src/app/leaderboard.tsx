@@ -181,10 +181,24 @@ export default function LeaderboardScreen() {
     setTeamScoresLoading(false);
   }
 
+  // Default the board to the most-played game (falls back to All Games
+  // if there are no approved scores yet). Users can still switch games.
+  async function loadDefaultLeaderboard() {
+    const { data } = await supabase.rpc("rpc_most_played_game");
+    const g = data as { id: string; name: string; type: string } | null;
+    if (g && g.id) {
+      setSelectedGameId(g.id);
+      setSelectedGameName(g.name);
+      await loadLeaderboard(timeFilter, g.id);
+    } else {
+      await loadLeaderboard(timeFilter, null);
+    }
+  }
+
   useEffect(() => {
     if (user) {
       loadGames();
-      loadLeaderboard(timeFilter, selectedGameId);
+      loadDefaultLeaderboard();
       loadTeamScores();
     }
   }, [user]);

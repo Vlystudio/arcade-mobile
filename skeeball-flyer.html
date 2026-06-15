@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArcadeTracker — Skee-Ball League</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0a0a0a;
+    color: #fff;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    padding: 28px 20px;
+  }
+
+  .flyer {
+    width: 100%; max-width: 760px;
+    background: #111; border: 1.5px solid #1e1e1e; border-radius: 24px;
+    overflow: hidden; position: relative;
+  }
+  .flyer::before {
+    content: ''; position: absolute; top: -80px; left: 50%;
+    transform: translateX(-50%); width: 480px; height: 150px;
+    background: radial-gradient(ellipse, rgba(6,182,212,0.2) 0%, transparent 70%);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── Header ── */
+  .header { padding: 38px 44px 24px; text-align: center; position: relative; z-index: 1; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: rgba(6,182,212,0.1); border: 1px solid rgba(6,182,212,0.28); color: #06b6d4;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase;
+    border-radius: 999px; padding: 5px 16px; margin-bottom: 18px;
+  }
+  .badge::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%;
+    background: #06b6d4; animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .headline { font-size: 46px; font-weight: 900; line-height: 1.0; letter-spacing: -0.03em; margin-bottom: 13px; }
+  .headline span { color: #06b6d4; }
+  .subheadline { font-size: 14.5px; color: #7a7a7a; font-weight: 400; line-height: 1.58; max-width: 500px; margin: 0 auto; }
+  .subheadline b { color: #b0b0b0; font-weight: 600; }
+
+  /* ── Main: mock + features ── */
+  .main {
+    display: grid; grid-template-columns: 232px 1fr; gap: 26px;
+    padding: 8px 44px 22px; position: relative; z-index: 1; align-items: start;
+  }
+
+  /* Phone mock (snippet of the site) */
+  .phone {
+    background: #000; border: 6px solid #1c1c1c; border-radius: 26px; padding: 12px 11px 14px;
+    box-shadow: 0 18px 40px rgba(0,0,0,0.5);
+  }
+  /* In-app top bar */
+  .app-topbar { display: flex; align-items: center; justify-content: space-between; padding: 1px 3px 11px; }
+  .app-topbar .chev { color: #888; font-size: 16px; font-weight: 700; line-height: 1; }
+  .app-topbar .app-title { font-size: 12px; font-weight: 800; color: #fff; }
+  .app-topbar .sp { width: 12px; }
+
+  /* Active player scoring card */
+  .play-card { background: #0c0c0c; border: 1px solid #1c1c1c; border-radius: 14px; padding: 12px 12px 13px; }
+  .play-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .ava {
+    width: 23px; height: 23px; border-radius: 8px; flex-shrink: 0;
+    background: linear-gradient(135deg, #1a3a44, #0e1e22); border: 1px solid #1f3a42;
+    color: #22d3ee; font-size: 10px; font-weight: 900; display: flex; align-items: center; justify-content: center;
+  }
+  .pname { font-size: 12.5px; font-weight: 800; color: #fff; }
+  .you { background: rgba(6,182,212,0.12); color: #06b6d4; font-size: 8.5px; font-weight: 900; border-radius: 5px; padding: 2px 6px; }
+  .ptot { margin-left: auto; font-size: 13.5px; font-weight: 900; color: #06b6d4; }
+  .ring-hint { font-size: 8.5px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: #777; margin-bottom: 10px; }
+  .ring-grid { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+  .ring {
+    width: 28px; height: 28px; border-radius: 50%; background: #0e0e0e; border: 2px solid;
+    display: flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 900;
+  }
+  .ring.r100 { width: 100%; height: 30px; border-radius: 999px; font-size: 13px; margin-top: 1px; }
+  .r10, .r20 { border-color: rgba(130,130,130,0.55); color: #9a9a9a; }
+  .r30 { border-color: rgba(59,130,246,0.5); color: #3b82f6; }
+  .r40 { border-color: rgba(139,92,246,0.5); color: #8b5cf6; }
+  .r50 { border-color: rgba(34,197,94,0.5); color: #22c55e; }
+  .r100 { border-color: rgba(6,182,212,0.55); color: #06b6d4; }
+  .hist { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; margin-top: 11px; }
+  .hchip { border-radius: 7px; padding: 3px 7px; font-size: 10.5px; font-weight: 900; border: 1px solid; }
+  .c30 { color: #3b82f6; border-color: rgba(59,130,246,0.28); background: rgba(59,130,246,0.1); }
+  .c40 { color: #8b5cf6; border-color: rgba(139,92,246,0.28); background: rgba(139,92,246,0.1); }
+  .c50 { color: #22c55e; border-color: rgba(34,197,94,0.28); background: rgba(34,197,94,0.1); }
+  .undo { margin-left: auto; font-size: 9.5px; font-weight: 700; color: #5a5a5a; }
+  .team-tot {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #0d0d0d; border: 1px solid #1a1a1a; border-radius: 11px; padding: 10px 13px; margin-top: 11px;
+  }
+  .team-tot span { font-size: 11px; color: #8a8a8a; font-weight: 600; }
+  .team-tot b { font-size: 18px; font-weight: 900; color: #06b6d4; letter-spacing: -0.02em; }
+  .phone-cap { text-align: center; font-size: 10px; color: #3a3a3a; font-weight: 600; margin-top: 11px; }
+
+  /* Feature list */
+  .features { display: flex; flex-direction: column; gap: 13px; }
+  .feat { display: flex; gap: 12px; align-items: flex-start; }
+  .feat-ic {
+    flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px;
+    background: rgba(6,182,212,0.08); border: 1px solid rgba(6,182,212,0.18);
+    display: flex; align-items: center; justify-content: center; font-size: 17px;
+  }
+  .feat-tx h4 { font-size: 13.5px; font-weight: 800; color: #ececec; margin-bottom: 2px; }
+  .feat-tx p { font-size: 11.5px; color: #6a6a6a; line-height: 1.45; }
+  .feat-tx p i { color: #9a9a9a; font-style: normal; font-weight: 600; }
+
+  /* ── Two panels ── */
+  .strip { display: grid; grid-template-columns: 1fr 1fr; gap: 11px; padding: 4px 44px 0; position: relative; z-index: 1; }
+  .panel { border-radius: 14px; padding: 15px 17px; }
+  .panel-id { background: rgba(6,182,212,0.05); border: 1px solid rgba(6,182,212,0.2); }
+  .panel-future { background: rgba(168,85,247,0.05); border: 1px solid rgba(168,85,247,0.22); }
+  .panel-kicker { font-size: 9.5px; font-weight: 800; letter-spacing: 0.11em; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .panel-id .panel-kicker { color: #06b6d4; }
+  .panel-future .panel-kicker { color: #c084fc; }
+  .soon { font-size: 8px; border-radius: 999px; padding: 1px 7px; letter-spacing: 0.05em; border: 1px solid rgba(168,85,247,0.4); color: #c084fc; }
+  .panel-title { font-size: 14.5px; font-weight: 900; color: #fff; line-height: 1.15; margin-bottom: 5px; letter-spacing: -0.02em; }
+  .panel-body { font-size: 11px; color: #6a6a6a; line-height: 1.5; }
+  .panel-body b { color: #9a9a9a; font-weight: 600; }
+
+  /* ── Footer / QR ── */
+  .footer {
+    margin-top: 20px; padding: 22px 44px 32px; border-top: 1px solid #1a1a1a;
+    display: grid; grid-template-columns: 1fr 196px; gap: 30px; align-items: center;
+    position: relative; z-index: 1;
+  }
+  .footer-lead { font-size: 19px; font-weight: 900; color: #fff; letter-spacing: -0.02em; line-height: 1.18; margin-bottom: 12px; }
+  .footer-lead span { color: #06b6d4; }
+  .perks { display: flex; flex-direction: column; gap: 7px; }
+  .perk { font-size: 12px; color: #777; display: flex; align-items: center; gap: 9px; }
+  .perk b { color: #ccc; font-weight: 700; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: #06b6d4; flex-shrink: 0; }
+  .qr-panel { display: flex; flex-direction: column; align-items: center; gap: 9px; text-align: center; }
+  .qr-outer {
+    background: linear-gradient(135deg, rgba(6,182,212,0.18), rgba(6,182,212,0.04));
+    border: 1px solid rgba(6,182,212,0.25); border-radius: 20px; padding: 3px;
+  }
+  .qr-wrap { background: #fff; border-radius: 18px; padding: 11px; display: block; }
+  .qr-wrap img { width: 150px; height: 150px; display: block; }
+  .qr-cta { font-size: 13.5px; font-weight: 800; color: #fff; line-height: 1.3; }
+  .qr-url { font-size: 12.5px; font-weight: 700; color: #06b6d4; }
+  .qr-sub { font-size: 10px; color: #444; line-height: 1.45; }
+
+  /* ── Print: one Letter page ── */
+  @media print {
+    @page { size: letter portrait; margin: 0.25in; }
+    html, body { background: #fff; padding: 0; margin: 0; display: block; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .flyer {
+      background: #fff; border: none; border-radius: 0; max-width: 100%;
+      width: 100%; margin: 0 auto;
+    }
+    .flyer::before { display: none; }
+    .header { padding: 16px 54px 10px; }
+    .subheadline { line-height: 1.45; }
+    .badge { background: #e0f2fe; border-color: #7dd3fc; color: #0284c7; }
+    .badge::before { background: #0284c7; animation: none; }
+    .headline { color: #111; }
+    .headline span { color: #0284c7; }
+    .subheadline { color: #555; } .subheadline b { color: #222; }
+    .main { padding: 2px 54px 6px; }
+    .features { gap: 8px; }
+    .feat-tx p { line-height: 1.4; }
+    .strip { padding: 2px 54px 0; }
+    .panel { padding: 11px 15px; }
+    .panel-body { line-height: 1.42; }
+    .phone { background: #f4f4f4; border-color: #e3e3e3; box-shadow: none; }
+    .app-topbar .chev { color: #999; } .app-topbar .app-title { color: #111; }
+    .play-card { background: #fff; border-color: #e5e5e5; }
+    .ava { background: #e0f2fe; border-color: #bae6fd; color: #0284c7; }
+    .pname { color: #111; } .you { background: #e0f2fe; color: #0284c7; } .ptot { color: #0284c7; }
+    .ring-hint { color: #888; }
+    .ring { background: #fff; }
+    .r10, .r20 { border-color: #cbd5e1; color: #64748b; }
+    .r30 { border-color: #93c5fd; color: #2563eb; }
+    .r40 { border-color: #c4b5fd; color: #7c3aed; }
+    .r50 { border-color: #86efac; color: #16a34a; }
+    .r100 { border-color: #7dd3fc; color: #0284c7; }
+    .c30 { background: #eff6ff; border-color: #bfdbfe; color: #2563eb; }
+    .c40 { background: #f5f3ff; border-color: #ddd6fe; color: #7c3aed; }
+    .c50 { background: #f0fdf4; border-color: #bbf7d0; color: #16a34a; }
+    .undo { color: #999; }
+    .team-tot { background: #f7f7f7; border-color: #eee; }
+    .team-tot span { color: #888; } .team-tot b { color: #0284c7; }
+    .phone-cap { color: #aaa; }
+    .feat-ic { background: #f0f9ff; border-color: #bae6fd; }
+    .feat-tx h4 { color: #111; } .feat-tx p { color: #666; } .feat-tx p i { color: #222; }
+    .panel-id { background: #f0f9ff; border-color: #bae6fd; }
+    .panel-future { background: #faf5ff; border-color: #e9d5ff; }
+    .panel-id .panel-kicker { color: #0284c7; }
+    .panel-future .panel-kicker { color: #9333ea; } .soon { border-color: #d8b4fe; color: #9333ea; }
+    .panel-title { color: #111; } .panel-body { color: #666; } .panel-body b { color: #222; }
+    .footer { margin-top: 4px; border-color: #e5e5e5; padding: 10px 54px 0; }
+    .qr-wrap { padding: 8px; } .qr-wrap img { width: 114px; height: 114px; }
+    .footer-lead { color: #111; } .footer-lead span { color: #0284c7; }
+    .perk { color: #555; } .perk b { color: #111; } .dot { background: #0284c7; }
+    .qr-outer { background: #f0f9ff; border-color: #7dd3fc; }
+    .qr-cta { color: #111; } .qr-url { color: #0284c7; } .qr-sub { color: #888; }
+  }
+</style>
+</head>
+<body>
+<div class="flyer">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="badge">Monday Night Skee-Ball League</div>
+    <h1 class="headline">Skee-Ball,<br><span>leveled up.</span></h1>
+    <p class="subheadline">
+      We run a skee-ball league every Monday. Now your phone keeps the score, tracks the
+      standings, and remembers <b>exactly who's been hot</b> — straight from your browser, nothing to install.
+    </p>
+  </div>
+
+  <!-- Main -->
+  <div class="main">
+    <!-- Phone mock -->
+    <div>
+      <div class="phone">
+        <div class="app-topbar">
+          <span class="chev">‹</span>
+          <span class="app-title">Lane 3</span>
+          <span class="sp"></span>
+        </div>
+        <div class="play-card">
+          <div class="play-head">
+            <span class="ava">R</span>
+            <span class="pname">Rogue</span>
+            <span class="you">You</span>
+            <span class="ptot">240 pts</span>
+          </div>
+          <div class="ring-hint">Round 2 · Ball 3 — pick ring</div>
+          <div class="ring-grid">
+            <span class="ring r10">10</span>
+            <span class="ring r20">20</span>
+            <span class="ring r30">30</span>
+            <span class="ring r40">40</span>
+            <span class="ring r50">50</span>
+            <span class="ring r100">100</span>
+          </div>
+          <div class="hist">
+            <span class="hchip c40">40</span><span class="hchip c50">50</span><span class="hchip c40">40</span><span class="hchip c30">30</span>
+            <span class="undo">↶ Undo</span>
+          </div>
+        </div>
+        <div class="team-tot"><span>Team total</span><b>360 pts</b></div>
+      </div>
+      <p class="phone-cap">Scoring a lane, just like in the app</p>
+    </div>
+
+    <!-- Features -->
+    <div class="features">
+      <div class="feat">
+        <div class="feat-ic">📲</div>
+        <div class="feat-tx"><h4>Scan in at your lane</h4><p>Point your camera at the code on the lane and you're checked in. No sign-up sheet, no waiting around.</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat-ic">🎳</div>
+        <div class="feat-tx"><h4>Tap in every ball</h4><p>Log each roll as you play. One person can keep score for the whole group, solo or as a team.</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat-ic">🏆</div>
+        <div class="feat-tx"><h4>Watch the standings</h4><p>See how your team's doing each Monday, and where you land for the season.</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat-ic">📊</div>
+        <div class="feat-tx"><h4>Know your numbers</h4><p>Averages, best rings, personal records — the story behind your game, ball by ball.</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat-ic">🎖️</div>
+        <div class="feat-tx"><h4>Earn a title</h4><p>Live in the 40s and you're a <i>Smooth Roller</i>. Own the 50 and you're <i>Monarch of 50's</i>. Wear it on your profile.</p></div>
+      </div>
+      <div class="feat">
+        <div class="feat-ic">🔗</div>
+        <div class="feat-tx"><h4>Brag a little</h4><p>Had a big game? Send a link to your scorecard so everyone can see the rank.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panels -->
+  <div class="strip">
+    <div class="panel panel-id">
+      <div class="panel-kicker">👤 Your profile</div>
+      <div class="panel-title">More than a username</div>
+      <div class="panel-body">Your avatar, your pronouns, the <b>title you've earned</b>, your trophies, and your whole league stat line — all in one place.</div>
+    </div>
+    <div class="panel panel-future">
+      <div class="panel-kicker">✨ Coming <span class="soon">EARLY 2027</span></div>
+      <div class="panel-title">Fantasy Skee-Ball</div>
+      <div class="panel-body">Draft a squad under a salary cap, ride hot streaks, work the transfer market. <b>Your stats already count</b> — every night you play now builds your value for draft day.</div>
+    </div>
+  </div>
+
+  <!-- Footer / QR -->
+  <div class="footer">
+    <div>
+      <div class="footer-lead">Scan it, make an account,<br><span>get on the board.</span></div>
+      <div class="perks">
+        <div class="perk"><span class="dot"></span><b>Free to join</b> — takes about a minute</div>
+        <div class="perk"><span class="dot"></span><b>Any phone works</b> — it opens right in your browser</div>
+        <div class="perk"><span class="dot"></span><b>Add it to your home screen</b> and it runs like an app</div>
+      </div>
+    </div>
+    <div class="qr-panel">
+      <div class="qr-outer">
+        <div class="qr-wrap">
+          <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAlgAAAJYAQMAAACEqAqfAAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7EAAAOxAGVKw4bAAAC20lEQVR4nO3dMXLzIBCGYTwpVOYIOoqPZh1NR9ERXKrwmJhlVyxIyaRIoZj3q35jePi7HRbJCeEPc4ttpvzFRT6EMOjwrCMxrunrj926JxYWFhbWqa01uHw2VpN7+mZI8Mta/MIrFhYWFlZf1lWnqjVo1XlNluEprZx1q1KHFl+ZsLCwsLD+pSVZtC7c0gfRm9qBhYWFhYXVWDIikQ7VU+tQxMLCwsLCcilnmH3cDcjv+19YWFhYWGex2jQ9qzWdOx55ctqqWE2wsLCwsHqxjrLvWZkV9AbkqEwdBwsLCwvrHFbVZ5JMadhG/NR8R1Hut0tWLCwsLKwOrYd88BfYQUcs83YjEf25464T3X0HFhYWFtabW/qPlzXq/bZOtrjL7v1WB8HCwsLCOrMVfYdK8hRdMm3PM1UL7Amn+kIcCwsLC+vtLV3p6tB0rM91z8oihWt187CwsLCwOrCqryyVVUaqLNtbecH1v7CwsLCwTmpJ7I5CsvqVslV77mjepNvVISwsLCys97Zk5UM7VPdNz/H7mTXo5rYglJ4VFhYWFtZ5raiXFaMun4Jl3D0LG/3IeFiHsLCwsLD6sCSLPgurI+5+O+Z38FyqZ2G1lD2xsLCwsLqxrCm1aM9KH3Vyv+xUYieWuO0XghEBCwsLC+vs1tF7cxevh1wccgZ/UDnuf2FhYWFh9WGN9Tt49ob1mubIVpeyssQfVLCwsLCw+rCOMpSvtruMrQ7pVkH1EiwsLCysM1u32GbKK6OeO6ylJblvljS5XH1JwcLCwsLqxbJCIyk/v3Eplp47ctSSVCeRH/6WERYWFhbWOayr1oBixW1E8qH6932mpGNhYWFhYZl1y8/C5rcmwpYx2nsUkt/VISwsLCyst7XmPLmqQzlNF8syh2/rEBYWFhbWWaySz+aOQk4ZU17p7rf19zqe9eZYWFhYWL1YbZpzx6Ar7XbjqA7pfwcLCwsLqw/rD/MFknk5+2AEFJcAAAAASUVORK5CYII=" alt="Scan to sign in or sign up at vlystudios.com/welcome" />
+        </div>
+      </div>
+      <p class="qr-cta">Scan to sign up<br>or log in</p>
+      <p class="qr-url">vlystudios.com</p>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
