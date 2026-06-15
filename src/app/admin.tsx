@@ -433,6 +433,9 @@ export default function AdminScreen() {
   const [startSeasonVisible, setStartSeasonVisible] = useState(false);
   const [newSeasonName, setNewSeasonName] = useState("");
   const [startingSeason, setStartingSeason] = useState(false);
+  // Tie-resolution / set finishing order
+  const [orderingMatch, setOrderingMatch] = useState<{ matchId: string; week: string; order: SkeeAdminSession[] } | null>(null);
+  const [savingOrder, setSavingOrder] = useState(false);
 
   // Content reports queue
   type ContentReport = {
@@ -2143,6 +2146,35 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
     } catch {
       // push is best-effort
     }
+  }
+
+  function moveOrder(index: number, delta: -1 | 1) {
+    setOrderingMatch((prev) => {
+      if (!prev) return prev;
+      const target = index + delta;
+      if (target < 0 || target >= prev.order.length) return prev;
+      const next = [...prev.order];
+      [next[index], next[target]] = [next[target], next[index]];
+      return { ...prev, order: next };
+    });
+  }
+
+  async function handleSaveMatchOrder() {
+    if (!orderingMatch || savingOrder) return;
+    setSavingOrder(true);
+    setSkeeAdminError(null);
+    const { data, error } = await supabase.rpc("rpc_admin_skeeball_set_match_order", {
+      p_match_id: orderingMatch.matchId,
+      p_ordered_session_ids: orderingMatch.order.map((o) => o.id),
+    });
+    setSavingOrder(false);
+    if (error || (data as any)?.error) {
+      setSkeeAdminError((data as any)?.message ?? (data as any)?.error ?? error?.message ?? "Failed to save order.");
+      return;
+    }
+    setOrderingMatch(null);
+    showToast("Finishing order saved");
+    await loadSkeeAdminSessions();
   }
 
   async function handleSkeeAdjust() {
@@ -4420,11 +4452,36 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
                 if (!groups[key]) groups[key] = [];
                 groups[key].push(s);
               });
-              return Object.entries(groups).map(([weekKey, sessions]) => (
+              return Object.entries(groups).map(([weekKey, sessions]) => {
+                const matchId = sessions.find((x) => x.league_match_id)?.league_match_id ?? null;
+                const placements = sessions.map((x) => x.placement).filter((p) => p != null);
+                const hasTie = new Set(placements).size !== placements.length;
+                return (
                 <View key={weekKey} style={styles.skeeMatchGroup}>
-                  <Text style={styles.skeeMatchGroupLabel}>
-                    {weekKey === "__no_match" ? "No League Match" : `Week of ${weekKey}`}
-                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                    <Text style={[styles.skeeMatchGroupLabel, { marginBottom: 0, flex: 1 }]}>
+                      {weekKey === "__no_match" ? "No League Match" : `Week of ${weekKey}`}
+                    </Text>
+                    {hasTie && (
+                      <View style={styles.tieBadge}>
+                        <Ionicons name="git-compare-outline" size={11} color="#f59e0b" />
+                        <Text style={styles.tieBadgeText}>TIE — roll-off</Text>
+                      </View>
+                    )}
+                    {matchId && sessions.length >= 2 && (
+                      <Pressable
+                        style={styles.skeeEditBtn}
+                        onPress={() => {
+                          const ordered = [...sessions].sort((a, b) => (a.placement ?? 99) - (b.placement ?? 99));
+                          setOrderingMatch({ matchId, week: weekKey, order: ordered });
+                          setSkeeAdminError(null);
+                        }}
+                      >
+                        <Ionicons name="swap-vertical-outline" size={15} color="#06b6d4" />
+                        <Text style={styles.skeeEditBtnText}>Set order</Text>
+                      </Pressable>
+                    )}
+                  </View>
                   {sessions.map((s) => (
                     <View key={s.id} style={styles.skeeAdminCard}>
                       <View style={styles.skeeAdminCardTop}>
@@ -4456,12 +4513,58 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
                     </View>
                   ))}
                 </View>
-              ));
+              );});
             })()
           )}
 
         </ScrollView>
       )}
+
+      {/* ── Set finishing order / tie resolution modal ── */}
+      <Modal visible={!!orderingMatch} transparent animationType="slide" onRequestClose={() => setOrderingMatch(null)}>
+        <View style={styles.confirmBg}>
+          <Pressable style={styles.confirmDismiss} onPress={() => setOrderingMatch(null)} />
+          <View style={[styles.confirmSheet, { width: "92%", maxWidth: 460 }]}>
+            <Text style={styles.confirmTitle}>Set Finishing Order</Text>
+            <Text style={[styles.confirmBody, { marginBottom: 10 }]}>
+              {orderingMatch ? (orderingMatch.week === "__no_match" ? "Round" : `Week of ${orderingMatch.week}`) : ""} — drag teams into final order after the roll-off. 1st place gets the most league points.
+            </Text>
+
+            {(orderingMatch?.order ?? []).map((o, i) => (
+              <View key={o.id} style={styles.orderEditRow}>
+                <View style={styles.orderEditPos}><Text style={styles.orderEditPosText}>{i + 1}</Text></View>
+                <Text style={styles.orderEditName} numberOfLines={1}>{o.team_name}</Text>
+                <Text style={styles.orderEditScore}>{o.game_score} pts</Text>
+                <Pressable style={[styles.orderArrowBtn, i === 0 && { opacity: 0.25 }]} disabled={i === 0} onPress={() => moveOrder(i, -1)}>
+                  <Ionicons name="chevron-up" size={18} color="#06b6d4" />
+                </Pressable>
+                <Pressable style={[styles.orderArrowBtn, i === (orderingMatch!.order.length - 1) && { opacity: 0.25 }]} disabled={i === (orderingMatch!.order.length - 1)} onPress={() => moveOrder(i, 1)}>
+                  <Ionicons name="chevron-down" size={18} color="#06b6d4" />
+                </Pressable>
+              </View>
+            ))}
+
+            <View style={styles.rulesCard}>
+              <Text style={styles.rulesTitle}>Roll-off rules</Text>
+              <Text style={styles.rulesText}>
+                Regular weeks: 1 player, 1 ball — first to hit a 100 wins; a miss passes to the next player. Up to 3 balls, then sudden death (highest single ball).{"\n"}
+                Hundo Week (wk 7): ladder 10 → 20 → 30 → 40 → 50 → 100. Miss your target and the opponent makes theirs, you lose; otherwise advance.
+              </Text>
+            </View>
+
+            {skeeAdminError && <Text style={[styles.skeeAdminMeta, { color: "#ef4444", marginTop: 6 }]}>{skeeAdminError}</Text>}
+
+            <View style={styles.confirmBtns}>
+              <Pressable style={styles.confirmCancel} onPress={() => setOrderingMatch(null)}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={[styles.confirmActionBtn, { backgroundColor: "#06b6d4" }, savingOrder && { opacity: 0.5 }]} onPress={handleSaveMatchOrder} disabled={savingOrder}>
+                {savingOrder ? <ActivityIndicator size="small" color="#000" /> : <Text style={[styles.confirmActionText, { color: "#000" }]}>Save Order</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Start New Season Modal ── */}
       <Modal visible={startSeasonVisible} transparent animationType="fade" onRequestClose={() => setStartSeasonVisible(false)}>
@@ -6471,4 +6574,23 @@ const styles = StyleSheet.create({
   skeeAdminMeta: { color: "#8a8a8a", fontSize: 12, marginBottom: 2 },
   skeeEditBtn: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 11, borderWidth: 1, borderColor: "rgba(6,182,212,0.3)", backgroundColor: "rgba(6,182,212,0.07)" },
   skeeEditBtnText: { color: "#06b6d4", fontSize: 12, fontWeight: "800" },
+  tieBadge: {
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: "rgba(245,158,11,0.1)", borderRadius: 8,
+    paddingHorizontal: 8, paddingVertical: 4,
+    borderWidth: 1, borderColor: "rgba(245,158,11,0.3)",
+  },
+  tieBadgeText: { color: "#f59e0b", fontSize: 10, fontWeight: "900", letterSpacing: 0.4 },
+  orderEditRow: {
+    flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a",
+  },
+  orderEditPos: { width: 26, height: 26, borderRadius: 8, backgroundColor: "rgba(6,182,212,0.12)", alignItems: "center", justifyContent: "center" },
+  orderEditPosText: { color: "#06b6d4", fontSize: 13, fontWeight: "900" },
+  orderEditName: { flex: 1, color: "#fff", fontSize: 14, fontWeight: "700" },
+  orderEditScore: { color: "#8a8a8a", fontSize: 12, fontWeight: "600" },
+  orderArrowBtn: { width: 30, height: 30, borderRadius: 8, backgroundColor: "#0d0d0d", alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#1a1a1a" },
+  rulesCard: { backgroundColor: "#0a0a0a", borderRadius: 12, padding: 12, marginTop: 14, borderWidth: 1, borderColor: "#161616" },
+  rulesTitle: { color: "#8a8a8a", fontSize: 10, fontWeight: "800", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 },
+  rulesText: { color: "#7a7a7a", fontSize: 11.5, lineHeight: 17 },
 });

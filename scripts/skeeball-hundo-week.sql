@@ -231,7 +231,7 @@ BEGIN
 
   INSERT INTO admin_audit_log (admin_id, action, target_id, details)
   VALUES (v_uid, 'skeeball_set_scoring_mode', v_week::text,
-    json_build_object('mode', p_mode, 'matches_updated', v_updated)::text);
+    jsonb_build_object('mode', p_mode, 'matches_updated', v_updated));
 
   RETURN json_build_object('ok', true, 'week_of', v_week, 'mode', p_mode);
 END;
