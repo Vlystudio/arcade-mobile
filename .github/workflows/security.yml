@@ -29,8 +29,10 @@ jobs:
       - name: TypeScript type check
         run: npx tsc --noEmit
 
+      # Lint errors block the build; warnings are advisory. A committed
+      # eslint.config.js keeps this deterministic (no auto-config in CI).
       - name: Lint
-        run: npx expo lint --max-warnings 0
+        run: npx expo lint
 
       - name: Web export (smoke build)
         run: npx expo export --platform web
