@@ -37,7 +37,7 @@ import { showToast } from "../components/toast";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke" | "trivia" | "skeeball" | "reports" | "games";
+type MainTab = "reviews" | "stats" | "health" | "teams" | "tournaments" | "users" | "forums" | "scheduler" | "support" | "karaoke" | "trivia" | "skeeball" | "reports" | "games" | "danger";
 type SupportTicket = { id: string; user_id: string; status: string; created_at: string; username: string; avatar_url: string | null };
 type SupportMsg    = { id: string; sender_id: string; content: string; is_admin_msg: boolean; created_at: string };
 type ReviewTab = "pending" | "approved" | "denied";
@@ -197,6 +197,7 @@ const MAIN_TABS: { key: MainTab; label: string; icon: string }[] = [
   { key: "reports",     label: "Reports",     icon: "flag-outline" },
   { key: "games",       label: "Games",       icon: "image-outline" },
   { key: "users",       label: "Users",       icon: "person-outline" },
+  { key: "danger",      label: "Reset",       icon: "trash-bin-outline" },
 ];
 
 const SCHED_SLOTS = ["6:00 PM", "7:15 PM", "8:30 PM"] as const;
@@ -303,6 +304,13 @@ export default function AdminScreen() {
   // Teams state
   const [adminTeams, setAdminTeams] = useState<AdminTeam[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
+
+  // Danger / data-reset (owner + architect only)
+  type SeasonRow = { id: string; name: string; status: string; start_week: string; end_week: string };
+  const [allSeasons, setAllSeasons] = useState<SeasonRow[]>([]);
+  const [pendingReset, setPendingReset] = useState<null | { title: string; warn: string; phrase: string; run: () => Promise<{ data: any; error: any }> }>(null);
+  const [resetConfirmText, setResetConfirmText] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
   const [deleteTeamTarget, setDeleteTeamTarget] = useState<AdminTeam | null>(null);
   const [deletingTeam, setDeletingTeam] = useState(false);
   const [createTeamVisible, setCreateTeamVisible] = useState(false);
@@ -535,6 +543,7 @@ export default function AdminScreen() {
     if (mainTab === "trivia") loadTriviaData();
     if (mainTab === "skeeball") { loadSkeeAdminSessions(); loadSkeeActiveLanes(); loadSkeeSeason(); loadDisputes(); }
     if (mainTab === "reports") { if (reportsTab === "beta") loadBetaReports(); else loadContentReports(reportsTab); }
+    if (mainTab === "danger") { loadAdminTeams(); loadAllSeasons(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
@@ -1077,6 +1086,43 @@ export default function AdminScreen() {
     else { setAdminTeams((prev) => prev.filter((t) => t.id !== deleteTeamTarget.id)); }
     setDeletingTeam(false);
     setDeleteTeamTarget(null);
+  }
+
+  // ── Danger zone: data reset (owner/architect, MFA-gated server-side) ─────────
+  async function loadAllSeasons() {
+    const { data } = await supabase
+      .from("skeeball_seasons")
+      .select("id, name, status, start_week, end_week")
+      .order("start_week", { ascending: false });
+    setAllSeasons((data ?? []) as SeasonRow[]);
+  }
+
+  async function runReset() {
+    if (!pendingReset) return;
+    setResetBusy(true);
+    const { data, error } = await pendingReset.run();
+    setResetBusy(false);
+    if (error) {
+      const msg = /mfa|aal2|factor/i.test(error.message ?? "")
+        ? "Two-factor authentication (MFA) is required for this action."
+        : error.message ?? "Failed.";
+      showToast(msg, "error");
+      return;
+    }
+    if ((data as any)?.error) {
+      showToast((data as any).message ?? (data as any).error, "error");
+      return;
+    }
+    const d = data as any;
+    const bits: string[] = [];
+    if (d?.sessions_deleted != null) bits.push(`${d.sessions_deleted} sessions`);
+    if (d?.balls_deleted != null) bits.push(`${d.balls_deleted} balls`);
+    if (d?.seasons_deleted != null) bits.push(`${d.seasons_deleted} seasons`);
+    showToast(`Done — cleared ${bits.join(", ") || "data"}`, "success");
+    setPendingReset(null);
+    setResetConfirmText("");
+    loadAdminTeams();
+    loadAllSeasons();
   }
 
   // ── Forums ─────────────────────────────────────────────────────────────────
@@ -2282,7 +2328,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
       {/* Main tab bar — wraps to show every tab on web; swipes on native */}
       {Platform.OS === "web" ? (
         <View style={styles.mainTabBarWebWrap}>
-          {MAIN_TABS.filter((t) => t.key !== "users" || userRole === "owner" || userRole === "architect").map(({ key, label, icon }) => (
+          {MAIN_TABS.filter((t) => (t.key !== "users" && t.key !== "danger") || userRole === "owner" || userRole === "architect").map(({ key, label, icon }) => (
             <Pressable
               key={key}
               style={[styles.mainTabItem, mainTab === key && styles.mainTabItemActive]}
@@ -2306,7 +2352,7 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
           style={styles.mainTabBar}
           contentContainerStyle={styles.mainTabBarContent}
         >
-          {MAIN_TABS.filter((t) => t.key !== "users" || userRole === "owner" || userRole === "architect").map(({ key, label, icon }) => (
+          {MAIN_TABS.filter((t) => (t.key !== "users" && t.key !== "danger") || userRole === "owner" || userRole === "architect").map(({ key, label, icon }) => (
             <Pressable
               key={key}
               style={[styles.mainTabItem, mainTab === key && styles.mainTabItemActive]}
@@ -4259,6 +4305,156 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
         </View>
       </Modal>
 
+      {mainTab === "danger" && (
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={teamsLoading} onRefresh={() => { loadAdminTeams(); loadAllSeasons(); }} tintColor="#ef4444" />}
+        >
+          <View style={styles.sectionHeader}>
+            <Ionicons name="warning-outline" size={20} color="#ef4444" />
+            <Text style={styles.sectionTitle}>Data Reset</Text>
+          </View>
+          <Text style={styles.dangerIntro}>
+            Owner / architect only. These permanently delete league gameplay so everyone can start fresh
+            for launch — sessions, ball scores, standings and seasons. Each action asks you to type a
+            confirmation phrase, and requires two-factor (MFA) to run.
+          </Text>
+
+          {/* Reset / delete a single team */}
+          <View style={styles.dangerCard}>
+            <Text style={styles.dangerCardTitle}>Reset a team</Text>
+            <Text style={styles.dangerCardHint}>“Reset data” wipes the team’s sessions & scores but keeps the team and its roster. “Delete team” removes the team entirely.</Text>
+            {adminTeams.length === 0 ? (
+              <Text style={styles.dangerEmpty}>No teams.</Text>
+            ) : adminTeams.map((team) => (
+              <View key={team.id} style={styles.dangerRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dangerRowName}>{team.name}</Text>
+                  <Text style={styles.dangerRowSub}>{team.member_count} {team.member_count === 1 ? "member" : "members"}</Text>
+                </View>
+                <Pressable
+                  style={styles.dangerBtn}
+                  onPress={() => { setResetConfirmText(""); setPendingReset({
+                    title: `Reset “${team.name}”`,
+                    warn: `Deletes all of ${team.name}'s skee-ball sessions, ball scores and standings. The team and its members stay. This cannot be undone.`,
+                    phrase: "RESET",
+                    run: async () => await supabase.rpc("rpc_admin_reset_team_data", { p_team_id: team.id, p_delete_team: false }),
+                  }); }}
+                >
+                  <Text style={styles.dangerBtnText}>Reset data</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.dangerBtn, styles.dangerBtnSolid]}
+                  onPress={() => { setResetConfirmText(""); setPendingReset({
+                    title: `Delete “${team.name}”`,
+                    warn: `Permanently deletes the team ${team.name}, its roster, chat, schedule AND all its gameplay data. This cannot be undone.`,
+                    phrase: "DELETE",
+                    run: async () => await supabase.rpc("rpc_admin_reset_team_data", { p_team_id: team.id, p_delete_team: true }),
+                  }); }}
+                >
+                  <Text style={[styles.dangerBtnText, { color: "#fff" }]}>Delete team</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+
+          {/* Delete a season */}
+          <View style={styles.dangerCard}>
+            <Text style={styles.dangerCardTitle}>Delete a season</Text>
+            <Text style={styles.dangerCardHint}>Removes the season and every session/score played within its week range.</Text>
+            {allSeasons.length === 0 ? (
+              <Text style={styles.dangerEmpty}>No seasons.</Text>
+            ) : allSeasons.map((s) => (
+              <View key={s.id} style={styles.dangerRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dangerRowName}>{s.name} {s.status === "active" ? <Text style={{ color: "#22c55e" }}>· active</Text> : null}</Text>
+                  <Text style={styles.dangerRowSub}>{new Date(s.start_week).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – {new Date(s.end_week).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</Text>
+                </View>
+                <Pressable
+                  style={[styles.dangerBtn, styles.dangerBtnSolid]}
+                  onPress={() => { setResetConfirmText(""); setPendingReset({
+                    title: `Delete season “${s.name}”`,
+                    warn: `Permanently deletes “${s.name}” and every session, ball score and league match in its week range. This cannot be undone.`,
+                    phrase: "DELETE",
+                    run: async () => await supabase.rpc("rpc_admin_delete_season_data", { p_season_id: s.id }),
+                  }); }}
+                >
+                  <Text style={[styles.dangerBtnText, { color: "#fff" }]}>Delete season</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+
+          {/* Full wipe */}
+          <View style={[styles.dangerCard, { borderColor: "rgba(239,68,68,0.4)" }]}>
+            <Text style={styles.dangerCardTitle}>Wipe ALL league data</Text>
+            <Text style={styles.dangerCardHint}>The launch reset. Clears every season, session, ball score, standing and league match across all teams.</Text>
+            <Pressable
+              style={[styles.dangerBtn, styles.dangerBtnWide]}
+              onPress={() => { setResetConfirmText(""); setPendingReset({
+                title: "Wipe ALL league data",
+                warn: "Deletes EVERY season, session, ball score, standing and league match across all teams. Teams and rosters are kept. This cannot be undone.",
+                phrase: "WIPE ALL",
+                run: async () => await supabase.rpc("rpc_admin_reset_all_league_data", { p_delete_teams: false }),
+              }); }}
+            >
+              <Text style={styles.dangerBtnText}>Wipe all gameplay (keep teams)</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.dangerBtn, styles.dangerBtnWide, styles.dangerBtnSolid]}
+              onPress={() => { setResetConfirmText(""); setPendingReset({
+                title: "Wipe EVERYTHING incl. teams",
+                warn: "Deletes ALL league data AND every team and roster. The whole league starts from zero. This cannot be undone.",
+                phrase: "WIPE ALL",
+                run: async () => await supabase.rpc("rpc_admin_reset_all_league_data", { p_delete_teams: true }),
+              }); }}
+            >
+              <Text style={[styles.dangerBtnText, { color: "#fff" }]}>Wipe everything + delete all teams</Text>
+            </Pressable>
+          </View>
+
+          <View style={{ height: 40 }} />
+        </ScrollView>
+      )}
+
+      {/* Typed-confirmation modal for data-reset actions */}
+      <Modal visible={!!pendingReset} transparent animationType="fade" onRequestClose={() => { if (!resetBusy) { setPendingReset(null); setResetConfirmText(""); } }}>
+        <View style={styles.dangerModalOverlay}>
+          <View style={styles.dangerModalCard}>
+            <View style={styles.dangerModalIcon}>
+              <Ionicons name="warning" size={24} color="#ef4444" />
+            </View>
+            <Text style={styles.dangerModalTitle}>{pendingReset?.title}</Text>
+            <Text style={styles.dangerModalWarn}>{pendingReset?.warn}</Text>
+            <Text style={styles.dangerModalPrompt}>Type <Text style={{ color: "#ef4444", fontWeight: "900" }}>{pendingReset?.phrase}</Text> to confirm:</Text>
+            <TextInput
+              style={styles.dangerModalInput}
+              value={resetConfirmText}
+              onChangeText={setResetConfirmText}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              placeholder={pendingReset?.phrase}
+              placeholderTextColor="#444"
+              editable={!resetBusy}
+            />
+            <View style={styles.dangerModalActions}>
+              <Pressable style={styles.dangerModalCancel} onPress={() => { if (!resetBusy) { setPendingReset(null); setResetConfirmText(""); } }} disabled={resetBusy}>
+                <Text style={styles.dangerModalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.dangerModalConfirm, (resetConfirmText.trim().toUpperCase() !== pendingReset?.phrase || resetBusy) && { opacity: 0.4 }]}
+                onPress={runReset}
+                disabled={resetConfirmText.trim().toUpperCase() !== pendingReset?.phrase || resetBusy}
+              >
+                {resetBusy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.dangerModalConfirmText}>Delete permanently</Text>}
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {mainTab === "skeeball" && (
         <ScrollView
           style={{ flex: 1 }}
@@ -6078,6 +6274,33 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 5,
   },
   userRoleBtnText: { color: "#888", fontSize: 11, fontWeight: "700" },
+
+  // ── Danger / data-reset tab ──
+  dangerIntro: { color: "#8a8a8a", fontSize: 13, lineHeight: 19, marginBottom: 18 },
+  dangerCard: { backgroundColor: "#0e0e0e", borderWidth: 1, borderColor: "rgba(239,68,68,0.2)", borderRadius: 16, padding: 16, marginBottom: 14 },
+  dangerCardTitle: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 4 },
+  dangerCardHint: { color: "#6a6a6a", fontSize: 12, lineHeight: 17, marginBottom: 12 },
+  dangerEmpty: { color: "#555", fontSize: 13, fontStyle: "italic" },
+  dangerRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#1a1a1a" },
+  dangerRowName: { color: "#e8e8e8", fontSize: 14, fontWeight: "700" },
+  dangerRowSub: { color: "#666", fontSize: 11.5, marginTop: 1 },
+  dangerBtn: { borderWidth: 1, borderColor: "rgba(239,68,68,0.45)", borderRadius: 9, paddingHorizontal: 12, paddingVertical: 8, alignItems: "center", justifyContent: "center" },
+  dangerBtnSolid: { backgroundColor: "#dc2626", borderColor: "#dc2626" },
+  dangerBtnWide: { marginTop: 8 },
+  dangerBtnText: { color: "#ef4444", fontSize: 12, fontWeight: "800" },
+
+  dangerModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", alignItems: "center", justifyContent: "center", padding: 28 },
+  dangerModalCard: { width: "100%", maxWidth: 380, backgroundColor: "#141414", borderWidth: 1, borderColor: "rgba(239,68,68,0.35)", borderRadius: 20, padding: 22, alignItems: "center" },
+  dangerModalIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(239,68,68,0.12)", alignItems: "center", justifyContent: "center", marginBottom: 12 },
+  dangerModalTitle: { color: "#fff", fontSize: 17, fontWeight: "900", textAlign: "center", marginBottom: 8 },
+  dangerModalWarn: { color: "#9a9a9a", fontSize: 13, lineHeight: 19, textAlign: "center", marginBottom: 16 },
+  dangerModalPrompt: { color: "#bbb", fontSize: 13, marginBottom: 8, alignSelf: "flex-start" },
+  dangerModalInput: { width: "100%", backgroundColor: "#0a0a0a", borderWidth: 1, borderColor: "#2a2a2a", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 11, color: "#fff", fontSize: 15, fontWeight: "800", letterSpacing: 1, marginBottom: 16 },
+  dangerModalActions: { flexDirection: "row", gap: 10, width: "100%" },
+  dangerModalCancel: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1, borderColor: "#2a2a2a", alignItems: "center" },
+  dangerModalCancelText: { color: "#aaa", fontSize: 14, fontWeight: "700" },
+  dangerModalConfirm: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: "#dc2626", alignItems: "center" },
+  dangerModalConfirmText: { color: "#fff", fontSize: 14, fontWeight: "800" },
 
   // Scheduler
   schedHeader: { marginBottom: 20 },
