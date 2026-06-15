@@ -30,9 +30,7 @@ import { supabase } from "../../lib/supabase";
 import { moderateText } from "../../lib/moderate-text";
 import { uploadModeratedPublicImage } from "../../lib/moderated-public-media";
 import { sendSecurityAlert } from "../../lib/security-notify";
-import { AppTour } from "../components/app-tour";
 import { useTour } from "../hooks/use-tour";
-import { getTourSteps } from "../../lib/tour-steps";
 import { PlayerLeagueCard } from "../components/skeeball-stats";
 import { showToast } from "../components/toast";
 import { fetchPlayerInsights, fetchPlayerStats, fetchSkeeSeasons, type PlayerInsights, type PlayerStats, type SkeeSeason } from "../lib/skeeball-stats";
@@ -51,7 +49,7 @@ export default function ProfileScreen() {
   const [email, setEmail] = useState<string | null>(null);
   const [role, setRole] = useState<AppRole>("user");
   const isAdmin = isElevatedRole(role);
-  const { tourVisible, replayTour, dismissTour } = useTour(user?.id);
+  const { replay: replayTour } = useTour(user?.id, role);
   const [pendingCount, setPendingCount] = useState(0);
   const [teamName, setTeamName] = useState<string | null>(null);
   const [teamRole, setTeamRole] = useState<string | null>(null);
@@ -1256,11 +1254,6 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      <AppTour
-        visible={tourVisible}
-        steps={getTourSteps(role)}
-        onDone={dismissTour}
-      />
     </View>
   );
 }

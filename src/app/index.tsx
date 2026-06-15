@@ -35,9 +35,7 @@ import { showActionToast, showToast } from "../components/toast";
 import { WhatsNewSheet } from "../components/whats-new";
 import { fetchInbox, unseenInboxCount } from "../lib/inbox";
 import { validateCommentContent, validatePostContent } from "../../lib/validation";
-import { AppTour } from "../components/app-tour";
 import { useTour } from "../hooks/use-tour";
-import { getTourSteps } from "../../lib/tour-steps";
 import type { AppRole } from "../components/role-badge";
 
 type Post = {
@@ -135,7 +133,7 @@ export default function FeedScreen() {
   const [onboarding, setOnboarding] = useState<{ photo: boolean; team: boolean; rsvp: boolean; pick: boolean } | null>(null);
 
   const [userRole, setUserRole] = useState<AppRole>("user");
-  const { tourVisible, dismissTour } = useTour(user?.id);
+  useTour(user?.id, userRole);
 
   async function loadFeed(feedTab: FeedTab) {
     if (!user) return;
@@ -1216,11 +1214,6 @@ export default function FeedScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <AppTour
-        visible={tourVisible}
-        steps={getTourSteps(userRole)}
-        onDone={dismissTour}
-      />
     </View>
   );
 }

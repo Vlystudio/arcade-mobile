@@ -21,6 +21,7 @@ import { EnvBanner } from "../components/env-banner";
 import { ScreenshotButton } from "../components/screenshot-button";
 import { configureNotificationHandler, registerForPush } from "../lib/push";
 import { ToastHost } from "../components/toast";
+import { GuidedTourHost } from "../components/guided-tour";
 import { UpdateBanner } from "../components/update-banner";
 
 configureNotificationHandler();
@@ -150,6 +151,7 @@ export default function RootLayout() {
           <Stack.Screen name="score-share" options={{ headerShown: false }} />
         </Stack>
         <ToastHost />
+        <GuidedTourHost />
         </AppColumn>
       </ThemeProvider>
       </CartProvider>
