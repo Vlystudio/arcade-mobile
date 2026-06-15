@@ -309,10 +309,17 @@ export default function SkeeballTrackerScreen({
       team_id?: string;
       team_name?: string;
       league_match_id?: string | null;
+      already_active?: boolean;
+      lane_mismatch?: boolean;
     };
 
     if (!result?.ok || !result.session_id) {
       throw new Error(result?.message ?? "Could not check in to this lane.");
+    }
+
+    // Scanned a different lane while already checked in elsewhere — explain it.
+    if (result.already_active && result.lane_mismatch && result.message) {
+      showToast(result.message, "info");
     }
 
     return {
