@@ -61,7 +61,11 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.rpc_skeeball_cancel_session(uuid)          FROM PUBLIC;
+-- Drop the original 1-arg overload created by skeeball-lane-checkout.sql.
+-- Keeping both made PostgREST ambiguous for single-arg calls
+-- ("could not choose the best candidate function"). The 2-arg version with
+-- p_force DEFAULT false serves callers passing either one or two args.
+DROP FUNCTION IF EXISTS public.rpc_skeeball_cancel_session(uuid);
+
 REVOKE ALL ON FUNCTION public.rpc_skeeball_cancel_session(uuid, boolean) FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.rpc_skeeball_cancel_session(uuid)          TO authenticated;
 GRANT EXECUTE ON FUNCTION public.rpc_skeeball_cancel_session(uuid, boolean) TO authenticated;
