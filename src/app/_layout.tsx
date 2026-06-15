@@ -22,6 +22,7 @@ import { ScreenshotButton } from "../components/screenshot-button";
 import { configureNotificationHandler, registerForPush } from "../lib/push";
 import { ToastHost } from "../components/toast";
 import { GuidedTourHost } from "../components/guided-tour";
+import { PullToRefresh } from "../components/pull-to-refresh";
 import { UpdateBanner } from "../components/update-banner";
 
 configureNotificationHandler();
@@ -153,6 +154,7 @@ export default function RootLayout() {
         </Stack>
         <ToastHost />
         <GuidedTourHost />
+        <PullToRefresh />
         </AppColumn>
       </ThemeProvider>
       </CartProvider>
