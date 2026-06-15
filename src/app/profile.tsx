@@ -1074,9 +1074,9 @@ export default function ProfileScreen() {
                   const active = draftTitle === key;
                   return (
                     <Pressable key={key} style={[styles.titleOption, active && styles.titleOptionActive]} onPress={() => setDraftTitle(key)}>
-                      <Ionicons name={info.icon as any} size={16} color={info.color} />
+                      {!info.hideIcon && <Ionicons name={info.icon as any} size={16} color={info.color} />}
                       <View style={{ flex: 1 }}>
-                        <Text style={[styles.titleOptionLabel, { color: info.color }]}>{info.label}</Text>
+                        <Text style={[styles.titleOptionLabel, { color: info.color }, info.glow && { textShadowColor: info.color, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 10 }]}>{info.label}</Text>
                         <Text style={styles.titleOptionHow}>{info.how}</Text>
                       </View>
                       {active && <Ionicons name="checkmark" size={16} color="#06b6d4" />}

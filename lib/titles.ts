@@ -1,7 +1,11 @@
 // Display catalog for earnable profile titles. Keys must match the server
 // (user_earned_title_keys / equipped_title). Earning is enforced in the DB;
 // this is purely how each title looks.
-export type TitleInfo = { label: string; color: string; icon: string; how: string };
+export type TitleInfo = {
+  label: string; color: string; icon: string; how: string;
+  hideIcon?: boolean; // render the label only, no icon
+  glow?: boolean;     // give the label text a colored glow
+};
 
 export const TITLES: Record<string, TitleInfo> = {
   beta_founder:        { label: "Founding Member",     color: "#2dd4bf", icon: "rocket",        how: "Joined during the beta, before full launch." },
@@ -15,7 +19,7 @@ export const TITLES: Record<string, TitleInfo> = {
   season_champion:     { label: "Season Champion",     color: "#fbbf24", icon: "medal",         how: "On the winning team of a league season." },
 
   // Role flair — granted by your role, not earned through play.
-  the_creator:         { label: "The Creator",         color: "#c084fc", icon: "color-wand",    how: "Built ArcadeApp. There's only one." },
+  the_creator:         { label: "The Creator",         color: "#c084fc", icon: "color-wand",    how: "Built ArcadeApp. There's only one.", hideIcon: true, glow: true },
   the_house:           { label: "The House",           color: "#fbbf24", icon: "diamond",       how: "Owns the arcade. The house always wins." },
   arcade_warden:       { label: "Arcade Warden",       color: "#8b5cf6", icon: "shield-half",   how: "Keeps order on the floor as an admin." },
   vanguard:            { label: "Vanguard",            color: "#34d399", icon: "flag",          how: "A front-line beta tester." },
