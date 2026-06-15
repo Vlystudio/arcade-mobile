@@ -4266,6 +4266,19 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
           showsVerticalScrollIndicator={false}
           refreshControl={<RefreshControl refreshing={skeeAdminLoading} onRefresh={() => { loadSkeeAdminSessions(); loadSkeeActiveLanes(); }} tintColor="#06b6d4" />}
         >
+          {/* Lane QR codes — generate & print printable check-in codes */}
+          <Pressable
+            style={[styles.skeeWeekCard, { borderColor: "rgba(6,182,212,0.25)", backgroundColor: "rgba(6,182,212,0.04)" }]}
+            onPress={() => router.push("/lane-qr-codes" as any)}
+          >
+            <Ionicons name="qr-code-outline" size={20} color="#06b6d4" />
+            <View style={{ flex: 1, marginLeft: 10 }}>
+              <Text style={styles.skeeWeekLabel}>Lane QR Codes</Text>
+              <Text style={[styles.reportMeta, { marginTop: 2 }]}>Generate &amp; print check-in codes for every skee-ball lane.</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color="#06b6d4" />
+          </Pressable>
+
           {/* Active lanes — kick a stuck/wrong team off a lane */}
           {skeeActiveLanes.length > 0 && (
             <View style={[styles.skeeWeekCard, { borderColor: "rgba(34,197,94,0.25)", backgroundColor: "rgba(34,197,94,0.04)", flexDirection: "column", alignItems: "stretch" }]}>
