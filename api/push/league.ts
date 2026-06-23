@@ -109,7 +109,8 @@ export default async function handler(req: any, res: any) {
     const { data: subs } = await supabase.from("profiles").select("id").eq("sub_available", true);
     const { data: members } = await supabase.from("team_members").select("user_id").eq("team_id", teamId);
     const memberIds = new Set((members ?? []).map((m: any) => m.user_id));
-    const targetIds = (subs ?? []).map((p: any) => p.id).filter((id: string) => !memberIds.has(id));
+    let targetIds = (subs ?? []).map((p: any) => p.id).filter((id: string) => !memberIds.has(id));
+    targetIds = await filterOptedIn(targetIds, "subs"); // respect "sub requests" mute
     let sent = 0;
     if (targetIds.length) {
       const { data: tokens } = await supabase.from("push_tokens").select("token").in("user_id", targetIds);
@@ -201,18 +202,30 @@ async function sendToTokens(
   return tokens.length;
 }
 
+/** Drop users who muted this notification category (profiles.notif_prefs). */
+async function filterOptedIn(userIds: string[], category: string): Promise<string[]> {
+  if (!userIds.length || !category) return userIds;
+  const { data } = await supabase.from("profiles").select("id, notif_prefs").in("id", userIds);
+  const muted = new Set(
+    (data ?? []).filter((p: any) => p.notif_prefs && p.notif_prefs[category] === false).map((p: any) => p.id),
+  );
+  return userIds.filter((id) => !muted.has(id));
+}
+
 /** Resolve team members → device tokens → Expo push send. Returns count sent. */
 async function sendToTeams(
   teamIds: string[],
   title: string,
   bodyText: string,
   data: Record<string, unknown>,
+  category: string = "league",
 ): Promise<number> {
   const { data: members } = await supabase
     .from("team_members")
     .select("user_id")
     .in("team_id", teamIds);
-  const userIds = [...new Set((members ?? []).map((m: any) => m.user_id))];
+  let userIds = [...new Set((members ?? []).map((m: any) => m.user_id))];
+  userIds = await filterOptedIn(userIds, category);
   if (!userIds.length) return 0;
 
   const { data: tokens } = await supabase

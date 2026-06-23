@@ -144,6 +144,7 @@ export default function ProfileScreen() {
 
   // Privacy & status
   const [isPrivate, setIsPrivate] = useState(false);
+  const [notifPrefs, setNotifPrefs] = useState<Record<string, boolean>>({});
   const [onlineStatus, setOnlineStatus] = useState<"online" | "offline">("offline");
   const [savingPrivacy, setSavingPrivacy] = useState(false);
   const [savingStatus, setSavingStatus] = useState(false);
@@ -167,7 +168,7 @@ export default function ProfileScreen() {
   async function loadProfile() {
     if (!user) return;
     const [profileRes, scoresRes, pendingRes, teamRes, placementsRes, friendsRes, trophiesRes, convRes] = await Promise.all([
-      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio, show_skeeball_stats, sub_available, is_beta_tester, pronouns, equipped_title").eq("id", user.id).single(),
+      supabase.from("profiles").select("username, avatar_url, role, featured_game_id, is_private, online_status, bio, show_skeeball_stats, sub_available, is_beta_tester, pronouns, equipped_title, notif_prefs").eq("id", user.id).single(),
       supabase.from("scores").select("score, game_id, games(id, name, type)").eq("user_id", user.id).eq("status", "approved"),
       supabase.from("scores").select("id", { count: "exact", head: true }).eq("user_id", user.id).eq("status", "pending"),
       supabase.from("team_members").select("role, teams(name)").eq("user_id", user.id).maybeSingle(),
@@ -212,6 +213,7 @@ export default function ProfileScreen() {
       setSubAvailable((profileRes.data as any).sub_available ?? false);
       setPronouns((profileRes.data as any).pronouns ?? null);
       setEquippedTitle((profileRes.data as any).equipped_title ?? null);
+      setNotifPrefs(((profileRes.data as any).notif_prefs as Record<string, boolean>) ?? {});
       supabase.rpc("rpc_get_my_titles").then(({ data }) => setEarnedTitles(Array.isArray(data) ? (data as string[]) : []));
     }
 
@@ -318,6 +320,15 @@ export default function ProfileScreen() {
     setDraftPronouns(pronouns ?? "");
     setDraftTitle(equippedTitle ?? null);
     setEditVisible(true);
+  }
+
+  async function toggleNotifPref(key: string, enabled: boolean) {
+    if (!user) return;
+    const prev = notifPrefs;
+    const next = { ...notifPrefs, [key]: enabled };
+    setNotifPrefs(next); // optimistic
+    const { error } = await supabase.from("profiles").update({ notif_prefs: next }).eq("id", user.id);
+    if (error) setNotifPrefs(prev);
   }
 
   async function quickEquipTitle(key: string | null) {
@@ -872,6 +883,42 @@ export default function ProfileScreen() {
                     disabled={savingSubAvail}
                     trackColor={{ false: "#2a2a2a", true: "rgba(245,158,11,0.5)" }}
                     thumbColor={subAvailable ? "#f59e0b" : "#666"}
+                  />
+                </View>
+                <View style={styles.settingsDivider} />
+                <View style={styles.settingsRow}>
+                  <View style={[styles.settingsIcon, { backgroundColor: "rgba(6,182,212,0.1)" }]}>
+                    <Ionicons name="notifications-outline" size={17} color="#06b6d4" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingsRowLabel}>League Night Alerts</Text>
+                    <Text style={styles.settingsRowSub}>
+                      {notifPrefs.league !== false ? "Reminders & round results" : "Muted"}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={notifPrefs.league !== false}
+                    onValueChange={(v) => toggleNotifPref("league", v)}
+                    trackColor={{ false: "#2a2a2a", true: "rgba(6,182,212,0.5)" }}
+                    thumbColor={notifPrefs.league !== false ? "#06b6d4" : "#666"}
+                  />
+                </View>
+                <View style={styles.settingsDivider} />
+                <View style={styles.settingsRow}>
+                  <View style={[styles.settingsIcon, { backgroundColor: "rgba(245,158,11,0.1)" }]}>
+                    <Ionicons name="hand-left-outline" size={17} color="#f59e0b" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.settingsRowLabel}>Sub Request Alerts</Text>
+                    <Text style={styles.settingsRowSub}>
+                      {notifPrefs.subs !== false ? "When a team needs a sub" : "Muted"}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={notifPrefs.subs !== false}
+                    onValueChange={(v) => toggleNotifPref("subs", v)}
+                    trackColor={{ false: "#2a2a2a", true: "rgba(245,158,11,0.5)" }}
+                    thumbColor={notifPrefs.subs !== false ? "#f59e0b" : "#666"}
                   />
                 </View>
                 <View style={styles.settingsDivider} />
