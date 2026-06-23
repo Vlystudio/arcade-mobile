@@ -19,6 +19,7 @@ import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { ListSkeleton } from "../components/skeleton";
+import { ActiveLaneBanner } from "../components/active-lane-banner";
 import { showToast } from "../components/toast";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { reportError } from "../lib/report-error";
@@ -546,6 +547,9 @@ export default function TeamsScreen() {
                 )}
               </View>
             </View>
+
+            {/* Rejoin an in-progress lane session, if any */}
+            <ActiveLaneBanner />
 
             {/* Fantasy Skee-Ball teaser — launches with the full feature next year */}
             <Pressable style={styles.fantasyTeaser} onPress={() => router.push("/fantasy" as any)}>

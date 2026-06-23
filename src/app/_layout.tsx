@@ -151,6 +151,7 @@ export default function RootLayout() {
           <Stack.Screen name="beta-feedback" options={{ headerShown: false }} />
           <Stack.Screen name="score-share" options={{ headerShown: false }} />
           <Stack.Screen name="lane-qr-codes" options={{ headerShown: false }} />
+          <Stack.Screen name="skeeball-recap" options={{ headerShown: false }} />
         </Stack>
         <ToastHost />
         <GuidedTourHost />

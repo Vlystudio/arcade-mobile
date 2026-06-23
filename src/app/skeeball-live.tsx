@@ -100,6 +100,10 @@ export default function SkeeballLiveScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const channelsRef = useRef<any[]>([]);
+  // TV / auto-cycle dashboard
+  const [season, setSeason] = useState<{ team_name: string; total_points: number; gold: number; silver: number; bronze: number }[]>([]);
+  const [tvMode, setTvMode] = useState(false);
+  const [panel, setPanel] = useState<0 | 1>(0); // 0 = tonight, 1 = season
 
   async function load() {
     const week = currentMonday();
@@ -108,6 +112,12 @@ export default function SkeeballLiveScreen() {
       .select("id, status, expected_teams")
       .eq("week_of", week)
       .order("created_at", { ascending: false });
+
+    // Season standings (for the auto-cycling TV dashboard)
+    supabase.from("skeeball_league_standings")
+      .select("team_name, total_points, gold, silver, bronze")
+      .order("total_points", { ascending: false }).limit(12)
+      .then(({ data }) => setSeason((data ?? []) as any));
 
     const open = (matches ?? []).find((m: any) => (m.status ?? "active") !== "completed")
       ?? (matches ?? [])[0];
@@ -205,6 +215,16 @@ export default function SkeeballLiveScreen() {
     };
   }, []);
 
+  // Auto-cycle between tonight's lanes and the season table when TV mode is on.
+  useEffect(() => {
+    if (!tvMode) { setPanel(0); return; }
+    const hasTonight = sessions.length > 0;
+    const hasSeason = season.length > 0;
+    if (!hasTonight || !hasSeason) { setPanel(hasTonight ? 0 : 1); return; }
+    const t = setInterval(() => setPanel((p) => (p === 0 ? 1 : 0)), 12000);
+    return () => clearInterval(t);
+  }, [tvMode, sessions.length, season.length]);
+
   function toggleFullscreen() {
     if (Platform.OS !== "web") return;
     try {
@@ -258,6 +278,15 @@ export default function SkeeballLiveScreen() {
           </Text>
         </View>
         {Platform.OS === "web" && (
+          <Pressable
+            style={s.backBtn}
+            hitSlop={6}
+            onPress={() => { const next = !tvMode; setTvMode(next); if (next && !document.fullscreenElement) toggleFullscreen(); }}
+          >
+            <Ionicons name="tv-outline" size={20} color={tvMode ? "#06b6d4" : "#555"} />
+          </Pressable>
+        )}
+        {Platform.OS === "web" && (
           <Pressable style={s.backBtn} onPress={toggleFullscreen} hitSlop={6}>
             <Ionicons name="expand-outline" size={20} color="#555" />
           </Pressable>
@@ -269,7 +298,30 @@ export default function SkeeballLiveScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor="#06b6d4" />}
       >
-        {sessions.length === 0 ? (
+        {tvMode && sessions.length > 0 && season.length > 0 && (
+          <View style={s.tvDots}>
+            <View style={[s.tvDot, panel === 0 && s.tvDotOn]} />
+            <View style={[s.tvDot, panel === 1 && s.tvDotOn]} />
+          </View>
+        )}
+
+        {panel === 1 && season.length > 0 ? (
+          <>
+            <Text style={s.sectionLabel}>Season Standings</Text>
+            {season.map((t, i) => (
+              <View key={i} style={s.teamCard}>
+                <View style={s.teamRow}>
+                  <Text style={s.placeNum}>{i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `#${i + 1}`}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={s.teamName}>{t.team_name}</Text>
+                    <Text style={s.teamMeta}>🥇 {t.gold} · 🥈 {t.silver} · 🥉 {t.bronze}</Text>
+                  </View>
+                  <Text style={s.teamTotal}>{t.total_points}</Text>
+                </View>
+              </View>
+            ))}
+          </>
+        ) : sessions.length === 0 ? (
           <View style={s.empty}>
             <Ionicons name="moon-outline" size={42} color="#333" />
             <Text style={s.emptyTitle}>No round in progress</Text>
@@ -349,6 +401,9 @@ const s = StyleSheet.create({
     color: "#6b6b6b", fontSize: 10, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1.4, marginBottom: 12,
   },
+  tvDots: { flexDirection: "row", justifyContent: "center", gap: 7, marginBottom: 14 },
+  tvDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#2a2a2a" },
+  tvDotOn: { backgroundColor: "#06b6d4", width: 18 },
 
   empty: { alignItems: "center", gap: 12, paddingVertical: 80, paddingHorizontal: 32 },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },

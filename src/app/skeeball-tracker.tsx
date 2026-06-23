@@ -797,6 +797,10 @@ export default function SkeeballTrackerScreen({
               <Text style={s.resultTotalValue}>{teamTotal}</Text>
             </View>
           </View>
+          <Pressable style={s.recapBtn} onPress={() => router.push("/skeeball-recap" as any)}>
+            <Ionicons name="sparkles-outline" size={17} color="#06b6d4" />
+            <Text style={s.recapBtnText}>View my night</Text>
+          </Pressable>
           <Pressable style={s.doneBtn} onPress={goBack}><Text style={s.doneBtnText}>Back to Team</Text></Pressable>
         </View>
       </SafeAreaView>
@@ -1226,7 +1230,13 @@ const s = StyleSheet.create({
   resultTotalLabel: { color: "#8a8a8a", fontSize: 14, fontWeight: "700" },
   resultTotalValue: { color: "#22c55e", fontSize: 28, fontWeight: "900" },
 
-  doneBtn: { backgroundColor: "#06b6d4", borderRadius: 18, paddingHorizontal: 32, paddingVertical: 16, marginTop: 32 },
+  recapBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    borderColor: "rgba(6,182,212,0.4)", borderWidth: 1, borderRadius: 18,
+    paddingHorizontal: 32, paddingVertical: 14, marginTop: 28,
+  },
+  recapBtnText: { color: "#06b6d4", fontWeight: "800", fontSize: 15 },
+  doneBtn: { backgroundColor: "#06b6d4", borderRadius: 18, paddingHorizontal: 32, paddingVertical: 16, marginTop: 12 },
   doneBtnText: { color: "#000", fontWeight: "900", fontSize: 16 },
 
   laneChip: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(6,182,212,0.1)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, alignSelf: "flex-start", marginBottom: 20, borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },

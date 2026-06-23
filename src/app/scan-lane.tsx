@@ -54,6 +54,8 @@ export default function ScanLaneScreen() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [showScanHelp, setShowScanHelp] = useState(false);
   const [manualToken, setManualToken] = useState("");
+  const [nfcSupported] = useState(() => typeof window !== "undefined" && "NDEFReader" in window);
+  const [nfcScanning, setNfcScanning] = useState(false);
   const [pendingTokenWithoutTeam, setPendingTokenWithoutTeam] = useState<string | null>(null);
   const [myTeams, setMyTeams] = useState<MyTeam[]>([]);
   const [teamsLoading, setTeamsLoading] = useState(false);
@@ -111,6 +113,37 @@ export default function ScanLaneScreen() {
       Alert.alert("Teams unavailable", "Could not load your teams. Open the scanner from your team page or try again.");
     } finally {
       setTeamsLoading(false);
+    }
+  };
+
+  // Web NFC (Android Chrome): read the lane tag and run the same check-in flow.
+  // The NFC tag holds the same URL the QR encodes (with the lane token).
+  const startNfc = async () => {
+    if (nfcScanning || loading) return;
+    try {
+      const reader = new (window as any).NDEFReader();
+      setNfcScanning(true);
+      await reader.scan();
+      reader.onreading = (e: any) => {
+        for (const rec of e.message.records ?? []) {
+          try {
+            if (rec.recordType === "url" || rec.recordType === "text") {
+              const val = new TextDecoder(rec.encoding || "utf-8").decode(rec.data);
+              setNfcScanning(false);
+              setScanned(true);
+              handleCheckIn(val);
+              return;
+            }
+          } catch { /* try next record */ }
+        }
+      };
+      reader.onreadingerror = () => {
+        setNfcScanning(false);
+        Alert.alert("NFC", "Couldn't read that tag. Try again, or scan the QR.");
+      };
+    } catch (e: any) {
+      setNfcScanning(false);
+      Alert.alert("NFC unavailable", e?.message ?? "NFC scanning isn't available here. Use the QR instead.");
     }
   };
 
@@ -502,6 +535,13 @@ export default function ScanLaneScreen() {
           </View>
         )}
 
+        {nfcSupported && !scanned && !loading && !openingScoring && (
+          <Pressable style={styles.nfcBtn} onPress={startNfc} disabled={nfcScanning}>
+            <Ionicons name={nfcScanning ? "radio" : "radio-outline"} size={18} color="#06b6d4" />
+            <Text style={styles.nfcBtnText}>{nfcScanning ? "Hold your phone to the lane tag…" : "Tap NFC tag instead"}</Text>
+          </Pressable>
+        )}
+
         <View style={styles.manualBox}>
           <Text style={styles.manualLabel}>QR Link Fallback</Text>
           <TextInput
@@ -645,6 +685,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: "#1a1a1a",
   },
   testBtnText: { color: "#888", fontWeight: "700", fontSize: 13 },
+  nfcBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9,
+    borderColor: "rgba(6,182,212,0.4)", borderWidth: 1, borderRadius: 14,
+    paddingVertical: 13, marginTop: 8, marginBottom: 4,
+  },
+  nfcBtnText: { color: "#06b6d4", fontSize: 14.5, fontWeight: "800" },
   manualBox: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a", paddingTop: 14, marginTop: 4 },
   manualLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 },
   manualInput: { backgroundColor: "#0d0d0d", borderWidth: 1, borderColor: "#222", borderRadius: 12, color: "#fff", fontSize: 14, paddingHorizontal: 12, paddingVertical: 12, marginBottom: 10 },
