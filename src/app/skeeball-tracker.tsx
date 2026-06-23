@@ -22,6 +22,7 @@ import { useRequireAuth } from "../hooks/use-require-auth";
 import { reportError } from "../lib/report-error";
 import { fetchPlayerStats } from "../lib/skeeball-stats";
 import { API_BASE } from "../../lib/api-base";
+import { haptic } from "../../lib/haptics";
 
 const LANE_COUNT = 6;
 const TOTAL_BALLS = 9;
@@ -495,6 +496,7 @@ export default function SkeeballTrackerScreen({
       setBallScores(asBallScores);
       setShowWarning(false);
       setWarningCountdown(WARNING_DURATION_S);
+      haptic("success");
     } catch (e: any) {
       const msg = e?.message ?? "Failed to submit scores";
       reportError("SkeeballTracker.submitBalls", msg);
@@ -505,6 +507,7 @@ export default function SkeeballTrackerScreen({
   }
 
   function addBall(pts: number) {
+    haptic(pts >= 50 ? "success" : "tap");
     setPlayerBalls((prev) => {
       const total = sessionPlayers.reduce((s, sp) => s + (prev[sp.player_user_id] ?? []).length, 0);
       if (total >= TOTAL_BALLS) return prev;
@@ -516,6 +519,7 @@ export default function SkeeballTrackerScreen({
   }
 
   function undoLastBall() {
+    haptic("light");
     setPlayerBalls((prev) => {
       const total = sessionPlayers.reduce((s, sp) => s + (prev[sp.player_user_id] ?? []).length, 0);
       if (total === 0) return prev;

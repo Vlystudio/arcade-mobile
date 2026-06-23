@@ -1,5 +1,6 @@
 import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import Animated, {
   useSharedValue,
@@ -27,6 +28,7 @@ import { supabase } from "../../lib/supabase";
 import { showToast } from "../components/toast";
 import { openUserProfile } from "../lib/open-profile";
 import { ScoreText } from "../components/score-text";
+import { EmptyState } from "../components/empty-state";
 
 type LeaderEntry = {
   rank: number;
@@ -425,15 +427,13 @@ export default function LeaderboardScreen() {
       )}
 
       {entries.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <View style={styles.emptyIconWrap}>
-            <Ionicons name="podium-outline" size={32} color="#333" />
-          </View>
-          <Text style={styles.emptyTitle}>No scores yet</Text>
-          <Text style={styles.emptySub}>
-            {selectedGameId ? `No approved ${selectedGameName} scores found.` : "Be the first to submit a score!"}
-          </Text>
-        </View>
+        <EmptyState
+          icon="podium-outline"
+          title="No scores yet"
+          subtitle={selectedGameId ? `No approved ${selectedGameName} scores yet — put yours on the board.` : "Be the first to get on the board."}
+          ctaLabel="Submit a score"
+          onPress={() => router.push("/submit-score" as any)}
+        />
       ) : (
         <>
           {top3.length > 0 && (

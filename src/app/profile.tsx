@@ -320,6 +320,15 @@ export default function ProfileScreen() {
     setEditVisible(true);
   }
 
+  async function quickEquipTitle(key: string | null) {
+    if (!user) return;
+    const prev = equippedTitle;
+    setEquippedTitle(key); // optimistic
+    const { error } = await supabase.from("profiles").update({ equipped_title: key }).eq("id", user.id);
+    if (error) { setEquippedTitle(prev); Alert.alert("Error", error.message); return; }
+    showToast(key ? `Equipped “${TITLES[key]?.label ?? key}”` : "Title removed");
+  }
+
   async function saveProfile() {
     if (!user) return;
     const name = draftUsername.trim();
@@ -639,6 +648,36 @@ export default function ProfileScreen() {
             )}
             {bio ? <Text style={styles.bioText}>{bio}</Text> : null}
             <Text style={styles.emailText}>{email ?? ""}</Text>
+
+            {/* Trophy case — every title earned; tap to equip/un-equip */}
+            {earnedTitles.length > 0 && (
+              <View style={styles.trophyCase}>
+                <Text style={styles.trophyCaseLabel}>TITLES · {earnedTitles.length}</Text>
+                <View style={styles.trophyCaseRow}>
+                  {earnedTitles.map((key) => {
+                    const info = TITLES[key];
+                    if (!info) return null;
+                    const active = equippedTitle === key;
+                    return (
+                      <Pressable
+                        key={key}
+                        onPress={() => quickEquipTitle(active ? null : key)}
+                        style={[
+                          styles.trophyChip,
+                          { borderColor: info.color + (active ? "cc" : "44"), backgroundColor: info.color + (active ? "22" : "0e") },
+                        ]}
+                      >
+                        {!info.hideIcon && <Ionicons name={info.icon as any} size={11} color={info.color} />}
+                        <Text style={[styles.trophyChipText, { color: info.color }, info.glow && { textShadowColor: info.color, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 7 }]}>
+                          {info.label}
+                        </Text>
+                        {active && <Ionicons name="checkmark-circle" size={11} color={info.color} />}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
           </View>
 
           {/* ── Action buttons (IG style) ── */}
@@ -1452,6 +1491,14 @@ const styles = StyleSheet.create({
   bioText: { color: "#ccc", fontSize: 13.5, lineHeight: 19, marginTop: 1 },
   emailText: { color: "#6b6b6b", fontSize: 12, marginTop: 1 },
   pronounText: { color: "#9aa0a6", fontSize: 12.5, fontWeight: "600" },
+  trophyCase: { marginTop: 12 },
+  trophyCaseLabel: { color: "#5a5a5a", fontSize: 10, fontWeight: "800", letterSpacing: 0.12 * 10, marginBottom: 8 },
+  trophyCaseRow: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  trophyChip: {
+    flexDirection: "row", alignItems: "center", gap: 5,
+    borderRadius: 999, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 4.5,
+  },
+  trophyChipText: { fontSize: 11.5, fontWeight: "800", letterSpacing: 0.2 },
 
   // ── Pronoun presets (edit sheet) ──
   pronounPresetRow: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 10 },
