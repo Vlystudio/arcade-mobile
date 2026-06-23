@@ -17,6 +17,7 @@ import { Alert } from "../../lib/alert";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { reportError } from "../lib/report-error";
 import { BugReportBanner } from "../components/bug-report";
+import { ProofGuideSheet } from "../components/proof-guide-sheet";
 import { supabase } from "../../lib/supabase";
 import { validateScoreValue } from "../../lib/validation";
 
@@ -44,6 +45,7 @@ export default function SubmitScoreScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [arcadeScore, setArcadeScore] = useState("");
   const [proofUri, setProofUri] = useState<string | null>(null);
+  const [proofGuideVisible, setProofGuideVisible] = useState(false);
 
   useEffect(() => {
     if (!submitted) return;
@@ -60,7 +62,13 @@ export default function SubmitScoreScreen() {
     setBalls((prev) => [...prev, pts]);
   }
 
-  async function pickProofFromCamera() {
+  // Show the framing guide first, then open the camera on confirm.
+  function pickProofFromCamera() {
+    setProofGuideVisible(true);
+  }
+
+  async function openProofCamera() {
+    setProofGuideVisible(false);
     const asset = await pickFromCamera({ allowsEditing: false, quality: 0.85 });
     if (asset) setProofUri(asset.uri);
   }
@@ -437,6 +445,11 @@ export default function SubmitScoreScreen() {
           </View>
         )}
       </ScrollView>
+      <ProofGuideSheet
+        visible={proofGuideVisible}
+        onCancel={() => setProofGuideVisible(false)}
+        onConfirm={openProofCamera}
+      />
     </SafeAreaView>
   );
 }

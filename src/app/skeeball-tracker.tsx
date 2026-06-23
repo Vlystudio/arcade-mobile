@@ -23,6 +23,7 @@ import { reportError } from "../lib/report-error";
 import { fetchPlayerStats } from "../lib/skeeball-stats";
 import { API_BASE } from "../../lib/api-base";
 import { haptic } from "../../lib/haptics";
+import { queueSubmit, looksOffline } from "../../lib/offline-queue";
 
 const LANE_COUNT = 6;
 const TOTAL_BALLS = 9;
@@ -465,14 +466,14 @@ export default function SkeeballTrackerScreen({
     if (!allLocalDone) { setSubmitError("Enter all ball scores before submitting."); return; }
     setSubmitting(true);
     setSubmitError(null);
+    const balls = sessionPlayers.flatMap((sp) =>
+      (playerBalls[sp.player_user_id] ?? []).map((score, i) => ({
+        player_user_id: sp.player_user_id,
+        ball_number: i + 1,
+        score,
+      }))
+    );
     try {
-      const balls = sessionPlayers.flatMap((sp) =>
-        (playerBalls[sp.player_user_id] ?? []).map((score, i) => ({
-          player_user_id: sp.player_user_id,
-          ball_number: i + 1,
-          score,
-        }))
-      );
       const { data, error } = await supabase.rpc("rpc_skeeball_submit_balls", {
         p_session_id: mySession!.id,
         p_balls: balls,
@@ -498,6 +499,15 @@ export default function SkeeballTrackerScreen({
       setWarningCountdown(WARNING_DURATION_S);
       haptic("success");
     } catch (e: any) {
+      // Dropped connection mid-submit: stash the game and flush automatically
+      // when we're back online, instead of losing the scores.
+      if (looksOffline(e)) {
+        await queueSubmit({ session_id: mySession!.id, balls });
+        haptic("warning");
+        showToast("You're offline — scores saved, will submit automatically", "success");
+        goBack();
+        return;
+      }
       const msg = e?.message ?? "Failed to submit scores";
       reportError("SkeeballTracker.submitBalls", msg);
       setSubmitError(msg);

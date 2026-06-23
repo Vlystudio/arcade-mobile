@@ -24,6 +24,7 @@ import { ToastHost } from "../components/toast";
 import { GuidedTourHost } from "../components/guided-tour";
 import { PullToRefresh } from "../components/pull-to-refresh";
 import { UpdateBanner } from "../components/update-banner";
+import { initOfflineFlush } from "../../lib/offline-queue";
 
 configureNotificationHandler();
 
@@ -62,6 +63,8 @@ function PushRegistrar() {
   React.useEffect(() => {
     if (user) registerForPush(user.id);
   }, [user?.id]);
+  // Flush any skee-ball scores queued while offline, on launch + when back online.
+  React.useEffect(() => { initOfflineFlush(); }, []);
   return null;
 }
 
