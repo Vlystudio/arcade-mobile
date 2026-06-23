@@ -31,6 +31,7 @@ import {
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { supabase } from "../../lib/supabase";
 import { API_BASE } from "../../lib/api-base";
+import { TITLES } from "../../lib/titles";
 import { compressImage } from "../../lib/compress-image";
 import { pickFromLibrary } from "../../lib/pick-image";
 import { showToast } from "../components/toast";
@@ -311,6 +312,8 @@ export default function AdminScreen() {
   const [pendingReset, setPendingReset] = useState<null | { title: string; warn: string; phrase: string; run: () => Promise<{ data: any; error: any }> }>(null);
   const [resetConfirmText, setResetConfirmText] = useState("");
   const [resetBusy, setResetBusy] = useState(false);
+  const [betaRewardKey, setBetaRewardKey] = useState<string | null>(null);
+  const [auditLog, setAuditLog] = useState<{ actions: any[]; events: any[] } | null>(null);
   const [deleteTeamTarget, setDeleteTeamTarget] = useState<AdminTeam | null>(null);
   const [deletingTeam, setDeletingTeam] = useState(false);
   const [createTeamVisible, setCreateTeamVisible] = useState(false);
@@ -543,7 +546,7 @@ export default function AdminScreen() {
     if (mainTab === "trivia") loadTriviaData();
     if (mainTab === "skeeball") { loadSkeeAdminSessions(); loadSkeeActiveLanes(); loadSkeeSeason(); loadDisputes(); }
     if (mainTab === "reports") { if (reportsTab === "beta") loadBetaReports(); else loadContentReports(reportsTab); }
-    if (mainTab === "danger") { loadAdminTeams(); loadAllSeasons(); }
+    if (mainTab === "danger") { loadAdminTeams(); loadAllSeasons(); loadAuditLog(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     if (mainTab === "tournaments") {
       if (tournTab === "manage") loadManageTournaments();
@@ -1118,11 +1121,19 @@ export default function AdminScreen() {
     if (d?.sessions_deleted != null) bits.push(`${d.sessions_deleted} sessions`);
     if (d?.balls_deleted != null) bits.push(`${d.balls_deleted} balls`);
     if (d?.seasons_deleted != null) bits.push(`${d.seasons_deleted} seasons`);
-    showToast(`Done — cleared ${bits.join(", ") || "data"}`, "success");
+    if (d?.granted != null) showToast(`Granted to ${d.granted} beta member${d.granted === 1 ? "" : "s"}`, "success");
+    else showToast(`Done — cleared ${bits.join(", ") || "data"}`, "success");
     setPendingReset(null);
     setResetConfirmText("");
     loadAdminTeams();
     loadAllSeasons();
+    loadAuditLog();
+  }
+
+  async function loadAuditLog() {
+    const { data } = await supabase.rpc("rpc_admin_get_audit_log", { p_limit: 60 });
+    const d = data as any;
+    if (d && !d.error) setAuditLog({ actions: d.actions ?? [], events: d.events ?? [] });
   }
 
   // ── Forums ─────────────────────────────────────────────────────────────────
@@ -4415,6 +4426,71 @@ img{width:420px;height:420px}p{color:#777;font-size:15px;margin-top:26px}
             </Pressable>
           </View>
 
+          {/* Beta rewards — grant a title to the founding cohort */}
+          <View style={[styles.dangerCard, { borderColor: "rgba(45,212,191,0.35)" }]}>
+            <Text style={styles.dangerCardTitle}>Beta rewards</Text>
+            <Text style={styles.dangerCardHint}>Grant a title to every beta member (everyone with the “Founding Member” grant). Pick a reward, then confirm.</Text>
+            <View style={styles.betaTitleRow}>
+              {Object.entries(TITLES).map(([key, info]) => {
+                const active = betaRewardKey === key;
+                return (
+                  <Pressable key={key} onPress={() => setBetaRewardKey(active ? null : key)}
+                    style={[styles.betaTitleChip, { borderColor: info.color + (active ? "cc" : "44"), backgroundColor: info.color + (active ? "22" : "0e") }]}>
+                    {!info.hideIcon && <Ionicons name={info.icon as any} size={12} color={info.color} />}
+                    <Text style={[styles.betaTitleChipText, { color: info.color }]}>{info.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable
+              style={[styles.dangerBtn, styles.dangerBtnWide, !betaRewardKey && { opacity: 0.4 }]}
+              disabled={!betaRewardKey}
+              onPress={() => { if (!betaRewardKey) return; setResetConfirmText(""); setPendingReset({
+                title: `Grant “${TITLES[betaRewardKey]?.label}” to beta`,
+                warn: `Adds the “${TITLES[betaRewardKey]?.label}” title to every beta-cohort member so they can equip it. This is additive (safe).`,
+                phrase: "GRANT",
+                run: async () => await supabase.rpc("rpc_admin_grant_title_to_beta", { p_title_key: betaRewardKey }),
+              }); }}
+            >
+              <Text style={styles.dangerBtnText}>{betaRewardKey ? `Grant “${TITLES[betaRewardKey]?.label}” to all beta members` : "Pick a title above"}</Text>
+            </Pressable>
+          </View>
+
+          {/* Audit log — recent admin actions + security events */}
+          <View style={styles.dangerCard}>
+            <Text style={styles.dangerCardTitle}>Activity log</Text>
+            <Text style={styles.dangerCardHint}>Recent admin actions and security events. Read-only.</Text>
+            {!auditLog ? (
+              <Text style={styles.dangerEmpty}>Loading…</Text>
+            ) : auditLog.actions.length === 0 && auditLog.events.length === 0 ? (
+              <Text style={styles.dangerEmpty}>Nothing logged yet.</Text>
+            ) : (
+              <>
+                {auditLog.actions.slice(0, 40).map((a, i) => (
+                  <View key={`a${i}`} style={styles.auditRow}>
+                    <Ionicons name="shield-checkmark-outline" size={14} color="#06b6d4" style={{ marginTop: 2 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.auditAction}>{(a.admin_username ?? "someone")} · {String(a.action).replace(/_/g, " ")}</Text>
+                      <Text style={styles.auditMeta}>
+                        {a.target_type ? `${a.target_type} ` : ""}{a.details ? JSON.stringify(a.details).slice(0, 80) : ""}
+                      </Text>
+                      <Text style={styles.auditTime}>{new Date(a.created_at).toLocaleString()}</Text>
+                    </View>
+                  </View>
+                ))}
+                {auditLog.events.slice(0, 20).map((e, i) => (
+                  <View key={`e${i}`} style={styles.auditRow}>
+                    <Ionicons name="alert-circle-outline" size={14} color={e.severity === "warn" ? "#f59e0b" : "#777"} style={{ marginTop: 2 }} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.auditAction}>{String(e.event_type).replace(/_/g, " ")}{e.username ? ` · ${e.username}` : ""}</Text>
+                      <Text style={styles.auditTime}>{new Date(e.created_at).toLocaleString()}</Text>
+                    </View>
+                  </View>
+                ))}
+              </>
+            )}
+          </View>
+
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
@@ -6281,6 +6357,13 @@ const styles = StyleSheet.create({
   dangerCardTitle: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 4 },
   dangerCardHint: { color: "#6a6a6a", fontSize: 12, lineHeight: 17, marginBottom: 12 },
   dangerEmpty: { color: "#555", fontSize: 13, fontStyle: "italic" },
+  betaTitleRow: { flexDirection: "row", flexWrap: "wrap", gap: 7, marginBottom: 12 },
+  betaTitleChip: { flexDirection: "row", alignItems: "center", gap: 5, borderRadius: 999, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5 },
+  betaTitleChipText: { fontSize: 11.5, fontWeight: "800" },
+  auditRow: { flexDirection: "row", gap: 9, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "#1a1a1a" },
+  auditAction: { color: "#ddd", fontSize: 13, fontWeight: "700", textTransform: "capitalize" },
+  auditMeta: { color: "#666", fontSize: 11, marginTop: 1 },
+  auditTime: { color: "#4a4a4a", fontSize: 10.5, marginTop: 2 },
   dangerRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 9, borderTopWidth: 1, borderTopColor: "#1a1a1a" },
   dangerRowName: { color: "#e8e8e8", fontSize: 14, fontWeight: "700" },
   dangerRowSub: { color: "#666", fontSize: 11.5, marginTop: 1 },
