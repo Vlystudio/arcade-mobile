@@ -6,13 +6,13 @@ import { supabase } from "./supabase";
 // submit fails on a dropped connection the scores would be lost. Instead we
 // stash the payload here and flush it automatically when connectivity returns.
 
-const KEY = "pending_skee_submits_v1";
+const STORAGE_KEY = "pending_skee_submits_v1"; // gitleaks:allow — AsyncStorage key, not a secret
 
 export type PendingSubmit = { session_id: string; balls: any[]; ts: number };
 
 async function read(): Promise<PendingSubmit[]> {
   try {
-    const raw = await AsyncStorage.getItem(KEY);
+    const raw = await AsyncStorage.getItem(STORAGE_KEY);
     return raw ? (JSON.parse(raw) as PendingSubmit[]) : [];
   } catch {
     return [];
@@ -20,7 +20,7 @@ async function read(): Promise<PendingSubmit[]> {
 }
 
 async function write(list: PendingSubmit[]) {
-  try { await AsyncStorage.setItem(KEY, JSON.stringify(list)); } catch {}
+  try { await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(list)); } catch {}
 }
 
 /** Save a submission to retry later. De-dupes by session_id (latest wins). */

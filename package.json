@@ -66,7 +66,8 @@
   },
   "overrides": {
     "ws": "^8.21.0",
-    "shell-quote": "^1.8.4"
+    "shell-quote": "^1.8.4",
+    "@sentry/cli": { "undici": "^6.27.0" }
   },
   "private": true
 }
