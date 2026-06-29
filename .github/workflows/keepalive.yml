@@ -1,0 +1,29 @@
+name: Supabase keep-alive
+
+# Free Supabase projects auto-pause after 7 days of inactivity. This pings the
+# REST API once a day so the project stays awake without a Vercel cron/function.
+#
+# Optional one-time setup for an authenticated ping (recommended):
+#   Repo → Settings → Secrets and variables → Actions → add
+#     SUPABASE_URL       e.g. https://ahtynqcogyqhcrvqdsmi.supabase.co
+#     SUPABASE_ANON_KEY  the public anon key (EXPO_PUBLIC_SUPABASE_ANON_KEY)
+# Without the secrets it still hits the project (a 401 counts as activity), which
+# is enough to prevent the pause.
+
+on:
+  schedule:
+    - cron: "0 12 * * *"   # daily at 12:00 UTC
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        run: |
+          BASE="${{ secrets.SUPABASE_URL }}"
+          if [ -z "$BASE" ]; then BASE="https://ahtynqcogyqhcrvqdsmi.supabase.co"; fi
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "$BASE/rest/v1/games?select=id&limit=1")
+          echo "Supabase responded: $CODE"

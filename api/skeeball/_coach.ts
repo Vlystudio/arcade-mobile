@@ -141,9 +141,15 @@ async function callLLM(prompt: string): Promise<{ order: any[]; tips: string[]; 
 
   let text: string | null = null;
 
+  // Cap each call below the serverless function timeout (10s on Vercel Hobby)
+  // so a slow model fails fast and the caller can fall back, instead of the
+  // platform killing the request with a 504.
+  const signal = AbortSignal.timeout(9000);
+
   if (anthropicKey) {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal,
       headers: {
         "Content-Type": "application/json",
         "x-api-key": anthropicKey,
@@ -151,7 +157,7 @@ async function callLLM(prompt: string): Promise<{ order: any[]; tips: string[]; 
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 800,
+        max_tokens: 500,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -161,13 +167,14 @@ async function callLLM(prompt: string): Promise<{ order: any[]; tips: string[]; 
   } else if (openaiKey) {
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
+      signal,
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${openaiKey}`,
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 800,
+        max_tokens: 500,
         response_format: { type: "json_object" },
         messages: [{ role: "user", content: prompt }],
       }),

@@ -16,6 +16,8 @@
   ],
   "rewrites": [
     { "source": "/s/:id", "destination": "/api/share/score?id=:id" },
+    { "source": "/api/security-notify", "destination": "/api/notify?kind=security" },
+    { "source": "/api/support-notify", "destination": "/api/notify?kind=support" },
     { "source": "/((?!api/|.*\\.[a-zA-Z0-9]+$).*)", "destination": "/index.html" }
   ],
   "headers": [

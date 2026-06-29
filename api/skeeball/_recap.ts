@@ -164,10 +164,14 @@ async function callLLM(prompt: string): Promise<{ recap: string; highlights: str
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
   let text: string | null = null;
+  // Fail fast under the serverless timeout (10s on Vercel Hobby) so the caller
+  // can fall back instead of the platform returning a 504.
+  const signal = AbortSignal.timeout(9000);
 
   if (anthropicKey) {
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
+      signal,
       headers: {
         "Content-Type": "application/json",
         "x-api-key": anthropicKey,
@@ -175,7 +179,7 @@ async function callLLM(prompt: string): Promise<{ recap: string; highlights: str
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-6",
-        max_tokens: 600,
+        max_tokens: 500,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -185,10 +189,11 @@ async function callLLM(prompt: string): Promise<{ recap: string; highlights: str
   } else if (openaiKey) {
     const r = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
+      signal,
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: 600,
+        max_tokens: 500,
         response_format: { type: "json_object" },
         messages: [{ role: "user", content: prompt }],
       }),
