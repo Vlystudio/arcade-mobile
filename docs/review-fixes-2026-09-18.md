@@ -43,9 +43,9 @@ Production was paused during the initial review. During release it was restored,
 
 ## Validation
 
-- **43 passing tests under Node 22**: actual source modules with service mocks, plus the complete upgrade executed in PGlite/PostgreSQL. Coverage includes legacy function signatures, authorization failures, payment rollback/retry, duplicate completion, old-score rankings, over-1,000-row aggregates, queue races, device reassignment, moderation failure and multi-page deletion.
+- **44 passing tests under Node 22**: actual source modules with service mocks, plus the complete upgrade executed in PGlite/PostgreSQL. Coverage includes legacy function signatures, authorization failures, payment rollback/retry, duplicate completion, old-score rankings, over-1,000-row aggregates, queue races, device reassignment, moderation failure and multi-page deletion.
 - TypeScript, the three changed Edge Function Deno checks, and Expo SDK compatibility: pass.
-- ESLint: 0 errors, 107 remaining warnings (review baseline: 120).
+- ESLint: 0 errors, 104 remaining warnings (review baseline: 120).
 - Production dependency audit: 0 high/critical; 14 moderate dependency entries remain.
 - Web export (62 routes), Android Hermes export, and iOS Hermes export: pass with placeholder public configuration.
 - Browser: desktop/mobile login renders; Forgot username fills email sign-in without exposing an identity mapping; no runtime errors observed.
