@@ -20,6 +20,8 @@ import { PullToRefresh } from "../components/pull-to-refresh";
 import { UpdateBanner } from "../components/update-banner";
 import { initOfflineFlush } from "../../lib/offline-queue";
 import { PendingScores } from "../components/pending-scores";
+import { MotionProvider, useReducedMotion } from "../context/motion-context";
+import { MOTION, RouteTransition } from "../components/motion";
 
 Sentry.init({
   dsn: "https://483f3f6bbb4581e28ed5ddaf6a17c07e@o4511509249785856.ingest.us.sentry.io/4511509250768896",
@@ -36,13 +38,14 @@ configureNotificationHandler();
 // Everything else renders in a centered phone-style column like IG/X web.
 const WEB_FULL_ROUTES = new Set(["/skeeball-live", "/karaoke-display", "/demo"]);
 const WEB_WIDE_ROUTES = new Set(["/admin", "/owner", "/architect"]);
+const TAB_ROUTES = new Set(["index", "games", "trivia", "teams", "food", "profile", "admin"]);
 
 /** Centers the whole app in a column on desktop web; no-op on native. */
 function AppColumn({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   if (Platform.OS !== "web") return <>{children}</>;
-  if (WEB_FULL_ROUTES.has(pathname)) return <>{children}</>;
-  const maxWidth = WEB_WIDE_ROUTES.has(pathname) ? 1140 : 680;
+  const fullWidth = WEB_FULL_ROUTES.has(pathname);
+  const maxWidth = fullWidth ? undefined : WEB_WIDE_ROUTES.has(pathname) ? 1140 : 680;
   return (
     <View style={{ flex: 1, backgroundColor: "#000", alignItems: "center" }}>
       <View
@@ -50,8 +53,8 @@ function AppColumn({ children }: { children: React.ReactNode }) {
           flex: 1,
           width: "100%",
           maxWidth,
-          borderLeftWidth: 1,
-          borderRightWidth: 1,
+          borderLeftWidth: fullWidth ? 0 : 1,
+          borderRightWidth: fullWidth ? 0 : 1,
           borderColor: "#161616",
         }}
       >
@@ -81,6 +84,11 @@ function PushRegistrar() {
 }
 
 export default function RootLayout() {
+  return <MotionProvider><RootNavigation /></MotionProvider>;
+}
+
+function RootNavigation() {
+  const reducedMotion = useReducedMotion();
   return (
     <SafeAreaProvider>
       <AuthProvider>
@@ -95,12 +103,16 @@ export default function RootLayout() {
         <PendingScores />
         <ScreenshotButton />
         <Stack
-          screenOptions={{
+          screenLayout={({ children }) => <RouteTransition>{children}</RouteTransition>}
+          screenOptions={({ route }) => ({
             headerStyle: { backgroundColor: "#000000" },
             headerTintColor: "#ffffff",
             headerTitleStyle: { fontWeight: "800", fontSize: 17 },
             headerShadowVisible: false,
-          }}
+            contentStyle: { backgroundColor: "#000000" },
+            animation: reducedMotion || Platform.OS === "web" ? "none" : TAB_ROUTES.has(route.name) ? "fade" : "slide_from_right",
+            animationDuration: MOTION.enter,
+          })}
         >
           <Stack.Screen name="auth" options={{ headerShown: false }} />
           <Stack.Screen name="index" options={{ headerShown: false }} />

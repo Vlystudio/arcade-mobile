@@ -1,14 +1,17 @@
+import { PressableScale as Pressable } from "./pressable-scale";
+import { useReducedMotion } from "../context/motion-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, usePathname } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
+  cancelAnimation,
 } from "react-native-reanimated";
-import { Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import { Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAdmin } from "../context/admin-context";
 import { useAuth } from "../context/auth-context";
@@ -37,7 +40,8 @@ const ADMIN_TAB: Tab = {
   route: "/admin",
 };
 
-const SPRING_CONFIG = { damping: 20, stiffness: 220, mass: 0.55 };
+const SPRING_CONFIG = { damping: 24, stiffness: 260, mass: 0.65, overshootClamping: true };
+let lastTabNavigation: { from: string; to: string } | undefined;
 
 // Module-level avatar cache so the tab bar doesn't refetch on every screen change.
 // undefined = not fetched yet, null = fetched but user has no avatar.
@@ -106,6 +110,7 @@ export default function BottomTabBar() {
   const insets = useSafeAreaInsets();
   const { isAdmin } = useAdmin();
   const { user } = useAuth();
+  const userId = user?.id;
   const { width: windowWidth } = useWindowDimensions();
   const [avatarUrl, setAvatarUrl] = useState<string | null>(cachedAvatarUrl ?? null);
   const [badges, setBadges] = useState<Badges>(cachedBadges);
@@ -115,19 +120,19 @@ export default function BottomTabBar() {
     const listener = (url: string | null) => setAvatarUrl(url);
     avatarListeners.add(listener);
 
-    if (user && (cachedAvatarUrl === undefined || cachedAvatarUserId !== user.id)) {
-      cachedAvatarUserId = user.id;
+    if (userId && (cachedAvatarUrl === undefined || cachedAvatarUserId !== userId)) {
+      cachedAvatarUserId = userId;
       supabase
         .from("profiles")
         .select("avatar_url")
-        .eq("id", user.id)
+        .eq("id", userId)
         .single()
         .then(({ data }) => {
           setTabBarAvatar(data?.avatar_url ?? null);
         });
     }
     return () => { avatarListeners.delete(listener); };
-  }, [user?.id]);
+  }, [userId]);
 
   // Badges, with module-level TTL cache shared across screens
   useEffect(() => {
@@ -135,18 +140,18 @@ export default function BottomTabBar() {
     badgeListeners.add(listener);
 
     if (
-      user &&
-      (Date.now() - badgesFetchedAt > BADGE_TTL_MS || badgesUserId !== user.id)
+      userId &&
+      (Date.now() - badgesFetchedAt > BADGE_TTL_MS || badgesUserId !== userId)
     ) {
       badgesFetchedAt = Date.now();
-      badgesUserId = user.id;
-      loadBadges(user.id).then((b) => {
+      badgesUserId = userId;
+      loadBadges(userId).then((b) => {
         cachedBadges = b;
         badgeListeners.forEach((fn) => fn(b));
       });
     }
     return () => { badgeListeners.delete(listener); };
-  }, [user?.id, pathname]);
+  }, [userId, pathname]);
 
   const tabs: Tab[] = isAdmin
     ? [...BASE_TABS.slice(0, BASE_TABS.length - 1), ADMIN_TAB, BASE_TABS[BASE_TABS.length - 1]]
@@ -157,17 +162,31 @@ export default function BottomTabBar() {
   const isLeagueNight = new Date().getDay() === 1;
 
   const activeIndex = tabs.findIndex((t) => t.route === pathname);
-  const tabWidth = windowWidth / tabs.length;
+  const reducedMotion = useReducedMotion();
+  const [barWidth, setBarWidth] = useState(0);
+  const [entryRoute] = useState(() => lastTabNavigation?.to === pathname ? lastTabNavigation.from : pathname);
+  const entryIndex = tabs.findIndex(t => t.route === entryRoute);
+  const previousWidth = useRef(0);
+  const tabWidth = barWidth / tabs.length;
 
   // Animated dot indicator under the active tab
-  const dotX = useSharedValue(Math.max(activeIndex, 0) * tabWidth + tabWidth / 2 - 2);
+  const dotX = useSharedValue(0);
 
   useEffect(() => {
-    const idx = tabs.findIndex((t) => t.route === pathname);
-    if (idx >= 0) {
-      dotX.value = withSpring(idx * tabWidth + tabWidth / 2 - 2, SPRING_CONFIG);
-    }
-  }, [pathname, tabWidth, tabs.length]);
+    if (activeIndex < 0 || tabWidth === 0) return;
+    const target = activeIndex * tabWidth + tabWidth / 2 - 2;
+    const resized = previousWidth.current !== 0 && previousWidth.current !== tabWidth;
+    if (previousWidth.current === 0) dotX.value = Math.max(entryIndex, 0) * tabWidth + tabWidth / 2 - 2;
+    dotX.value = reducedMotion || resized ? target : withSpring(target, SPRING_CONFIG);
+    previousWidth.current = tabWidth;
+    return () => cancelAnimation(dotX);
+  }, [activeIndex, dotX, entryIndex, reducedMotion, tabWidth]);
+
+  function navigate(route: string) {
+    if (pathname === route) return;
+    lastTabNavigation = { from: pathname, to: route };
+    router.replace(route as any);
+  }
 
   const isAdminActive = pathname === "/admin";
 
@@ -216,11 +235,10 @@ export default function BottomTabBar() {
                 active && styles.railItemActive,
                 (pressed || hovered) && styles.railItemHover,
               ]}
-              onPress={() => {
-                if (pathname !== tab.route) router.replace(tab.route as any);
-              }}
+              onPress={() => navigate(tab.route)}
               accessibilityLabel={tab.label}
               accessibilityRole="tab"
+              aria-selected={active}
             >
               <View>
                 {isProfileTab ? (
@@ -257,9 +275,9 @@ export default function BottomTabBar() {
 
   // ── Phone / narrow web: bottom bar ──
   return (
-    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 10) }]}>
+    <View onLayout={event => setBarWidth(event.nativeEvent.layout.width)} style={[styles.container, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       {/* animated active-tab dot */}
-      {activeIndex >= 0 && (
+      {activeIndex >= 0 && barWidth > 0 && (
         <Animated.View
           style={[
             styles.dot,
@@ -280,11 +298,10 @@ export default function BottomTabBar() {
           <Pressable
             key={tab.route}
             style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
-            onPress={() => {
-              if (pathname !== tab.route) router.replace(tab.route as any);
-            }}
+            onPress={() => navigate(tab.route)}
             accessibilityLabel={tab.label}
             accessibilityRole="tab"
+            aria-selected={active}
           >
             <View>
               {isProfileTab ? (

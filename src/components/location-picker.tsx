@@ -1,6 +1,7 @@
+import { PressableScale as Pressable } from "./pressable-scale";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { AppLocation, LOCATIONS, useLocation } from "../context/location-context";
+import { StyleSheet, Text, View } from "react-native";
+import { LOCATIONS, useLocation } from "../context/location-context";
 
 type Props = {
   compact?: boolean;

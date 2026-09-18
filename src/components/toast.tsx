@@ -1,10 +1,13 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useEffect, useRef, useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Animated, StyleSheet, Text, View } from "react-native";
+import { PressableScale as Pressable } from "./pressable-scale";
+import { useReducedMotion } from "../context/motion-context";
+import { MOTION } from "./motion";
 
 type ToastType = "success" | "error" | "info";
 type ToastAction = { label: string; onPress: () => void };
-type ToastItem = { id: number; message: string; type: ToastType; action?: ToastAction; durationMs?: number };
+type ToastItem = { id: number; message: string; type: ToastType; action?: ToastAction; durationMs?: number; closing?: boolean };
 
 let nextId = 1;
 let pushToast: ((t: ToastItem) => void) | null = null;
@@ -33,37 +36,49 @@ const COLORS: Record<ToastType, { fg: string; icon: string }> = {
 /** Render once near the root. Hosts the toast stack (max 3, auto-dismiss). */
 export function ToastHost() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const close = useCallback((id: number) => setToasts(prev => prev.map(t => t.id === id ? { ...t, closing: true } : t)), []);
+  const remove = useCallback((id: number) => setToasts(prev => prev.filter(t => t.id !== id)), []);
 
   useEffect(() => {
     pushToast = (t) => {
       setToasts((prev) => [...prev.slice(-2), t]);
-      setTimeout(() => {
-        setToasts((prev) => prev.filter((x) => x.id !== t.id));
-      }, t.durationMs ?? 2600);
     };
-    dismissToast = (id) => setToasts((prev) => prev.filter((x) => x.id !== id));
+    dismissToast = close;
     return () => { pushToast = null; dismissToast = null; };
-  }, []);
+  }, [close]);
 
   if (toasts.length === 0) return null;
   return (
     <View style={s.host} pointerEvents="box-none">
-      {toasts.map((t) => <ToastRow key={t.id} toast={t} />)}
+      {toasts.map((t) => <ToastRow key={t.id} toast={t} onClose={close} onRemove={remove} />)}
     </View>
   );
 }
 
-function ToastRow({ toast }: { toast: ToastItem }) {
+function ToastRow({ toast, onClose, onRemove }: { toast: ToastItem; onClose: (id: number) => void; onRemove: (id: number) => void }) {
   const anim = useRef(new Animated.Value(0)).current;
+  const reducedMotion = useReducedMotion();
   useEffect(() => {
-    Animated.spring(anim, { toValue: 1, useNativeDriver: true, damping: 18, stiffness: 220 }).start();
-  }, []);
+    const timer = setTimeout(() => onClose(toast.id), toast.durationMs ?? 2600);
+    return () => clearTimeout(timer);
+  }, [onClose, toast.durationMs, toast.id]);
+  useEffect(() => {
+    const animation = Animated.timing(anim, {
+      toValue: toast.closing ? 0 : 1,
+      duration: reducedMotion ? 0 : toast.closing ? MOTION.exit : MOTION.enter,
+      easing: MOTION.easeOut, useNativeDriver: MOTION.nativeDriver, isInteraction: false,
+    });
+    animation.start(({ finished }) => { if (finished && toast.closing) onRemove(toast.id); });
+    return () => animation.stop();
+  }, [anim, onRemove, reducedMotion, toast.closing, toast.id]);
   const c = COLORS[toast.type];
   return (
     <Animated.View
+      accessibilityLiveRegion="polite"
+      pointerEvents={toast.closing ? "none" : "auto"}
       style={[s.toast, {
         opacity: anim,
-        transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+        transform: [{ translateY: reducedMotion ? 0 : anim.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
       }]}
     >
       <Ionicons name={c.icon as any} size={16} color={c.fg} />

@@ -1,25 +1,57 @@
-import { useRef, type ReactNode } from "react";
-import { Animated, Pressable, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Animated, Pressable, StyleSheet, type PressableProps } from "react-native";
+import { useReducedMotion } from "../context/motion-context";
+import { MOTION } from "./motion";
 
-/**
- * Pressable with native-feeling spring scale feedback (0.96 on press-in).
- * Drop-in replacement for Pressable on buttons/cards.
- */
-export function PressableScale({ style, children, ...rest }: Omit<PressableProps, "children" | "style"> & { style?: StyleProp<ViewStyle>; children?: ReactNode }) {
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+/** One element owns both layout and the hit target, including flex and absolute styles. */
+export function PressableScale({ style, children, accessibilityRole = "button", ...props }: PressableProps) {
+  const reducedMotion = useReducedMotion();
   const scale = useRef(new Animated.Value(1)).current;
+  const [interaction, setInteraction] = useState({ pressed: false, hovered: false, focused: false });
+
+  useEffect(() => {
+    if (reducedMotion || props.disabled) {
+      scale.stopAnimation();
+      scale.setValue(1);
+    }
+    return () => scale.stopAnimation();
+  }, [props.disabled, reducedMotion, scale]);
+
+  function animate(pressed: boolean) {
+    scale.stopAnimation();
+    Animated.timing(scale, {
+      toValue: pressed && !reducedMotion && !props.disabled ? 0.98 : 1,
+      duration: reducedMotion ? 0 : pressed ? MOTION.press : MOTION.release,
+      easing: MOTION.easeOut, useNativeDriver: MOTION.nativeDriver,
+    }).start();
+  }
+
+  const resolvedStyle = StyleSheet.flatten(typeof style === "function" ? style(interaction) : style);
+  const transforms = resolvedStyle?.transform;
+
   return (
-    <Pressable
-      {...rest}
-      onPressIn={(e) => {
-        Animated.spring(scale, { toValue: 0.96, useNativeDriver: true, speed: 50, bounciness: 0 }).start();
-        rest.onPressIn?.(e);
+    <AnimatedPressable
+      {...props}
+      accessibilityRole={accessibilityRole}
+      style={[resolvedStyle, { transform: [...(Array.isArray(transforms) ? transforms : []), { scale }] }]}
+      onPressIn={event => {
+        setInteraction(value => ({ ...value, pressed: true }));
+        animate(true);
+        props.onPressIn?.(event);
       }}
-      onPressOut={(e) => {
-        Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 6 }).start();
-        rest.onPressOut?.(e);
+      onPressOut={event => {
+        setInteraction(value => ({ ...value, pressed: false }));
+        animate(false);
+        props.onPressOut?.(event);
       }}
+      onHoverIn={event => { setInteraction(value => ({ ...value, hovered: true })); props.onHoverIn?.(event); }}
+      onHoverOut={event => { setInteraction(value => ({ ...value, hovered: false })); props.onHoverOut?.(event); }}
+      onFocus={event => { setInteraction(value => ({ ...value, focused: true })); props.onFocus?.(event); }}
+      onBlur={event => { setInteraction(value => ({ ...value, focused: false })); props.onBlur?.(event); }}
     >
-      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
-    </Pressable>
+      {typeof children === "function" ? children(interaction) : children}
+    </AnimatedPressable>
   );
 }

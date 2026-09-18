@@ -1,11 +1,11 @@
+import { MotionSheet } from "../components/motion-sheet";
+import { PressableScale as Pressable } from "../components/pressable-scale";
 import { Image } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -183,7 +183,7 @@ export default function FoodScreen() {
                 <Text style={styles.pageTitle}>{isVinyl ? "Kitchen" : "Food"}</Text>
                 <Text style={styles.pageSub}>{isVinyl ? "Full kitchen menu" : "Order to your lane"}</Text>
               </View>
-              <Pressable style={styles.cartBtn} onPress={() => router.push("/food-cart" as any)}>
+              <Pressable accessibilityLabel="View cart" style={styles.cartBtn} onPress={() => router.push("/food-cart" as any)}>
                 <Ionicons name="bag-outline" size={22} color="#fff" />
                 {itemCount > 0 && (
                   <View style={styles.cartBadge}>
@@ -290,84 +290,74 @@ export default function FoodScreen() {
       <BottomTabBar />
 
       {/* Location switcher modal */}
-      <Modal visible={locSwitcherVisible} transparent animationType="slide" onRequestClose={() => setLocSwitcherVisible(false)}>
-        <View style={styles.locModalBg}>
-          <Pressable style={styles.locModalDismiss} onPress={() => setLocSwitcherVisible(false)} />
-          <View style={styles.locModalSheet}>
-            <View style={styles.locModalHandle} />
-            <Text style={styles.locModalTitle}>Switch Location</Text>
-            <Text style={styles.locModalSub}>Your cart is saved separately for each location.</Text>
-            <LocationPicker />
-            <Pressable style={styles.locModalDoneBtn} onPress={() => setLocSwitcherVisible(false)}>
-              <Text style={styles.locModalDoneBtnText}>Done</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      <MotionSheet visible={locSwitcherVisible} onClose={() => setLocSwitcherVisible(false)} style={styles.locModalSheet} accessibilityLabel="Switch location">
+        <View style={styles.locModalHandle} />
+        <Text style={styles.locModalTitle}>Switch Location</Text>
+        <Text style={styles.locModalSub}>Your cart is saved separately for each location.</Text>
+        <LocationPicker />
+        <Pressable style={styles.locModalDoneBtn} onPress={() => setLocSwitcherVisible(false)}>
+          <Text style={styles.locModalDoneBtnText}>Done</Text>
+        </Pressable>
+      </MotionSheet>
 
       {/* Item detail sheet */}
-      <Modal visible={!!selectedItem} transparent animationType="slide" onRequestClose={() => setSelectedItem(null)}>
-        <View style={styles.sheetBg}>
-          <Pressable style={styles.sheetDismiss} onPress={() => setSelectedItem(null)} />
-          {selectedItem && (
-            <View style={styles.sheet}>
-              <View style={styles.sheetHandle} />
+      <MotionSheet visible={!!selectedItem} onClose={() => setSelectedItem(null)} style={styles.sheet} accessibilityLabel="Menu item details">
+        {selectedItem && <>
+          <View style={styles.sheetHandle} />
 
-              {/* Photo or placeholder */}
-              {selectedItem.photo_url ? (
-                <Image source={{ uri: selectedItem.photo_url }} style={styles.sheetPhoto} contentFit="cover" />
-              ) : (
-                <View style={[styles.sheetPhotoPlaceholder, { backgroundColor: (CATEGORY_COLORS[selectedItem.category] ?? "#06b6d4") + "18" }]}>
-                  <Ionicons name="fast-food-outline" size={40} color={CATEGORY_COLORS[selectedItem.category] ?? "#06b6d4"} />
-                </View>
-              )}
-
-              <View style={styles.sheetBody}>
-                <View style={styles.sheetTitleRow}>
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.sheetCatRow}>
-                      <View style={[styles.sheetCatBadge, { backgroundColor: (CATEGORY_COLORS[selectedItem.category] ?? "#06b6d4") + "22" }]}>
-                        <Text style={[styles.sheetCatText, { color: CATEGORY_COLORS[selectedItem.category] ?? "#06b6d4" }]}>
-                          {selectedItem.category}
-                        </Text>
-                      </View>
-                    </View>
-                    <Text style={styles.sheetName}>{selectedItem.name}</Text>
-                  </View>
-                  <Text style={styles.sheetPrice}>${selectedItem.price.toFixed(2)}</Text>
-                </View>
-
-                {selectedItem.description && (
-                  <Text style={styles.sheetDesc}>{selectedItem.description}</Text>
-                )}
-
-                {selectedItem.ingredients.length > 0 && (
-                  <>
-                    <Text style={styles.sheetSectionLabel}>Ingredients</Text>
-                    <View style={styles.ingredientsList}>
-                      {selectedItem.ingredients.map((ing, i) => (
-                        <View key={i} style={styles.ingredientChip}>
-                          <Text style={styles.ingredientText}>{ing}</Text>
-                        </View>
-                      ))}
-                    </View>
-                  </>
-                )}
-
-                <Pressable
-                  style={[styles.addToCartBtn, addedId === selectedItem.id && styles.addToCartBtnDone]}
-                  onPress={() => handleAddToCart(selectedItem)}
-                >
-                  <Ionicons name={addedId === selectedItem.id ? "checkmark" : "bag-add-outline"} size={20} color="#000" />
-                  <Text style={styles.addToCartBtnText}>
-                    {addedId === selectedItem.id ? "Added!" : `Add to Cart — $${selectedItem.price.toFixed(2)}`}
-                  </Text>
-                </Pressable>
-              </View>
+          {/* Photo or placeholder */}
+          {selectedItem.photo_url ? (
+            <Image source={{ uri: selectedItem.photo_url }} style={styles.sheetPhoto} contentFit="cover" />
+          ) : (
+            <View style={[styles.sheetPhotoPlaceholder, { backgroundColor: (CATEGORY_COLORS[selectedItem.category] ?? "#06b6d4") + "18" }]}>
+              <Ionicons name="fast-food-outline" size={40} color={CATEGORY_COLORS[selectedItem.category] ?? "#06b6d4"} />
             </View>
           )}
-        </View>
-      </Modal>
+
+          <View style={styles.sheetBody}>
+            <View style={styles.sheetTitleRow}>
+              <View style={{ flex: 1 }}>
+                <View style={styles.sheetCatRow}>
+                  <View style={[styles.sheetCatBadge, { backgroundColor: (CATEGORY_COLORS[selectedItem.category] ?? "#06b6d4") + "22" }]}>
+                    <Text style={[styles.sheetCatText, { color: CATEGORY_COLORS[selectedItem.category] ?? "#06b6d4" }]}>
+                      {selectedItem.category}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.sheetName}>{selectedItem.name}</Text>
+              </View>
+              <Text style={styles.sheetPrice}>${selectedItem.price.toFixed(2)}</Text>
+            </View>
+
+            {selectedItem.description && (
+              <Text style={styles.sheetDesc}>{selectedItem.description}</Text>
+            )}
+
+            {selectedItem.ingredients.length > 0 && (
+              <>
+                <Text style={styles.sheetSectionLabel}>Ingredients</Text>
+                <View style={styles.ingredientsList}>
+                  {selectedItem.ingredients.map((ing, i) => (
+                    <View key={i} style={styles.ingredientChip}>
+                      <Text style={styles.ingredientText}>{ing}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            <Pressable
+              style={[styles.addToCartBtn, addedId === selectedItem.id && styles.addToCartBtnDone]}
+              onPress={() => handleAddToCart(selectedItem)}
+            >
+              <Ionicons name={addedId === selectedItem.id ? "checkmark" : "bag-add-outline"} size={20} color="#000" />
+              <Text style={styles.addToCartBtnText}>
+                {addedId === selectedItem.id ? "Added!" : `Add to Cart — $${selectedItem.price.toFixed(2)}`}
+              </Text>
+            </Pressable>
+          </View>
+        </>}
+      </MotionSheet>
     </View>
   );
 }
@@ -397,7 +387,8 @@ function MenuCard({ item, justAdded, onPress, onAdd }: {
 }) {
   const color = CATEGORY_COLORS[item.category] ?? "#06b6d4";
   return (
-    <Pressable style={styles.card} onPress={onPress}>
+    <View style={styles.card}>
+      <Pressable style={styles.cardDetails} onPress={onPress} accessibilityLabel={`${item.name}, view details`}>
       {item.photo_url ? (
         <Image source={{ uri: item.photo_url }} style={styles.cardPhoto} contentFit="cover" cachePolicy="memory-disk" />
       ) : (
@@ -412,13 +403,15 @@ function MenuCard({ item, justAdded, onPress, onAdd }: {
         )}
         <Text style={styles.cardPrice}>${item.price.toFixed(2)}</Text>
       </View>
+      </Pressable>
       <Pressable
+        accessibilityLabel={`Add ${item.name} to cart`}
         style={[styles.addBtn, justAdded && styles.addBtnDone]}
         onPress={(e) => { e.stopPropagation(); onAdd(); }}
       >
         <Ionicons name={justAdded ? "checkmark" : "add"} size={20} color="#000" />
       </Pressable>
-    </Pressable>
+    </View>
   );
 }
 
@@ -464,8 +457,6 @@ const styles = StyleSheet.create({
   locBannerChange: { color: "#8a8a8a", fontSize: 12, fontWeight: "600" },
 
   // Location switcher modal
-  locModalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" },
-  locModalDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   locModalSheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     padding: 24, paddingBottom: 36, borderTopWidth: 1, borderColor: "#222",
@@ -511,6 +502,7 @@ const styles = StyleSheet.create({
     width: 72, height: 72, borderRadius: 14,
     alignItems: "center", justifyContent: "center",
   },
+  cardDetails: { flex: 1, flexDirection: "row", alignItems: "center", gap: 14 },
   cardBody: { flex: 1 },
   cardName: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 3 },
   cardDesc: { color: "#8a8a8a", fontSize: 13, lineHeight: 18, marginBottom: 6 },
@@ -526,8 +518,6 @@ const styles = StyleSheet.create({
   emptySub: { color: "#777", fontSize: 14, textAlign: "center", lineHeight: 20 },
 
   // Item detail sheet
-  sheetBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" },
-  sheetDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   sheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     borderTopWidth: 1, borderColor: "#1a1a1a", overflow: "hidden",

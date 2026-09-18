@@ -1,3 +1,6 @@
+import { MotionSheet } from "../components/motion-sheet";
+import { useReducedMotion } from "../context/motion-context";
+import { PressableScale as Pressable } from "../components/pressable-scale";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
@@ -7,7 +10,6 @@ import {
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -42,6 +44,7 @@ const TOS_SECTIONS = [
 ];
 
 export default function LoginScreen() {
+  const reducedMotion = useReducedMotion();
   const { setRememberMe, signOut } = useAuth();
 
   const [email, setEmail]               = useState("");
@@ -318,7 +321,7 @@ export default function LoginScreen() {
       </KeyboardAvoidingView>
 
       {/* ── ToS Acceptance Modal (full-screen, scroll-to-unlock) ── */}
-      <Modal visible={showTosModal} transparent={false} animationType="slide" onRequestClose={() => {}}>
+      <Modal visible={showTosModal} transparent={false} animationType={reducedMotion ? "none" : "slide"} onRequestClose={() => {}}>
         <SafeAreaView style={styles.tosModalRoot} edges={["top", "bottom"]}>
           {/* Header */}
           <View style={styles.tosModalHeader}>
@@ -397,109 +400,99 @@ export default function LoginScreen() {
       </Modal>
 
       {/* ── Forgot Username Sheet ─────────────────────────────────── */}
-      <Modal visible={showForgotUsername} transparent animationType="slide" onRequestClose={closeForgotUsername}>
-        <View style={styles.modalBg}>
-          <Pressable style={styles.modalDismiss} onPress={closeForgotUsername} />
-          <View style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetIconRow}>
-              <View style={styles.sheetIcon}>
-                <Ionicons name="person-outline" size={22} color="#06b6d4" />
-              </View>
-            </View>
-            <Text style={styles.sheetTitle}>Forgot username?</Text>
-            <Text style={styles.sheetSub}>You can sign in with your email address. Your username is shown on your profile after sign-in.</Text>
-
-                <View style={styles.inputWrap}>
-                  <Ionicons name="mail-outline" size={18} color="#444" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Email address"
-                    autoComplete="email"
-                    textContentType="emailAddress"
-                    placeholderTextColor="#555"
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    value={forgotEmail}
-                    onChangeText={setForgotEmail}
-                    onSubmitEditing={handleLookupUsername}
-                  />
-                </View>
-
-                <BugReportBanner error={forgotUsernameError} />
-
-                <Pressable style={styles.sheetBtn} onPress={handleLookupUsername}>
-                  <Text style={styles.sheetBtnText}>Continue with email</Text>
-                </Pressable>
-
-            <Pressable style={styles.sheetCancel} onPress={closeForgotUsername}>
-              <Text style={styles.sheetCancelText}>Cancel</Text>
-            </Pressable>
+      <MotionSheet visible={showForgotUsername} onClose={closeForgotUsername} style={styles.sheet} accessibilityLabel="Forgot username">
+        <View style={styles.sheetHandle} />
+        <View style={styles.sheetIconRow}>
+          <View style={styles.sheetIcon}>
+            <Ionicons name="person-outline" size={22} color="#06b6d4" />
           </View>
         </View>
-      </Modal>
+        <Text style={styles.sheetTitle}>Forgot username?</Text>
+        <Text style={styles.sheetSub}>You can sign in with your email address. Your username is shown on your profile after sign-in.</Text>
+
+        <View style={styles.inputWrap}>
+          <Ionicons name="mail-outline" size={18} color="#444" style={styles.inputIcon} />
+          <TextInput
+            style={styles.input}
+            placeholder="Email address"
+            autoComplete="email"
+            textContentType="emailAddress"
+            placeholderTextColor="#555"
+            autoCapitalize="none"
+            keyboardType="email-address"
+            value={forgotEmail}
+            onChangeText={setForgotEmail}
+            onSubmitEditing={handleLookupUsername}
+          />
+        </View>
+
+        <BugReportBanner error={forgotUsernameError} />
+
+        <Pressable style={styles.sheetBtn} onPress={handleLookupUsername}>
+          <Text style={styles.sheetBtnText}>Continue with email</Text>
+        </Pressable>
+
+        <Pressable style={styles.sheetCancel} onPress={closeForgotUsername}>
+          <Text style={styles.sheetCancelText}>Cancel</Text>
+        </Pressable>
+      </MotionSheet>
 
       {/* ── Forgot Password Sheet ─────────────────────────────────── */}
-      <Modal visible={showForgotPassword} transparent animationType="slide" onRequestClose={closeForgotPassword}>
-        <View style={styles.modalBg}>
-          <Pressable style={styles.modalDismiss} onPress={closeForgotPassword} />
-          <View style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetIconRow}>
-              <View style={styles.sheetIcon}>
-                <Ionicons name="lock-open-outline" size={22} color="#06b6d4" />
-              </View>
-            </View>
-            <Text style={styles.sheetTitle}>Forgot password?</Text>
-
-            {!resetSent ? (
-              <>
-                <Text style={styles.sheetSub}>Enter your email and we'll send you a link to reset your password.</Text>
-
-                <View style={styles.inputWrap}>
-                  <Ionicons name="mail-outline" size={18} color="#444" style={styles.inputIcon} />
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Email address"
-                    autoComplete="email"
-                    textContentType="emailAddress"
-                    placeholderTextColor="#555"
-                    autoCapitalize="none"
-                    keyboardType="email-address"
-                    value={resetEmail}
-                    onChangeText={setResetEmail}
-                    onSubmitEditing={handleSendReset}
-                  />
-                </View>
-
-                <BugReportBanner error={forgotPasswordError} />
-
-                <Pressable
-                  style={[styles.sheetBtn, sendingReset && styles.sheetBtnDisabled]}
-                  onPress={handleSendReset}
-                  disabled={sendingReset}
-                >
-                  {sendingReset
-                    ? <ActivityIndicator color="#000" size="small" />
-                    : <Text style={styles.sheetBtnText}>Send reset link</Text>
-                  }
-                </Pressable>
-              </>
-            ) : (
-              <View style={styles.resultBox}>
-                <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
-                <Text style={[styles.resultLabel, { flex: 1 }]}>
-                  Reset link sent to <Text style={{ color: "#fff", fontWeight: "700" }}>{resetEmail}</Text>. Check your inbox.
-                </Text>
-              </View>
-            )}
-
-            <Pressable style={styles.sheetCancel} onPress={closeForgotPassword}>
-              <Text style={styles.sheetCancelText}>{resetSent ? "Done" : "Cancel"}</Text>
-            </Pressable>
+      <MotionSheet visible={showForgotPassword} onClose={closeForgotPassword} style={styles.sheet} accessibilityLabel="Forgot password">
+        <View style={styles.sheetHandle} />
+        <View style={styles.sheetIconRow}>
+          <View style={styles.sheetIcon}>
+            <Ionicons name="lock-open-outline" size={22} color="#06b6d4" />
           </View>
         </View>
-      </Modal>
+        <Text style={styles.sheetTitle}>Forgot password?</Text>
+
+        {!resetSent ? (
+          <>
+            <Text style={styles.sheetSub}>Enter your email and we'll send you a link to reset your password.</Text>
+
+            <View style={styles.inputWrap}>
+              <Ionicons name="mail-outline" size={18} color="#444" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Email address"
+                autoComplete="email"
+                textContentType="emailAddress"
+                placeholderTextColor="#555"
+                autoCapitalize="none"
+                keyboardType="email-address"
+                value={resetEmail}
+                onChangeText={setResetEmail}
+                onSubmitEditing={handleSendReset}
+              />
+            </View>
+
+            <BugReportBanner error={forgotPasswordError} />
+
+            <Pressable
+              style={[styles.sheetBtn, sendingReset && styles.sheetBtnDisabled]}
+              onPress={handleSendReset}
+              disabled={sendingReset}
+            >
+              {sendingReset
+                ? <ActivityIndicator color="#000" size="small" />
+                : <Text style={styles.sheetBtnText}>Send reset link</Text>
+              }
+            </Pressable>
+          </>
+        ) : (
+          <View style={styles.resultBox}>
+            <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
+            <Text style={[styles.resultLabel, { flex: 1 }]}>
+              Reset link sent to <Text style={{ color: "#fff", fontWeight: "700" }}>{resetEmail}</Text>. Check your inbox.
+            </Text>
+          </View>
+        )}
+
+        <Pressable style={styles.sheetCancel} onPress={closeForgotPassword}>
+          <Text style={styles.sheetCancelText}>{resetSent ? "Done" : "Cancel"}</Text>
+        </Pressable>
+      </MotionSheet>
     </SafeAreaView>
   );
 }
@@ -579,8 +572,6 @@ const styles = StyleSheet.create({
   backBtnText: { color: "#333", fontSize: 13 },
 
   // Modal / sheet
-  modalBg:      { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "flex-end" },
-  modalDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   sheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40,

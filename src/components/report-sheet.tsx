@@ -1,11 +1,10 @@
+import { MotionSheet } from "./motion-sheet";
+import { PressableScale as Pressable } from "./pressable-scale";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -81,76 +80,69 @@ export function ReportSheet({ target, onClose }: {
   const isProfile = target?.type === "profile";
 
   return (
-    <Modal visible={target !== null} transparent animationType="slide" onRequestClose={close}>
-      <View style={s.bg}>
-        <Pressable style={s.dismiss} onPress={close} />
-        <View style={s.sheet}>
-          <View style={s.handle} />
-          <Text style={s.title}>{isProfile ? "Report User" : "Report Content"}</Text>
-          {target?.label ? <Text style={s.sub} numberOfLines={1}>{target.label}</Text> : null}
+    <MotionSheet visible={target !== null} onClose={close} style={s.sheet} accessibilityLabel="Report content">
+      <View style={s.handle} />
+      <Text style={s.title}>{isProfile ? "Report User" : "Report Content"}</Text>
+      {target?.label ? <Text style={s.sub} numberOfLines={1}>{target.label}</Text> : null}
 
-          <ScrollView style={{ maxHeight: 360 }} showsVerticalScrollIndicator={false}>
-            {REASONS.map((r) => {
-              const active = reason === r.key;
-              return (
-                <Pressable
-                  key={r.key}
-                  style={[s.reasonRow, active && s.reasonRowActive]}
-                  onPress={() => setReason(r.key)}
-                >
-                  <Ionicons name={r.icon as any} size={17} color={active ? "#ef4444" : "#777"} />
-                  <Text style={[s.reasonText, active && s.reasonTextActive]}>{r.label}</Text>
-                  <Ionicons
-                    name={active ? "radio-button-on" : "radio-button-off"}
-                    size={18}
-                    color={active ? "#ef4444" : "#333"}
-                  />
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          {reason && (
-            <TextInput
-              style={s.detailsInput}
-              placeholder="Add details (optional)…"
-              placeholderTextColor="#555"
-              value={details}
-              onChangeText={setDetails}
-              multiline
-              maxLength={500}
-            />
-          )}
-
-          {error && (
-            <View style={s.errorRow}>
-              <Ionicons name="alert-circle-outline" size={14} color="#ef4444" />
-              <Text style={s.errorText}>{error}</Text>
-            </View>
-          )}
-
-          <Pressable style={s.guidelinesLink} onPress={() => { close(); router.push("/guidelines" as any); }}>
-            <Text style={s.guidelinesText}>See our community guidelines</Text>
-          </Pressable>
-
-          <Pressable
-            style={[s.submitBtn, (!reason || submitting) && { opacity: 0.4 }]}
-            onPress={submit}
-            disabled={!reason || submitting}
-          >
-            {submitting
-              ? <ActivityIndicator size="small" color="#fff" />
-              : <Text style={s.submitText}>Submit Report</Text>}
-          </Pressable>
-        </View>
+      <View>
+        {REASONS.map((r) => {
+          const active = reason === r.key;
+          return (
+            <Pressable
+              key={r.key}
+              style={[s.reasonRow, active && s.reasonRowActive]}
+              onPress={() => setReason(r.key)}
+            >
+              <Ionicons name={r.icon as any} size={17} color={active ? "#ef4444" : "#777"} />
+              <Text style={[s.reasonText, active && s.reasonTextActive]}>{r.label}</Text>
+              <Ionicons
+                name={active ? "radio-button-on" : "radio-button-off"}
+                size={18}
+                color={active ? "#ef4444" : "#333"}
+              />
+            </Pressable>
+          );
+        })}
       </View>
-    </Modal>
+
+      {reason && (
+        <TextInput
+          style={s.detailsInput}
+          placeholder="Add details (optional)…"
+          placeholderTextColor="#555"
+          value={details}
+          onChangeText={setDetails}
+          multiline
+          maxLength={500}
+        />
+      )}
+
+      {error && (
+        <View style={s.errorRow}>
+          <Ionicons name="alert-circle-outline" size={14} color="#ef4444" />
+          <Text style={s.errorText}>{error}</Text>
+        </View>
+      )}
+
+      <Pressable style={s.guidelinesLink} onPress={() => { close(); router.push("/guidelines" as any); }}>
+        <Text style={s.guidelinesText}>See our community guidelines</Text>
+      </Pressable>
+
+      <Pressable
+        style={[s.submitBtn, (!reason || submitting) && { opacity: 0.4 }]}
+        onPress={submit}
+        disabled={!reason || submitting}
+      >
+        {submitting
+          ? <ActivityIndicator size="small" color="#fff" />
+          : <Text style={s.submitText}>Submit Report</Text>}
+      </Pressable>
+    </MotionSheet>
   );
 }
 
 const s = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
-  dismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   sheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 22, paddingTop: 14, paddingBottom: 32,

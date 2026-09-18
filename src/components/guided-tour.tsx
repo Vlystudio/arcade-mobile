@@ -1,8 +1,11 @@
+import { PressableScale as Pressable } from "./pressable-scale";
+import { useReducedMotion } from "../context/motion-context";
+import { MOTION } from "./motion";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, usePathname } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Animated, Platform, StyleSheet, Text, View } from "react-native";
 import { getTourSteps, tourStorageKey, type TourStep } from "../../lib/tour-steps";
 import { useAuth } from "../context/auth-context";
 import type { AppRole } from "./role-badge";
@@ -24,6 +27,7 @@ export function startGuidedTour(steps: TourStep[], onDone?: () => void) {
  * they see exactly what's being explained.
  */
 export function GuidedTourHost() {
+  const reducedMotion = useReducedMotion();
   const [tour, setTour] = useState<ActiveTour | null>(null);
   const [index, setIndex] = useState(0);
   const pathname = usePathname();
@@ -68,12 +72,15 @@ export function GuidedTourHost() {
   // Animate the card in on each step.
   useEffect(() => {
     if (!tour) return;
-    fade.setValue(0); slide.setValue(40);
-    Animated.parallel([
-      Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }),
-      Animated.spring(slide, { toValue: 0, useNativeDriver: true, damping: 18, stiffness: 200 }),
-    ]).start();
-  }, [tour, index]);
+    if (reducedMotion) { fade.setValue(1); slide.setValue(0); return; }
+    fade.setValue(0); slide.setValue(16);
+    const animation = Animated.parallel([
+      Animated.timing(fade, { toValue: 1, duration: MOTION.enter, easing: MOTION.easeOut, useNativeDriver: MOTION.nativeDriver, isInteraction: false }),
+      Animated.timing(slide, { toValue: 0, duration: MOTION.enter, easing: MOTION.easeOut, useNativeDriver: MOTION.nativeDriver, isInteraction: false }),
+    ]);
+    animation.start();
+    return () => animation.stop();
+  }, [tour, index, fade, slide, reducedMotion]);
 
   if (!tour || !step) return null;
 

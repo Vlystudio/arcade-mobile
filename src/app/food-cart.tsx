@@ -1,3 +1,4 @@
+import { PressableScale as Pressable } from "../components/pressable-scale";
 import { checkoutFingerprint, readCheckout, saveCheckout, removeCheckout } from "../../lib/checkout-state";
 import { useAuth } from "../context/auth-context";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -8,7 +9,6 @@ import {
   AppState,
   Linking,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,

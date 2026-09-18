@@ -1,3 +1,6 @@
+import { MotionSheet } from "../components/motion-sheet";
+import { MotionView } from "../components/motion";
+import { PressableScale as Pressable } from "../components/pressable-scale";
 /**
  * Full app demo — all tabs, entirely mock data, no auth required.
  * Visit /demo in the browser to preview.
@@ -6,8 +9,6 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
-  Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -146,18 +147,20 @@ export default function DemoScreen() {
       <SafeAreaView style={g.safe} edges={["top"]}>
         {/* Demo notice */}
         <View style={g.notice}>
-          <Pressable onPress={() => router.canGoBack() ? router.back() : router.replace("/login" as any)} style={g.noticeBack}>
+          <Pressable accessibilityLabel="Back to sign in" onPress={() => router.canGoBack() ? router.back() : router.replace("/login" as any)} style={g.noticeBack}>
             <Ionicons name="arrow-back" size={16} color="#555" />
           </Pressable>
           <View style={g.noticeBadge}><Text style={g.noticeBadgeText}>DEMO</Text></View>
           <Text style={g.noticeText}>Mock data · no account needed</Text>
         </View>
 
-        {activeTab === "feed"    && <FeedTab />}
-        {activeTab === "games"   && <GamesTab />}
-        {activeTab === "food"    && <FoodTab />}
-        {activeTab === "teams"   && <TeamsTab />}
-        {activeTab === "profile" && <ProfileTab onAdmin={() => {}} />}
+        <MotionView transitionKey={activeTab} style={{ flex: 1 }}>
+          {activeTab === "feed"    && <FeedTab />}
+          {activeTab === "games"   && <GamesTab />}
+          {activeTab === "food"    && <FoodTab />}
+          {activeTab === "teams"   && <TeamsTab />}
+          {activeTab === "profile" && <ProfileTab onAdmin={() => {}} />}
+        </MotionView>
       </SafeAreaView>
 
       {/* Bottom tab bar */}
@@ -166,7 +169,7 @@ export default function DemoScreen() {
           const active = activeTab === tab.key;
           const badge = tab.key === "feed" ? CHATS.filter(c => c.unread > 0).length : 0;
           return (
-            <Pressable key={tab.key} style={({ pressed }) => [g.tabItem, pressed && { opacity: 0.5 }]} onPress={() => setActiveTab(tab.key)}>
+            <Pressable key={tab.key} accessibilityRole="tab" accessibilityLabel={tab.label} aria-selected={active} style={g.tabItem} onPress={() => setActiveTab(tab.key)}>
               <View style={[g.tabIconWrap, active && g.tabIconWrapActive]}>
                 <Ionicons name={active ? tab.iconActive : tab.icon} size={22} color={active ? "#06b6d4" : "#484848"} />
                 {badge > 0 && <View style={g.tabBadge}><Text style={g.tabBadgeText}>{badge}</Text></View>}
@@ -280,9 +283,7 @@ function FeedTab() {
       </ScrollView>
 
       {/* Post action sheet */}
-      <Modal visible={!!menuPost} transparent animationType="fade" onRequestClose={() => setMenuPost(null)}>
-        <Pressable style={f.menuOverlay} onPress={() => setMenuPost(null)}>
-          <View style={f.menuSheet}>
+      <MotionSheet visible={!!menuPost} onClose={() => setMenuPost(null)} style={f.menuSheet} accessibilityLabel="Post actions">
             <Pressable style={f.menuItem} onPress={() => setMenuPost(null)}>
               <Ionicons name="pencil-outline" size={16} color="#fff" />
               <Text style={f.menuItemText}>Edit Post</Text>
@@ -295,9 +296,7 @@ function FeedTab() {
             <Pressable style={f.menuItem} onPress={() => setMenuPost(null)}>
               <Text style={f.menuCancelText}>Cancel</Text>
             </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
+      </MotionSheet>
     </View>
   );
 }
@@ -310,9 +309,9 @@ function GamesTab() {
   const [selectedGame, setSelectedGame] = useState<string | null>(null);
   const [gamePickerVisible, setGamePickerVisible] = useState(false);
 
-  const filtered = selectedGame ? LEADER_ENTRIES.filter(e => GAMES.find(g => g.name === e.game && e.game === selectedGame)) : LEADER_ENTRIES;
-  const top3 = LEADER_ENTRIES.slice(0, 3);
-  const rest = LEADER_ENTRIES.slice(3);
+  const filtered = selectedGame ? LEADER_ENTRIES.filter(e => e.game === selectedGame) : LEADER_ENTRIES;
+  const top3 = filtered.slice(0, 3);
+  const rest = filtered.slice(3);
 
   if (view === "leaderboard") {
     return (
@@ -408,34 +407,29 @@ function GamesTab() {
         </ScrollView>
 
         {/* Game picker */}
-        <Modal visible={gamePickerVisible} transparent animationType="slide" onRequestClose={() => setGamePickerVisible(false)}>
-          <View style={lb.pickerBg}>
-            <Pressable style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} onPress={() => setGamePickerVisible(false)} />
-            <View style={lb.pickerSheet}>
-              <View style={lb.pickerHandle} />
-              <Text style={lb.pickerTitle}>Select Game</Text>
-              <Pressable style={[lb.gameOption, !selectedGame && lb.gameOptionActive]} onPress={() => { setSelectedGame(null); setGamePickerVisible(false); }}>
-                <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                  <Ionicons name="game-controller-outline" size={14} color={!selectedGame ? "#06b6d4" : "#555"} />
-                  <Text style={[lb.gameOptionName, !selectedGame && { color: "#fff" }]}>All Games</Text>
-                </View>
-                {!selectedGame && <Ionicons name="checkmark-circle" size={18} color="#06b6d4" />}
-              </Pressable>
-              {GAMES.map(g => (
-                <Pressable key={g.id} style={[lb.gameOption, selectedGame === g.name && lb.gameOptionActive]} onPress={() => { setSelectedGame(g.name); setGamePickerVisible(false); }}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <View style={[lb.gameDot, { backgroundColor: gameColor(g.type) }]} />
-                    <Text style={[lb.gameOptionName, selectedGame === g.name && { color: "#fff" }]}>{g.name}</Text>
-                  </View>
-                  {selectedGame === g.name && <Ionicons name="checkmark-circle" size={18} color="#06b6d4" />}
-                </Pressable>
-              ))}
-              <Pressable style={lb.pickerCancel} onPress={() => setGamePickerVisible(false)}>
-                <Text style={lb.pickerCancelText}>Cancel</Text>
-              </Pressable>
+        <MotionSheet visible={gamePickerVisible} onClose={() => setGamePickerVisible(false)} style={lb.pickerSheet} accessibilityLabel="Select game">
+          <View style={lb.pickerHandle} />
+          <Text style={lb.pickerTitle}>Select Game</Text>
+          <Pressable style={[lb.gameOption, !selectedGame && lb.gameOptionActive]} onPress={() => { setSelectedGame(null); setGamePickerVisible(false); }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <Ionicons name="game-controller-outline" size={14} color={!selectedGame ? "#06b6d4" : "#555"} />
+              <Text style={[lb.gameOptionName, !selectedGame && { color: "#fff" }]}>All Games</Text>
             </View>
-          </View>
-        </Modal>
+            {!selectedGame && <Ionicons name="checkmark-circle" size={18} color="#06b6d4" />}
+          </Pressable>
+          {GAMES.map(g => (
+            <Pressable key={g.id} style={[lb.gameOption, selectedGame === g.name && lb.gameOptionActive]} onPress={() => { setSelectedGame(g.name); setGamePickerVisible(false); }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                <View style={[lb.gameDot, { backgroundColor: gameColor(g.type) }]} />
+                <Text style={[lb.gameOptionName, selectedGame === g.name && { color: "#fff" }]}>{g.name}</Text>
+              </View>
+              {selectedGame === g.name && <Ionicons name="checkmark-circle" size={18} color="#06b6d4" />}
+            </Pressable>
+          ))}
+          <Pressable style={lb.pickerCancel} onPress={() => setGamePickerVisible(false)}>
+            <Text style={lb.pickerCancelText}>Cancel</Text>
+          </Pressable>
+        </MotionSheet>
       </View>
     );
   }
@@ -539,7 +533,7 @@ function FoodTab() {
           <Text style={fd.headerTitle}>{isVinyl ? "Kitchen" : "Food"}</Text>
           <Text style={fd.headerSub}>{isVinyl ? "Full kitchen menu" : "Order to your lane"}</Text>
         </View>
-        <Pressable style={[fd.cartBtn, cartCount > 0 && fd.cartBtnActive]} onPress={() => setCartVisible(true)}>
+        <Pressable accessibilityLabel="View order" style={[fd.cartBtn, cartCount > 0 && fd.cartBtnActive]} onPress={() => setCartVisible(true)}>
           <Ionicons name="bag-outline" size={20} color={cartCount > 0 ? "#000" : "#fff"} />
           {cartCount > 0 && <View style={fd.cartBadge}><Text style={fd.cartBadgeText}>{cartCount}</Text></View>}
         </Pressable>
@@ -580,13 +574,13 @@ function FoodTab() {
               <View style={fd.qtyRow}>
                 {qty > 0 ? (
                   <>
-                    <Pressable style={fd.qtyBtn} onPress={() => remove(item.id)}>
+                    <Pressable accessibilityLabel={`Remove one ${item.name}`} style={fd.qtyBtn} onPress={() => remove(item.id)}>
                       <Ionicons name="remove" size={16} color="#06b6d4" />
                     </Pressable>
                     <Text style={fd.qtyText}>{qty}</Text>
                   </>
                 ) : null}
-                <Pressable style={[fd.addBtn, qty > 0 && fd.addBtnActive]} onPress={() => add(item.id)}>
+                <Pressable accessibilityLabel={`Add ${item.name}`} style={[fd.addBtn, qty > 0 && fd.addBtnActive]} onPress={() => add(item.id)}>
                   <Ionicons name="add" size={18} color={qty > 0 ? "#000" : "#06b6d4"} />
                 </Pressable>
               </View>
@@ -597,47 +591,42 @@ function FoodTab() {
       </ScrollView>
 
       {/* Cart modal */}
-      <Modal visible={cartVisible} transparent animationType="slide" onRequestClose={() => setCartVisible(false)}>
-        <View style={fd.cartBg}>
-          <Pressable style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }} onPress={() => setCartVisible(false)} />
-          <View style={fd.cartSheet}>
-            <View style={fd.cartHandle} />
-            <Text style={fd.cartTitle}>Your Order</Text>
-            {cartCount === 0 ? (
-              <View style={fd.cartEmpty}>
-                <Text style={fd.cartEmptyText}>No items added yet</Text>
-              </View>
-            ) : (
-              <>
-                {Object.entries(cart).map(([id, qty]) => {
-                  const item = MENU_ITEMS.find(i => i.id === id)!;
-                  return (
-                    <View key={id} style={fd.cartRow}>
-                      <Text style={fd.cartRowEmoji}>{item.emoji}</Text>
-                      <View style={{ flex: 1 }}>
-                        <Text style={fd.cartRowName}>{item.name}</Text>
-                        <Text style={fd.cartRowPrice}>${(item.price * qty).toFixed(2)}</Text>
-                      </View>
-                      <Text style={fd.cartRowQty}>×{qty}</Text>
-                    </View>
-                  );
-                })}
-                <View style={fd.cartTotalRow}>
-                  <Text style={fd.cartTotalLabel}>Total</Text>
-                  <Text style={fd.cartTotalValue}>${cartTotal.toFixed(2)}</Text>
-                </View>
-                <View style={fd.checkoutBtn}>
-                  <Ionicons name="card-outline" size={18} color="#000" />
-                  <Text style={fd.checkoutBtnText}>Checkout via Square</Text>
-                </View>
-              </>
-            )}
-            <Pressable style={fd.cartCancel} onPress={() => setCartVisible(false)}>
-              <Text style={fd.cartCancelText}>Close</Text>
-            </Pressable>
+      <MotionSheet visible={cartVisible} onClose={() => setCartVisible(false)} style={fd.cartSheet} accessibilityLabel="Your order">
+        <View style={fd.cartHandle} />
+        <Text style={fd.cartTitle}>Your Order</Text>
+        {cartCount === 0 ? (
+          <View style={fd.cartEmpty}>
+            <Text style={fd.cartEmptyText}>No items added yet</Text>
           </View>
-        </View>
-      </Modal>
+        ) : (
+          <>
+            {Object.entries(cart).map(([id, qty]) => {
+              const item = MENU_ITEMS.find(i => i.id === id)!;
+              return (
+                <View key={id} style={fd.cartRow}>
+                  <Text style={fd.cartRowEmoji}>{item.emoji}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={fd.cartRowName}>{item.name}</Text>
+                    <Text style={fd.cartRowPrice}>${(item.price * qty).toFixed(2)}</Text>
+                  </View>
+                  <Text style={fd.cartRowQty}>×{qty}</Text>
+                </View>
+              );
+            })}
+            <View style={fd.cartTotalRow}>
+              <Text style={fd.cartTotalLabel}>Total</Text>
+              <Text style={fd.cartTotalValue}>${cartTotal.toFixed(2)}</Text>
+            </View>
+            <View style={fd.checkoutBtn}>
+              <Ionicons name="card-outline" size={18} color="#000" />
+              <Text style={fd.checkoutBtnText}>Checkout via Square</Text>
+            </View>
+          </>
+        )}
+        <Pressable style={fd.cartCancel} onPress={() => setCartVisible(false)}>
+          <Text style={fd.cartCancelText}>Close</Text>
+        </Pressable>
+      </MotionSheet>
     </View>
   );
 }
@@ -988,7 +977,6 @@ const f = StyleSheet.create({
   likeWrap: { width: 30, height: 30, borderRadius: 15, backgroundColor: "#161616", alignItems: "center", justifyContent: "center" },
   likeWrapActive: { backgroundColor: "rgba(239,68,68,0.12)" },
   likeCount: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
-  menuOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" },
   menuSheet: { backgroundColor: "#141414", borderTopLeftRadius: 20, borderTopRightRadius: 20, borderTopWidth: 1, borderColor: "#222", paddingBottom: 28, paddingTop: 8 },
   menuItem: { flexDirection: "row", alignItems: "center", gap: 12, paddingHorizontal: 22, paddingVertical: 16 },
   menuItemText: { color: "#fff", fontSize: 16, fontWeight: "600" },
@@ -1067,7 +1055,6 @@ const lb = StyleSheet.create({
   listYou: { color: "#8a8a8a", fontWeight: "500" },
   listGame: { color: "#777", fontSize: 11, marginTop: 2 },
   listScore: { color: "#22c55e", fontSize: 17, fontWeight: "900" },
-  pickerBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   pickerSheet: { backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 36, borderTopWidth: 1, borderColor: "#1a1a1a", gap: 8 },
   pickerHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 8 },
   pickerTitle: { color: "#fff", fontSize: 16, fontWeight: "900", textAlign: "center", marginBottom: 8 },
@@ -1110,7 +1097,6 @@ const fd = StyleSheet.create({
   qtyText: { color: "#fff", fontWeight: "800", fontSize: 15, minWidth: 18, textAlign: "center" },
   addBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: "rgba(6,182,212,0.1)", borderWidth: 1, borderColor: "rgba(6,182,212,0.3)", alignItems: "center", justifyContent: "center" },
   addBtnActive: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
-  cartBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
   cartSheet: { backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, paddingBottom: 36, borderTopWidth: 1, borderColor: "#1a1a1a", gap: 10 },
   cartHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 8 },
   cartTitle: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 4 },

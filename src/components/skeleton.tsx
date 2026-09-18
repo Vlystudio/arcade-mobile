@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Animated, StyleSheet, View, type ViewStyle } from "react-native";
+import { useReducedMotion } from "../context/motion-context";
+import { MOTION } from "./motion";
 
 /** Pulsing placeholder block. */
 export function Skeleton({ width, height = 14, radius = 8, style }: {
@@ -9,16 +11,18 @@ export function Skeleton({ width, height = 14, radius = 8, style }: {
   style?: ViewStyle;
 }) {
   const pulse = useRef(new Animated.Value(0.35)).current;
+  const reducedMotion = useReducedMotion();
   useEffect(() => {
+    if (reducedMotion) { pulse.setValue(0.55); return; }
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.7, duration: 700, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.35, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.7, duration: 900, useNativeDriver: MOTION.nativeDriver, isInteraction: false }),
+        Animated.timing(pulse, { toValue: 0.35, duration: 900, useNativeDriver: MOTION.nativeDriver, isInteraction: false }),
       ]),
     );
     loop.start();
     return () => loop.stop();
-  }, []);
+  }, [pulse, reducedMotion]);
   return (
     <Animated.View
       style={[{

@@ -1,7 +1,9 @@
+import { MotionSheet } from "./motion-sheet";
+import { PressableScale as Pressable } from "./pressable-scale";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 // Bump the version whenever the list changes — the sheet shows once per version.
 const WHATS_NEW_VERSION = "2026-06-12";
@@ -33,37 +35,30 @@ export function WhatsNewSheet() {
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={dismiss}>
-      <View style={s.bg}>
-        <Pressable style={s.dismissArea} onPress={dismiss} />
-        <View style={s.sheet}>
-          <View style={s.handle} />
-          <Text style={s.heading}>✨ What's New</Text>
-          <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
-            {ITEMS.map((it) => (
-              <View key={it.title} style={s.row}>
-                <View style={[s.iconWrap, { backgroundColor: `${it.color}14`, borderColor: `${it.color}30` }]}>
-                  <Ionicons name={it.icon as any} size={17} color={it.color} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={s.title}>{it.title}</Text>
-                  <Text style={s.body}>{it.body}</Text>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-          <Pressable style={s.btn} onPress={dismiss}>
-            <Text style={s.btnText}>Let's go</Text>
-          </Pressable>
-        </View>
+    <MotionSheet visible={visible} onClose={dismiss} style={s.sheet} accessibilityLabel="What's new">
+      <View style={s.handle} />
+      <Text style={s.heading}>✨ What's New</Text>
+      <View>
+        {ITEMS.map((it) => (
+          <View key={it.title} style={s.row}>
+            <View style={[s.iconWrap, { backgroundColor: `${it.color}14`, borderColor: `${it.color}30` }]}>
+              <Ionicons name={it.icon as any} size={17} color={it.color} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={s.title}>{it.title}</Text>
+              <Text style={s.body}>{it.body}</Text>
+            </View>
+          </View>
+        ))}
       </View>
-    </Modal>
+      <Pressable style={s.btn} onPress={dismiss}>
+        <Text style={s.btnText}>Let's go</Text>
+      </Pressable>
+    </MotionSheet>
   );
 }
 
 const s = StyleSheet.create({
-  bg: { flex: 1, backgroundColor: "rgba(0,0,0,0.78)", justifyContent: "flex-end" },
-  dismissArea: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   sheet: {
     backgroundColor: "#111", borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingHorizontal: 22, paddingTop: 14, paddingBottom: 34,
