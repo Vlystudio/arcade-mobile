@@ -16,6 +16,15 @@ test('offline queue retains server rejections with a recovery message',async()=>
  assert.equal(await q.flushQueue('a'),0);assert.equal(await q.pendingCount('a'),1);
  assert.equal((await q.pendingSubmissions('a'))[0].last_error,'Login required');
 });
+test('explicit discard removes only the confirmed session from the correct account',async()=>{
+ const q=offline(async()=>({data:{ok:true}}));
+ await q.queueSubmit('a',{session_id:'ended',balls:[]});
+ await q.queueSubmit('a',{session_id:'other',balls:[]});
+ await q.queueSubmit('b',{session_id:'ended',balls:[]});
+ await q.discardQueuedSubmission('a','ended');
+ assert.equal((await q.pendingSubmissions('a'))[0].session_id,'other');
+ assert.equal(await q.pendingCount('a'),1); assert.equal(await q.pendingCount('b'),1);
+});
 test('concurrent enqueue survives a flush, including edits to the same session',async()=>{
  let enter,release;const arrived=new Promise(r=>enter=r),hold=new Promise(r=>release=r);
  const q=offline(async()=>{enter();await hold;return {data:{ok:true}}});

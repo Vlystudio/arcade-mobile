@@ -1,15 +1,11 @@
 import { PressableScale as Pressable } from "./pressable-scale";
 import { useReducedMotion } from "../context/motion-context";
 import { MOTION } from "./motion";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, usePathname } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Platform, StyleSheet, Text, View } from "react-native";
-import { getTourSteps, tourStorageKey, type TourStep } from "../../lib/tour-steps";
-import { useAuth } from "../context/auth-context";
-import type { AppRole } from "./role-badge";
-import { supabase } from "../../lib/supabase";
+import { type TourStep } from "../../lib/tour-steps";
 
 // Toast-style global controller so the tour can be launched from any screen
 // and — crucially — survive navigation, since it's mounted once at the root.
@@ -31,8 +27,6 @@ export function GuidedTourHost() {
   const [tour, setTour] = useState<ActiveTour | null>(null);
   const [index, setIndex] = useState(0);
   const pathname = usePathname();
-  const { user } = useAuth();
-  const autoRef = useRef(false);
   const fade = useRef(new Animated.Value(0)).current;
   const slide = useRef(new Animated.Value(40)).current;
 
@@ -41,23 +35,7 @@ export function GuidedTourHost() {
     return () => { pushTour = null; };
   }, []);
 
-  // First-launch auto-start lives ONLY here (single root mount), so screens
-  // mounting/unmounting during the tour can never re-trigger it.
-  useEffect(() => {
-    if (!user?.id || autoRef.current) return;
-    autoRef.current = true;
-    const key = tourStorageKey(user.id);
-    AsyncStorage.getItem(key).then(async (val) => {
-      if (val) return;
-      let role: AppRole = "user";
-      try {
-        const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-        role = ((data as any)?.role ?? "user") as AppRole;
-      } catch { /* default user */ }
-      startGuidedTour(getTourSteps(role), () => AsyncStorage.setItem(key, "done").catch(() => {}));
-    });
-  }, [user?.id]);
-
+  // The tour is optional and starts from the profile help action.
   const step = tour?.steps[index];
 
   // Navigate to the step's screen when it changes.

@@ -1,3 +1,4 @@
+import { SessionFinish } from "../components/session-finish";
 import { publicProfilesById } from "../../lib/public-profiles";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -24,7 +25,9 @@ import { reportError } from "../lib/report-error";
 import { fetchPlayerStats } from "../lib/skeeball-stats";
 import { API_BASE } from "../../lib/api-base";
 import { haptic } from "../../lib/haptics";
-import { queueSubmit, looksOffline } from "../../lib/offline-queue";
+import { queueSubmit, looksOffline, discardQueuedSubmission, pendingSubmissions } from "../../lib/offline-queue";
+import { useActiveGame } from "../context/active-game-context";
+import { restoreBalls } from "../../lib/experience";
 
 const LANE_COUNT = 6;
 const TOTAL_BALLS = 9;
@@ -48,7 +51,7 @@ const WARNING_DURATION_S     = 120;
 
 const SKEE_RINGS = [10, 20, 30, 40, 50, 100];
 const RING_COLORS: Record<number, string> = {
-  10: "#555", 20: "#555", 30: "#3b82f6", 40: "#8b5cf6", 50: "#22c55e", 100: "#06b6d4",
+  10: "#a3adb8", 20: "#a3adb8", 30: "#3b82f6", 40: "#8b5cf6", 50: "#22c55e", 100: "#06b6d4",
 };
 
 type LaneSession = { id: string; team_id: string; lane_number: number; status: string; team_name?: string; last_activity_at?: string; league_match_id?: string | null; placement?: number | null; league_points?: number | null };
@@ -94,6 +97,9 @@ export default function SkeeballTrackerScreen({
   const teamId = initialTeamId ?? routeTeamId;
   const teamName = initialTeamName ?? routeTeamName;
   const { user } = useRequireAuth();
+  const { draft, ready: draftReady, save: saveDraft, clear: clearDraft } = useActiveGame();
+  const [draftSessionReady, setDraftSessionReady] = useState<string | null>(null);
+  const completing = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [allActiveSessions, setAllActiveSessions] = useState<LaneSession[]>([]);
@@ -148,8 +154,18 @@ export default function SkeeballTrackerScreen({
   }));
 
   useEffect(() => {
-    if (user && teamId) loadData();
-  }, [user, teamId, qrSessionId, qrLaneToken]);
+    if (user && teamId && draftReady) loadData();
+  }, [user, teamId, qrSessionId, qrLaneToken, draftReady]);
+
+  useEffect(() => {
+    if (!user || !mySession || draftSessionReady !== mySession.id) return;
+    if (mySession.status !== "active") { void clearDraft(mySession.id).catch(() => {}); return; }
+    void saveDraft({ version: 1, userId: user.id, sessionId: mySession.id, teamId: mySession.team_id,
+      teamName: mySession.team_name ?? teamName ?? "Your team", lane: mySession.lane_number,
+      playerBalls, lineup: sessionPlayers.map(p => p.player_user_id), updatedAt: Date.now(), previousBest: myPrevBest }).catch(() => {
+      setSubmitError("Device storage is unavailable. Keep this game open until you submit your scores.");
+    });
+  }, [user, mySession, draftSessionReady, playerBalls, sessionPlayers, myPrevBest, saveDraft, clearDraft, teamName]);
 
   useEffect(() => {
     return () => { channelRef.current?.unsubscribe(); };
@@ -187,7 +203,7 @@ export default function SkeeballTrackerScreen({
     const interval = setInterval(async () => {
       const now = Date.now();
 
-      if (mySession?.status === "active" && mySession.last_activity_at) {
+      if (mySession?.status === "active" && mySession.last_activity_at && !allBallsSubmitted) {
         const idle = now - new Date(mySession.last_activity_at).getTime();
         if (idle >= INACTIVITY_TIMEOUT_MS) {
           setShowWarning(false);
@@ -201,18 +217,10 @@ export default function SkeeballTrackerScreen({
         }
       }
 
-      // Clean up other disconnected teams' stale sessions
-      for (const s of allActiveSessions) {
-        if (s.team_id === teamId || !s.last_activity_at) continue;
-        const idle = now - new Date(s.last_activity_at).getTime();
-        if (idle >= INACTIVITY_TIMEOUT_MS) {
-          await supabase.from("skeeball_sessions").update({ status: "abandoned" }).eq("id", s.id).eq("status", "active");
-        }
-      }
     }, INACTIVITY_CHECK_MS);
 
     return () => clearInterval(interval);
-  }, [mySession, allActiveSessions, teamId, showWarning]);
+  }, [mySession, showWarning, allBallsSubmitted]);
 
   // Countdown ticker — ticks every second while warning is visible
   useEffect(() => {
@@ -244,6 +252,7 @@ export default function SkeeballTrackerScreen({
         supabase.from("team_members").select("user_id, role").eq("team_id", teamId),
         supabase.from("profiles").select("is_admin").eq("id", user!.id).single(),
       ]);
+      if (sessRes.error || memRes.error) throw sessRes.error ?? memRes.error;
       setIsAdmin(profileRes.data?.is_admin === true);
 
       const sessions: LaneSession[] = (sessRes.data ?? []).map((s: any) => ({
@@ -277,10 +286,12 @@ export default function SkeeballTrackerScreen({
       }
 
       setMySession(mine);
+      if (!mine && draft && draft.teamId === teamId) void clearDraft(draft.sessionId).catch(() => {});
 
       // Snapshot career best while the game is still active (PB celebration)
-      if (mine && mine.status === "active" && user) {
-        fetchPlayerStats(user.id).then((st) => setMyPrevBest(st?.totals.best ?? null));
+      if (user) {
+        if (draft && mine && draft.sessionId === mine.id) setMyPrevBest(draft.previousBest);
+        else fetchPlayerStats(user.id).then((st) => setMyPrevBest(st?.totals.best ?? null));
       }
 
       if (mine) await loadSessionData(mine.id, members);
@@ -344,6 +355,7 @@ export default function SkeeballTrackerScreen({
       supabase.from("skeeball_session_players").select("session_id, player_user_id, shoot_position").eq("session_id", sessionId),
       supabase.from("skeeball_ball_scores").select("*").eq("session_id", sessionId),
     ]);
+    if (playersRes.error || scoresRes.error) throw playersRes.error ?? scoresRes.error;
 
     const players: SessionPlayer[] = (playersRes.data ?? [])
       .map((p: any) => {
@@ -362,13 +374,22 @@ export default function SkeeballTrackerScreen({
         .sort((a, b) => a.ball_number - b.ball_number)
         .map((b) => b.score);
     }
-    setPlayerBalls(initialBalls);
+    setPlayerBalls(restoreBalls(initialBalls, draft, sessionId));
+    setDraftSessionReady(sessionId);
     // Realtime for this session's ball scores
     if (channelRef.current) channelRef.current.unsubscribe();
     channelRef.current = supabase
       .channel(`skeeball_session_${sessionId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "skeeball_sessions", filter: `id=eq.${sessionId}` }, (payload: any) => {
-        if (payload.new?.status === "completed") setMySession((prev) => prev ? { ...prev, status: "completed" } : prev);
+        if (payload.new?.status) {
+          if (payload.new.status === "abandoned") {
+            void clearDraft(sessionId).catch(() => {});
+            setMySession(null);
+            setDraftSessionReady(null);
+            setPlayerBalls({});
+            showToast("This lane session has ended. Check in again to start a new game.", "info");
+          } else setMySession((prev) => prev ? { ...prev, ...payload.new } : prev);
+        }
       })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "skeeball_ball_scores", filter: `session_id=eq.${sessionId}` }, (payload: any) => {
         setBallScores((prev) => [
@@ -524,7 +545,9 @@ export default function SkeeballTrackerScreen({
     }
   }
 
+  const lastTouch = useRef(0);
   function addBall(pts: number) {
+    if (Date.now() - lastTouch.current > 20_000) { lastTouch.current = Date.now(); void stayActive(); }
     haptic(pts >= 50 ? "success" : "tap");
     setPlayerBalls((prev) => {
       const total = sessionPlayers.reduce((s, sp) => s + (prev[sp.player_user_id] ?? []).length, 0);
@@ -551,7 +574,8 @@ export default function SkeeballTrackerScreen({
   async function stayActive() {
     if (!mySession) return;
     const now = new Date().toISOString();
-    await supabase.from("skeeball_sessions").update({ last_activity_at: now }).eq("id", mySession.id);
+    const { error } = await supabase.from("skeeball_sessions").update({ last_activity_at: now }).eq("id", mySession.id).eq("status", "active");
+    if (error) return;
     setMySession((prev) => prev ? { ...prev, last_activity_at: now } : prev);
     setShowWarning(false);
     setWarningCountdown(WARNING_DURATION_S);
@@ -580,11 +604,28 @@ export default function SkeeballTrackerScreen({
   }
 
   async function abandonSession(sessionId: string) {
-    await supabase
+    if (!user) return;
+    const queued = await pendingSubmissions(user.id).catch(() => null);
+    if (!queued || queued.some(item => item.session_id === sessionId)) return;
+    const latest = await supabase.from("skeeball_sessions")
+      .select("status, last_activity_at, skeeball_ball_scores(id)").eq("id", sessionId).maybeSingle();
+    if (latest.error || !latest.data || latest.data.status !== "active") return;
+    const lastActivity = latest.data.last_activity_at;
+    if (!lastActivity || latest.data.skeeball_ball_scores?.length >= TOTAL_BALLS) return;
+    if (Date.now() - new Date(lastActivity).getTime() < INACTIVITY_TIMEOUT_MS) {
+      setMySession(prev => prev?.id === sessionId ? { ...prev, last_activity_at: lastActivity } : prev);
+      setShowWarning(false);
+      return;
+    }
+    const { data, error } = await supabase
       .from("skeeball_sessions")
       .update({ status: "abandoned" })
       .eq("id", sessionId)
-      .eq("status", "active");
+      .eq("status", "active")
+      .eq("last_activity_at", lastActivity)
+      .select("id");
+    if (error || !data?.length) { setSubmitError("Could not release the lane. Please retry when connected."); return; }
+    await clearDraft(sessionId).catch(() => {});
     setMySession(null);
     setSessionPlayers([]);
     setBallScores([]);
@@ -592,8 +633,10 @@ export default function SkeeballTrackerScreen({
   }
 
   async function completeSession() {
-    if (!mySession || mySession.status !== "active") return;
-
+    if (!mySession || mySession.status !== "active" || completing.current) return;
+    completing.current = true;
+    setSubmitError(null);
+    try {
     const { data, error } = await supabase.rpc("rpc_skeeball_complete_session", {
       p_session_id: mySession.id,
     });
@@ -628,6 +671,9 @@ export default function SkeeballTrackerScreen({
     if (result.placement != null && mySession.league_match_id) {
       notifyRoundFinal(mySession.league_match_id);
     }
+    } catch {
+      setSubmitError("Could not finalize the game. Your submitted scores are saved; try again.");
+    } finally { completing.current = false; }
   }
 
   async function notifyRoundFinal(matchId: string) {
@@ -661,22 +707,38 @@ export default function SkeeballTrackerScreen({
   async function checkOutAndLeave(force: boolean) {
     if (mySession?.id) {
       try {
-        await supabase.rpc("rpc_skeeball_cancel_session", { p_session_id: mySession.id, p_force: force });
-      } catch { /* leave anyway */ }
+        const { data, error } = await supabase.rpc("rpc_skeeball_cancel_session", { p_session_id: mySession.id, p_force: force });
+        if (error || data?.error || data?.ok !== true) throw new Error(error?.message ?? data?.message ?? "Game was not ended");
+        if (user) await discardQueuedSubmission(user.id, mySession.id);
+        await clearDraft(mySession.id);
+      } catch {
+        showToast("Could not end the game. Your scores are still here; try again.", "error");
+        return;
+      }
     }
     leaveScreen();
   }
 
-  // Android hardware back routes through the same check-out logic.
+  // Android hardware back saves the draft just like the visible Back control.
   useEffect(() => {
     const sub = BackHandler.addEventListener("hardwareBackPress", () => { goBack(); return true; });
     return () => sub.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mySession, playerBalls, ballScores, sessionPlayers]);
 
-  // Back = check the team out of the lane. Silent if nothing's been entered;
-  // confirm first (and discard) if balls are already recorded.
-  function goBack() {
+  // Leaving the scorer preserves the lane and draft; ending a game is explicit.
+  async function goBack() {
+    if (mySession?.status === "active" && user && draftSessionReady === mySession.id) {
+      try {
+        await saveDraft({ version: 1, userId: user.id, sessionId: mySession.id, teamId: mySession.team_id,
+          teamName: mySession.team_name ?? teamName ?? "Your team", lane: mySession.lane_number,
+          playerBalls, lineup: sessionPlayers.map(p => p.player_user_id), updatedAt: Date.now(), previousBest: myPrevBest });
+      } catch { showToast("Could not save on this device. Keep the game open and retry.", "error"); return; }
+    }
+    leaveScreen();
+  }
+
+  function endGame() {
     if (mySession?.status === "active") {
       const enteredLocal = sessionPlayers.reduce(
         (s, sp) => s + (playerBalls[sp.player_user_id] ?? []).length, 0
@@ -685,7 +747,7 @@ export default function SkeeballTrackerScreen({
       if (entered > 0) {
         Alert.alert(
           "Discard this game?",
-          `You've recorded ${entered} ball${entered === 1 ? "" : "s"}. Going back checks ${mySession.team_name ?? "your team"} out of Lane ${mySession.lane_number} and discards these scores — they won't be saved.`,
+          `End the game on Lane ${mySession.lane_number}? This releases the lane and discards the unfinished scores. Use Back to save and resume instead.`,
           [
             { text: "Keep Playing", style: "cancel" },
             { text: "Discard & Exit", style: "destructive", onPress: () => checkOutAndLeave(true) },
@@ -729,7 +791,7 @@ export default function SkeeballTrackerScreen({
   if (loading) {
     return (
       <SafeAreaView style={s.safe} edges={["top"]}>
-        <View style={s.topBar}><Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable></View>
+        <View style={s.topBar}><Pressable accessibilityRole="button" accessibilityLabel="Save and go back" style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable></View>
         <View style={s.centered}><ActivityIndicator size="large" color="#06b6d4" /></View>
       </SafeAreaView>
     );
@@ -740,7 +802,7 @@ export default function SkeeballTrackerScreen({
   if (!isMonday() && !isAdmin && !cameFromQr) {
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
-        <View style={s.topBar}><Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable></View>
+        <View style={s.topBar}><Pressable accessibilityRole="button" accessibilityLabel="Save and go back" style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable></View>
         <View style={s.centered}>
           <Ionicons name="calendar-outline" size={56} color="#2a2a2a" style={{ marginBottom: 20 }} />
           <Text style={s.bigTitle}>League Night is Monday</Text>
@@ -753,93 +815,30 @@ export default function SkeeballTrackerScreen({
   // ─── Complete ─────────────────────────────────────────────────────────────────
 
   if (sessionDone) {
-    const teamTotal = sessionPlayers.reduce((sum, sp) => sum + ballScores.filter((b) => b.player_user_id === sp.player_user_id).reduce((s, b) => s + b.score, 0), 0);
-    const placement = mySession?.placement ?? null;
-    const leaguePoints = mySession?.league_points ?? null;
-    const placementEmoji = placement === 1 ? "🥇" : placement === 2 ? "🥈" : placement === 3 ? "🥉" : placement === 4 ? "4️⃣" : null;
-    const placementLabel = placement === 1 ? "1st Place" : placement === 2 ? "2nd Place" : placement === 3 ? "3rd Place" : placement === 4 ? "4th Place" : null;
-    const placementColor = placement === 1 ? "#f59e0b" : placement === 2 ? "#94a3b8" : placement === 3 ? "#cd7c2f" : "#555";
-    return (
-      <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
-        <View style={s.topBar}><Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable></View>
-        <View style={s.centered}>
-          <View style={s.trophyWrap}><Ionicons name="trophy" size={48} color="#f59e0b" /></View>
-          <Text style={s.bigTitle}>Game Complete!</Text>
-          <Text style={s.bigSub}>Scores submitted for review.</Text>
-          {(() => {
-            const myTotal = ballScores
-              .filter((b) => b.player_user_id === user?.id)
-              .reduce((sum, b) => sum + b.score, 0);
-            if (myPrevBest != null && myTotal > myPrevBest) {
-              return (
-                <View style={s.pbBanner}>
-                  <Text style={s.pbEmoji}>🎉</Text>
-                  <View>
-                    <Text style={s.pbTitle}>New personal best!</Text>
-                    <Text style={s.pbSub}>{myTotal} pts — previous best was {myPrevBest}</Text>
-                  </View>
-                </View>
-              );
-            }
-            return null;
-          })()}
-          {placementLabel && (
-            <View style={[s.placementBadge, { borderColor: placementColor + "44" }]}>
-              <Text style={s.placementEmoji}>{placementEmoji}</Text>
-              <View>
-                <Text style={[s.placementLabel, { color: placementColor }]}>{placementLabel}</Text>
-                {leaguePoints != null && (
-                  <Text style={s.placementPts}>+{leaguePoints} league point{leaguePoints !== 1 ? "s" : ""}</Text>
-                )}
-              </View>
-            </View>
-          )}
-          <View style={s.resultCard}>
-            {sessionPlayers.map((sp) => {
-              const pts = ballScores.filter((b) => b.player_user_id === sp.player_user_id).reduce((sum, b) => sum + b.score, 0);
-              const playerBalls = ballScores.filter((b) => b.player_user_id === sp.player_user_id).sort((a, b) => a.ball_number - b.ball_number);
-              return (
-                <View key={sp.player_user_id} style={s.resultRow}>
-                  <Avatar uri={sp.avatar_url} name={sp.username} size={36} radius={11} />
-                  <View style={{ flex: 1, marginLeft: 12 }}>
-                    <Text style={s.resultName}>{sp.username}</Text>
-                    <Text style={s.resultBalls}>{playerBalls.map((b) => b.score).join(" · ")} pts</Text>
-                  </View>
-                  <Text style={s.resultTotal}>{pts}</Text>
-                </View>
-              );
-            })}
-            <View style={s.resultDivider} />
-            <View style={s.resultTotalRow}>
-              <Text style={s.resultTotalLabel}>Team Total</Text>
-              <Text style={s.resultTotalValue}>{teamTotal}</Text>
-            </View>
-          </View>
-          <Pressable style={s.recapBtn} onPress={() => router.push("/skeeball-recap" as any)}>
-            <Ionicons name="sparkles-outline" size={17} color="#06b6d4" />
-            <Text style={s.recapBtnText}>View my night</Text>
-          </Pressable>
-          <Pressable style={s.doneBtn} onPress={goBack}><Text style={s.doneBtnText}>Back to Team</Text></Pressable>
-        </View>
-      </SafeAreaView>
-    );
+    return <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
+      <SessionFinish userId={user?.id} previousBest={myPrevBest} placement={mySession?.placement} leaguePoints={mySession?.league_points}
+        players={sessionPlayers.map(sp => ({ id: sp.player_user_id, name: sp.username, score: ballScores.filter(b => b.player_user_id === sp.player_user_id).reduce((sum, b) => sum + b.score, 0) }))}
+        onDone={leaveScreen} />
+    </SafeAreaView>;
   }
-
-  // ─── Waiting (I submitted, waiting for teammates) ─────────────────────────────
 
   if (mySession && iAmPlayer && allBallsSubmitted) {
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         {warningModal}
         <View style={s.topBar}>
-          <Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Save and go back" style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
           <Text style={s.topBarTitle}>Lane {mySession.lane_number}</Text>
-          <View style={{ width: 40 }} />
+          <Pressable accessibilityRole="button" style={{ minHeight: 44, minWidth: 84, alignItems: "center", justifyContent: "center" }} onPress={endGame}><Text style={{ color: "#fca5a5", fontWeight: "700" }}>End game</Text></Pressable>
         </View>
         <View style={s.centered}>
           <View style={s.waitWrap}><ActivityIndicator size="large" color="#06b6d4" /></View>
           <Text style={s.bigTitle}>Scores Submitted!</Text>
           <Text style={s.bigSub}>Finalizing results…</Text>
+          {submitError && <>
+            <Text style={{ color: "#fca5a5", marginTop: 16, textAlign: "center" }}>{submitError}</Text>
+            <Pressable accessibilityRole="button" style={s.doneBtn} onPress={completeSession}><Text style={s.doneBtnText}>Retry finalizing</Text></Pressable>
+          </>}
           <View style={{ width: "100%", paddingHorizontal: 24, marginTop: 32 }}>
             {playerProgress.map((pp) => (
               <ProgressRow key={pp.player_user_id} pp={pp} isMe={pp.player_user_id === user?.id} />
@@ -856,9 +855,9 @@ export default function SkeeballTrackerScreen({
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         <View style={s.topBar}>
-          <Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Save and go back" style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
           <Text style={s.topBarTitle}>Lane {mySession.lane_number}</Text>
-          <View style={{ width: 40 }} />
+          <Pressable accessibilityRole="button" style={{ minHeight: 44, minWidth: 84, alignItems: "center", justifyContent: "center" }} onPress={endGame}><Text style={{ color: "#fca5a5", fontWeight: "700" }}>End game</Text></Pressable>
         </View>
         <ScrollView contentContainerStyle={s.scroll}>
           <Text style={s.spectatorNote}>You're not in the lineup this game.</Text>
@@ -894,9 +893,9 @@ export default function SkeeballTrackerScreen({
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         {warningModal}
         <View style={s.topBar}>
-          <Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Save and go back" style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
           <Text style={s.topBarTitle}>Lane {mySession.lane_number}</Text>
-          <View style={{ width: 40 }} />
+          <Pressable accessibilityRole="button" style={{ minHeight: 44, minWidth: 84, alignItems: "center", justifyContent: "center" }} onPress={endGame}><Text style={{ color: "#fca5a5", fontWeight: "700" }}>End game</Text></Pressable>
         </View>
         <ScrollView contentContainerStyle={s.scroll}>
 
@@ -935,6 +934,7 @@ export default function SkeeballTrackerScreen({
                   <Text style={s.orderName}>{sp.username}</Text>
                   <Pressable
                     style={[s.orderArrow, idx === 0 && { opacity: 0.25 }]}
+                    accessibilityLabel={`Move ${sp.username} earlier in the lineup`}
                     onPress={() => moveInOrder(idx, -1)}
                     disabled={idx === 0 || savingOrder}
                     hitSlop={6}
@@ -943,6 +943,7 @@ export default function SkeeballTrackerScreen({
                   </Pressable>
                   <Pressable
                     style={[s.orderArrow, idx === sessionPlayers.length - 1 && { opacity: 0.25 }]}
+                    accessibilityLabel={`Move ${sp.username} later in the lineup`}
                     onPress={() => moveInOrder(idx, 1)}
                     disabled={idx === sessionPlayers.length - 1 || savingOrder}
                     hitSlop={6}
@@ -1106,7 +1107,7 @@ export default function SkeeballTrackerScreen({
   return (
     <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
       <View style={s.topBar}>
-        <Pressable style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
+        <Pressable accessibilityRole="button" accessibilityLabel="Save and go back" style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
         <Text style={s.topBarTitle}>Track Scores</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -1159,7 +1160,7 @@ export default function SkeeballTrackerScreen({
                   onPress={() => !taken && setSelectedLane(sel ? null : lane)}
                   disabled={taken}
                 >
-                  <Text style={[s.laneBtnNum, sel && { color: "#000" }, taken && { color: "#333" }]}>{lane}</Text>
+                  <Text style={[s.laneBtnNum, sel && { color: "#000" }, taken && { color: "#a3adb8" }]}>{lane}</Text>
                   <Text style={[s.laneBtnStatus, sel && { color: "#000" }, taken && { color: "#ef4444" }]}>
                     {taken ? "Locked" : sel ? "Selected" : "Open"}
                   </Text>
@@ -1226,26 +1227,26 @@ const s = StyleSheet.create({
   iconBtn: { width: 40, height: 40, alignItems: "center", justifyContent: "center" },
 
   bigTitle: { color: "#fff", fontSize: 26, fontWeight: "900", textAlign: "center", marginBottom: 8 },
-  bigSub: { color: "#8a8a8a", fontSize: 14, textAlign: "center" },
+  bigSub: { color: "#a3adb8", fontSize: 14, textAlign: "center" },
 
-  sectionLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
-  spectatorNote: { color: "#8a8a8a", fontSize: 14, textAlign: "center", marginBottom: 24 },
+  sectionLabel: { color: "#a3adb8", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
+  spectatorNote: { color: "#a3adb8", fontSize: 14, textAlign: "center", marginBottom: 24 },
 
   trophyWrap: { width: 96, height: 96, borderRadius: 48, backgroundColor: "rgba(245,158,11,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 24, borderWidth: 1, borderColor: "rgba(245,158,11,0.25)" },
   placementBadge: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#111", borderRadius: 16, paddingHorizontal: 20, paddingVertical: 14, borderWidth: 1, marginTop: 4, marginBottom: 4 },
   placementEmoji: { fontSize: 32 },
   placementLabel: { fontSize: 20, fontWeight: "900" },
-  placementPts: { color: "#8a8a8a", fontSize: 13, fontWeight: "600", marginTop: 2 },
+  placementPts: { color: "#a3adb8", fontSize: 13, fontWeight: "600", marginTop: 2 },
   waitWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: "rgba(6,182,212,0.1)", alignItems: "center", justifyContent: "center", marginBottom: 24 },
 
   resultCard: { width: "100%", backgroundColor: "#111", borderRadius: 20, padding: 20, marginTop: 24, borderWidth: 1, borderColor: "#1a1a1a" },
   resultRow: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   resultName: { color: "#fff", fontSize: 15, fontWeight: "800" },
-  resultBalls: { color: "#777", fontSize: 12, marginTop: 2 },
+  resultBalls: { color: "#a3adb8", fontSize: 12, marginTop: 2 },
   resultTotal: { color: "#06b6d4", fontSize: 22, fontWeight: "900" },
   resultDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#2a2a2a", marginVertical: 12 },
   resultTotalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  resultTotalLabel: { color: "#8a8a8a", fontSize: 14, fontWeight: "700" },
+  resultTotalLabel: { color: "#a3adb8", fontSize: 14, fontWeight: "700" },
   resultTotalValue: { color: "#22c55e", fontSize: 28, fontWeight: "900" },
 
   recapBtn: {
@@ -1260,7 +1261,7 @@ const s = StyleSheet.create({
   laneChip: { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: "rgba(6,182,212,0.1)", borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8, alignSelf: "flex-start", marginBottom: 20, borderWidth: 1, borderColor: "rgba(6,182,212,0.2)" },
   laneChipText: { color: "#06b6d4", fontWeight: "800", fontSize: 14 },
   scoreTitle: { color: "#fff", fontSize: 22, fontWeight: "900", marginBottom: 6 },
-  scoreSub: { color: "#8a8a8a", fontSize: 13, marginBottom: 24 },
+  scoreSub: { color: "#a3adb8", fontSize: 13, marginBottom: 24 },
 
   orderCard: {
     backgroundColor: "rgba(6,182,212,0.04)", borderRadius: 16, padding: 14, marginBottom: 14,
@@ -1268,7 +1269,7 @@ const s = StyleSheet.create({
   },
   orderHeader: { flexDirection: "row", alignItems: "center", gap: 7, marginBottom: 4 },
   orderTitle: { color: "#fff", fontSize: 14, fontWeight: "800", flex: 1 },
-  orderHint: { color: "#8a8a8a", fontSize: 11.5, lineHeight: 16, marginBottom: 10 },
+  orderHint: { color: "#a3adb8", fontSize: 11.5, lineHeight: 16, marginBottom: 10 },
   orderRow: {
     flexDirection: "row", alignItems: "center", gap: 9, paddingVertical: 7,
     borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: "rgba(6,182,212,0.12)",
@@ -1288,7 +1289,7 @@ const s = StyleSheet.create({
   },
   pbEmoji: { fontSize: 26 },
   pbTitle: { color: "#22c55e", fontSize: 15, fontWeight: "900" },
-  pbSub: { color: "#777", fontSize: 12.5, marginTop: 2 },
+  pbSub: { color: "#a3adb8", fontSize: 12.5, marginTop: 2 },
 
   playerSection: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: "#1a1a1a" },
   playerSectionHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
@@ -1296,9 +1297,9 @@ const s = StyleSheet.create({
   playerSectionTotal: { color: "#06b6d4", fontSize: 16, fontWeight: "900" },
 
   ballRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a", gap: 12 },
-  ballLabel: { color: "#8a8a8a", fontSize: 14, fontWeight: "700", width: 48 },
+  ballLabel: { color: "#a3adb8", fontSize: 14, fontWeight: "700", width: 48 },
   ballInput: { flex: 1, color: "#fff", fontSize: 28, fontWeight: "900", textAlign: "center" },
-  ballUnit: { color: "#333", fontSize: 13, fontWeight: "700", width: 28, textAlign: "right" },
+  ballUnit: { color: "#a3adb8", fontSize: 13, fontWeight: "700", width: 28, textAlign: "right" },
   hundoBanner: {
     flexDirection: "row", alignItems: "center", gap: 12,
     backgroundColor: "rgba(245,158,11,0.08)", borderRadius: 16, padding: 14, marginBottom: 16,
@@ -1312,7 +1313,7 @@ const s = StyleSheet.create({
   hundoCountLabel: { color: "#8a7a4a", fontSize: 10, fontWeight: "800", letterSpacing: 0.5 },
 
   totalRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", backgroundColor: "#0d0d0d", borderRadius: 12, padding: 16, marginBottom: 20, borderWidth: 1, borderColor: "#1a1a1a" },
-  totalLabel: { color: "#8a8a8a", fontSize: 14 },
+  totalLabel: { color: "#a3adb8", fontSize: 14 },
   totalValue: { color: "#06b6d4", fontSize: 22, fontWeight: "900" },
 
   submitBtn: { backgroundColor: "#06b6d4", borderRadius: 18, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 18, marginBottom: 12 },
@@ -1325,7 +1326,7 @@ const s = StyleSheet.create({
   memberRow: { flexDirection: "row", alignItems: "center", backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a" },
   memberRowSel: { backgroundColor: "rgba(6,182,212,0.08)", borderColor: "rgba(6,182,212,0.3)" },
   memberRowDim: { opacity: 0.4 },
-  memberName: { color: "#777", fontSize: 15, fontWeight: "700" },
+  memberName: { color: "#a3adb8", fontSize: 15, fontWeight: "700" },
   capLabel: { color: "#f59e0b", fontSize: 11, fontWeight: "700", marginTop: 2 },
   checkbox: { width: 26, height: 26, borderRadius: 8, backgroundColor: "#1a1a1a", borderWidth: 1.5, borderColor: "#2a2a2a", alignItems: "center", justifyContent: "center" },
   checkboxSel: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
@@ -1335,13 +1336,13 @@ const s = StyleSheet.create({
   laneBtnSel: { backgroundColor: "#06b6d4", borderColor: "#06b6d4" },
   laneBtnTaken: { backgroundColor: "#0d0d0d", borderColor: "#1a1a1a" },
   laneBtnNum: { color: "#fff", fontSize: 22, fontWeight: "900" },
-  laneBtnStatus: { color: "#777", fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
-  laneTeamName: { color: "#8a8a8a", fontSize: 10, textAlign: "center", paddingHorizontal: 2 },
+  laneBtnStatus: { color: "#a3adb8", fontSize: 10, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.5 },
+  laneTeamName: { color: "#a3adb8", fontSize: 10, textAlign: "center", paddingHorizontal: 2 },
 
   progressRow: { flexDirection: "row", alignItems: "center", paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   progressCard: { backgroundColor: "#111", borderRadius: 16, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: "#1a1a1a", borderBottomWidth: 0 },
   progressName: { color: "#fff", fontSize: 14, fontWeight: "800" },
-  progressSub: { color: "#777", fontSize: 12, marginTop: 1 },
+  progressSub: { color: "#a3adb8", fontSize: 12, marginTop: 1 },
   youChip: { backgroundColor: "rgba(6,182,212,0.12)", borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   youChipText: { color: "#06b6d4", fontSize: 10, fontWeight: "900" },
   ballDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: "#1e1e1e", borderWidth: 1, borderColor: "#2a2a2a" },
@@ -1350,7 +1351,7 @@ const s = StyleSheet.create({
   kickBtn: { position: "absolute", top: 4, right: 4, padding: 2 },
 
   // Ring-tap scoring
-  ringHint: { color: "#8a8a8a", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 12 },
+  ringHint: { color: "#a3adb8", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 12 },
   ringGrid: { flexDirection: "row", flexWrap: "wrap", gap: 14, justifyContent: "center" },
   ringBtn: {
     width: 88, height: 88, borderRadius: 44, backgroundColor: "#111",
@@ -1366,12 +1367,12 @@ const s = StyleSheet.create({
   chip: { borderRadius: 10, paddingHorizontal: 10, paddingVertical: 6, borderWidth: 1 },
   chipText: { fontSize: 14, fontWeight: "900" },
   undoBtn: { flexDirection: "row", alignItems: "center", gap: 4, paddingVertical: 6, paddingHorizontal: 10 },
-  undoText: { color: "#8a8a8a", fontSize: 12 },
+  undoText: { color: "#a3adb8", fontSize: 12 },
 
   completeRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingTop: 4 },
   completeText: { color: "#22c55e", fontSize: 14, fontWeight: "800" },
   playerSectionDim: { opacity: 0.5 },
-  upNextText: { color: "#777", fontSize: 12, fontStyle: "italic", paddingTop: 4 },
+  upNextText: { color: "#a3adb8", fontSize: 12, fontStyle: "italic", paddingTop: 4 },
 
   warningOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", alignItems: "center", justifyContent: "center", padding: 32 },
   warningCard: { width: "100%", backgroundColor: "#111", borderRadius: 24, padding: 28, alignItems: "center", borderWidth: 1.5, borderColor: "rgba(239,68,68,0.4)" },

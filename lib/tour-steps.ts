@@ -23,9 +23,9 @@ const USER_STEPS: TourStep[] = [
   {
     icon: "home",
     iconColor: "#06b6d4",
-    tag: "Feed",
-    title: "This is your Feed",
-    body: "Posts from friends and the league. Use the composer at the top to share something. Like, react with emojis, comment, and tap any avatar to open that person's profile. The bell (top-right) is your notifications; the “Arcade” tab holds official announcements.",
+    tag: "Home",
+    title: "Your night starts here",
+    body: "Find your current game, schedule, RSVP, and venue up front. Your feed and composer are below. Like, react, comment, and tap an avatar to open a profile. The bell opens notifications; the Arcade feed filter holds official announcements.",
     route: "/",
   },
   {
@@ -33,7 +33,7 @@ const USER_STEPS: TourStep[] = [
     iconColor: "#f59e0b",
     tag: "Upload a Score",
     title: "Submit a high score",
-    body: "This is the Games screen. Tap any game, then the blue ＋ to submit your score. You'll take a LIVE photo of the machine's display as proof — gallery uploads aren't accepted. An admin reviews it, then it hits the leaderboard.",
+    body: "This is Play. Find games, personal score targets, Trivia, and tournaments here. Tap a game to submit a score with a live photo of the machine's display. After review, approved scores appear on the leaderboard.",
     route: "/games",
   },
   {
@@ -148,7 +148,7 @@ const ADMIN_EXTRA_STEPS: TourStep[] = [
     iconColor: "#f59e0b",
     tag: "Admin Panel",
     title: "Your admin powers",
-    body: "You have a dedicated Admin tab. From here you manage scores, the league, tournaments, karaoke, users, content reports, the beta program, and support — all in one place. Swipe the top tab bar to reach every section.",
+    body: "Open Staff workspace from You to manage scores, the league, tournaments, karaoke, users, content reports, the beta program, and support. Swipe the top tab bar to reach every section.",
     route: "/admin",
   },
   {

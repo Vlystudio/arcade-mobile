@@ -1,3 +1,4 @@
+import { TonightCard } from "../components/tonight-card";
 import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
 import { compressImage, MAX_UPLOAD_BYTES } from "../../lib/compress-image";
 import { Image } from "expo-image";
@@ -36,7 +37,6 @@ import { showActionToast, showToast } from "../components/toast";
 import { WhatsNewSheet } from "../components/whats-new";
 import { fetchInbox, unseenInboxCount } from "../lib/inbox";
 import { validateCommentContent, validatePostContent } from "../../lib/validation";
-import type { AppRole } from "../components/role-badge";
 
 type Post = {
   id: string;
@@ -130,9 +130,7 @@ export default function FeedScreen() {
   const [interactionsLoading, setInteractionsLoading] = useState(false);
 
   // Onboarding checklist for fresh accounts
-  const [onboarding, setOnboarding] = useState<{ photo: boolean; team: boolean; rsvp: boolean; pick: boolean } | null>(null);
 
-  const [userRole, setUserRole] = useState<AppRole>("user");
 
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -166,12 +164,11 @@ export default function FeedScreen() {
     if (data) {
       setUsername(data.username);
       setMyAvatarUrl(data.avatar_url ?? null);
-      setUserRole((data.role as AppRole) ?? "user");
     }
   }
 
   useEffect(() => {
-    if (user) { loadProfile(); loadFeed(tab); loadAnnouncement(); loadInboxDot(); loadOnboarding(); }
+    if (user) { loadProfile(); loadFeed(tab); loadAnnouncement(); loadInboxDot();  }
   }, [user]);
 
   async function loadInboxDot() {
@@ -180,38 +177,6 @@ export default function FeedScreen() {
       const items = await fetchInbox(user.id);
       setInboxUnseen(await unseenInboxCount(items));
     } catch {}
-  }
-
-  async function loadOnboarding() {
-    if (!user) return;
-    const dismissed = await AsyncStorage.getItem("onboarding_dismissed");
-    if (dismissed) return;
-    const monday = new Date();
-    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-    const weekOf = monday.toISOString().slice(0, 10);
-    const [profRes, teamRes, rsvpRes, pickRes] = await Promise.all([
-      supabase.from("profiles").select("avatar_url, onboarding_dismissed").eq("id", user.id).single(),
-      supabase.from("team_members").select("team_id", { count: "exact", head: true }).eq("user_id", user.id),
-      supabase.from("league_rsvps").select("user_id", { count: "exact", head: true }).eq("user_id", user.id).eq("week_of", weekOf),
-      supabase.from("pickem_picks").select("user_id", { count: "exact", head: true }).eq("user_id", user.id).eq("week_of", weekOf),
-    ]);
-    // Dismissed on another device? Mirror it locally and stay hidden.
-    if (profRes.data?.onboarding_dismissed) {
-      AsyncStorage.setItem("onboarding_dismissed", "1").catch(() => {});
-      return;
-    }
-    const state = {
-      photo: !!profRes.data?.avatar_url,
-      team: (teamRes.count ?? 0) > 0,
-      rsvp: (rsvpRes.count ?? 0) > 0,
-      pick: (pickRes.count ?? 0) > 0,
-    };
-    // Fully done? Never show again.
-    if (Object.values(state).every(Boolean)) {
-      dismissOnboarding();
-      return;
-    }
-    setOnboarding(state);
   }
 
   async function openInteractions(post: Post) {
@@ -240,14 +205,6 @@ export default function FeedScreen() {
       id: r.user_id, emoji: r.emoji, username: names[r.user_id]?.username ?? "Unknown", avatar_url: names[r.user_id]?.avatar_url ?? null,
     })));
     setInteractionsLoading(false);
-  }
-
-  function dismissOnboarding() {
-    AsyncStorage.setItem("onboarding_dismissed", "1").catch(() => {});
-    if (user) {
-      supabase.from("profiles").update({ onboarding_dismissed: true }).eq("id", user.id).then(() => {});
-    }
-    setOnboarding(null);
   }
 
   async function loadAnnouncement() {
@@ -616,25 +573,28 @@ export default function FeedScreen() {
             </View>
           </View>
           <View style={styles.headerActions}>
-            <Pressable style={styles.iconBtn} onPress={() => router.push("/forums" as any)}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Community forums" style={styles.iconBtn} onPress={() => router.push("/forums" as any)}>
               <Ionicons name="chatbubbles-outline" size={21} color="#888" />
             </Pressable>
-            <Pressable style={styles.iconBtn} onPress={() => router.push("/chat" as any)}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Messages" style={styles.iconBtn} onPress={() => router.push("/chat" as any)}>
               <Ionicons name="chatbubble-outline" size={21} color="#888" />
             </Pressable>
             <Pressable
               style={styles.iconBtn}
+              accessibilityRole="button" accessibilityLabel="Notifications"
               onPress={() => { setInboxUnseen(0); router.push("/notifications" as any); }}
             >
               <Ionicons name="notifications-outline" size={21} color="#888" />
               {inboxUnseen > 0 && <View style={styles.bellDot} />}
             </Pressable>
-            <Pressable style={styles.iconBtnCyan} onPress={() => setCreateVisible(true)}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Create post" style={styles.iconBtnCyan} onPress={() => setCreateVisible(true)}>
               <Ionicons name="add" size={20} color="#000" />
             </Pressable>
           </View>
         </View>
 
+        <FlatList
+          ListHeaderComponent={<><TonightCard />
         {/* Broadcast announcement banner */}
         {announcement && (
           <View style={styles.broadcastBanner}>
@@ -655,39 +615,6 @@ export default function FeedScreen() {
           <Text style={styles.quickComposerText}>What's happening at the lanes?</Text>
           <Ionicons name="image-outline" size={18} color="#555" />
         </Pressable>
-
-        {/* New-player onboarding checklist */}
-        {onboarding && (
-          <View style={styles.onboardCard}>
-            <View style={styles.onboardHeader}>
-              <Text style={styles.onboardTitle}>Get set for league night 🎳</Text>
-              <Pressable onPress={dismissOnboarding} hitSlop={8}>
-                <Ionicons name="close" size={16} color="#777" />
-              </Pressable>
-            </View>
-            {([
-              { done: onboarding.photo, label: "Add a profile photo", route: "/profile" },
-              { done: onboarding.team, label: "Join (or create) a team", route: "/teams" },
-              { done: onboarding.rsvp, label: "RSVP for Monday on your team page", route: "/teams" },
-              { done: onboarding.pick, label: "Make your weekly Pick'em pick", route: "/leagues" },
-            ] as const).map((step) => (
-              <Pressable
-                key={step.label}
-                style={styles.onboardRow}
-                onPress={() => !step.done && router.push(step.route as any)}
-                disabled={step.done}
-              >
-                <Ionicons
-                  name={step.done ? "checkmark-circle" : "ellipse-outline"}
-                  size={18}
-                  color={step.done ? "#22c55e" : "#555"}
-                />
-                <Text style={[styles.onboardLabel, step.done && styles.onboardLabelDone]}>{step.label}</Text>
-                {!step.done && <Ionicons name="chevron-forward" size={13} color="#444" />}
-              </Pressable>
-            ))}
-          </View>
-        )}
 
         {/* Tab switcher */}
         <View style={styles.tabRow}>
@@ -721,14 +648,14 @@ export default function FeedScreen() {
             </Text>
           </Pressable>
         )}
-        <FlatList
+          </>}
           ref={feedScrollRef}
           data={posts}
           keyExtractor={(post) => post.id}
           initialNumToRender={6}
           windowSize={7}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={posts.length === 0 ? styles.emptyContainer : undefined}
+          contentContainerStyle={{ paddingBottom: 24 }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setNewPostCount(0); void loadFeed(tab); }} tintColor="#06b6d4" />}
           onEndReached={() => { void loadFeed(tab, true); }}
           onEndReachedThreshold={0.5}
@@ -1371,7 +1298,7 @@ const styles = StyleSheet.create({
     borderRadius: 12, borderWidth: 1, borderColor: "#222",
     backgroundColor: "#111",
   },
-  locationPromptText: { color: "#777", fontSize: 11, fontWeight: "600" },
+  locationPromptText: { color: "#a3adb8", fontSize: 11, fontWeight: "600" },
   iconBtn: { width: 36, height: 36, alignItems: "center", justifyContent: "center" },
   iconBtnCyan: {
     width: 34, height: 34, borderRadius: 17,
@@ -1414,7 +1341,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginBottom: 4,
   },
   emptyTitle: { color: "#fff", fontSize: 18, fontWeight: "800", textAlign: "center" },
-  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  emptySub: { color: "#a3adb8", fontSize: 14, textAlign: "center", lineHeight: 20 },
   emptyBtn: {
     marginTop: 4, flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: "#06b6d4", borderRadius: 14, paddingHorizontal: 22, paddingVertical: 12,
@@ -1438,7 +1365,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6, paddingVertical: 2,
   },
   officialTagText: { color: "#06b6d4", fontSize: 10, fontWeight: "800" },
-  postTime: { color: "#777", fontSize: 12, marginTop: 2 },
+  postTime: { color: "#a3adb8", fontSize: 12, marginTop: 2 },
 
   // Score block inside post
   scoreBlock: {
@@ -1470,7 +1397,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#161616", alignItems: "center", justifyContent: "center",
   },
   likeIconWrapActive: { backgroundColor: "rgba(239,68,68,0.12)" },
-  likeCount: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
+  likeCount: { color: "#a3adb8", fontSize: 13, fontWeight: "600" },
   likeCountActive: { color: "#ef4444" },
 
   // Create post modal
@@ -1485,7 +1412,7 @@ const styles = StyleSheet.create({
   modalTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
   postAuthorRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   postAuthorName: { color: "#fff", fontWeight: "800", fontSize: 15 },
-  postAudienceLabel: { color: "#777", fontSize: 11, marginTop: 2 },
+  postAudienceLabel: { color: "#a3adb8", fontSize: 11, marginTop: 2 },
   modalCloseBtn: {
     width: 32, height: 32, borderRadius: 16,
     backgroundColor: "#1e1e1e", alignItems: "center", justifyContent: "center",
@@ -1505,7 +1432,7 @@ const styles = StyleSheet.create({
   postBtnOff: { backgroundColor: "#1a1a1a" },
   postBtnText: { color: "#000", fontWeight: "900", fontSize: 15 },
 
-  reportPrompt: { color: "#888", fontSize: 13, marginBottom: 12 },
+  reportPrompt: { color: "#a3adb8", fontSize: 13, marginBottom: 12 },
   reportOption: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 10 },
   reportRadio: {
     width: 20, height: 20, borderRadius: 10,
@@ -1561,7 +1488,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16, alignItems: "center",
     marginTop: 8, borderWidth: 1, borderColor: "#222",
   },
-  locModalDoneBtnText: { color: "#888", fontWeight: "700", fontSize: 15 },
+  locModalDoneBtnText: { color: "#a3adb8", fontWeight: "700", fontSize: 15 },
 
   // Post destination toggle (arcade officials only)
   postDestRow: {
@@ -1576,7 +1503,7 @@ const styles = StyleSheet.create({
   },
   postDestBtnActive: { backgroundColor: "#1e1e1e" },
   postDestBtnArcade: { backgroundColor: "rgba(6,182,212,0.1)" },
-  postDestText: { color: "#777", fontSize: 13, fontWeight: "600" },
+  postDestText: { color: "#a3adb8", fontSize: 13, fontWeight: "600" },
   postDestTextActive: { color: "#fff", fontWeight: "700" },
   postDestTextArcade: { color: "#06b6d4", fontWeight: "700" },
 
@@ -1603,11 +1530,11 @@ const styles = StyleSheet.create({
   menuItemText: { color: "#fff", fontSize: 16, fontWeight: "600" },
   menuItemDestructive: { color: "#ef4444" },
   menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: "#222", marginHorizontal: 16 },
-  menuCancelText: { color: "#8a8a8a", fontSize: 16, fontWeight: "600" },
+  menuCancelText: { color: "#a3adb8", fontSize: 16, fontWeight: "600" },
 
   // Comments
   cmtEmpty: { alignItems: "center", justifyContent: "center", paddingVertical: 36, gap: 10 },
-  cmtEmptyText: { color: "#777", fontSize: 14 },
+  cmtEmptyText: { color: "#a3adb8", fontSize: 14 },
   interModalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "flex-end" },
   interModalDismiss: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0 },
   interSheet: {
@@ -1618,7 +1545,7 @@ const styles = StyleSheet.create({
   },
   interHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 12 },
   interTitle: { color: "#fff", fontSize: 18, fontWeight: "900", textAlign: "center", marginBottom: 10 },
-  interEmpty: { color: "#777", fontSize: 13.5, textAlign: "center", paddingVertical: 26 },
+  interEmpty: { color: "#a3adb8", fontSize: 13.5, textAlign: "center", paddingVertical: 26 },
   interSection: { color: "#7a7a7a", fontSize: 11, fontWeight: "800", letterSpacing: 1, marginTop: 10, marginBottom: 6 },
   interRow: {
     flexDirection: "row", alignItems: "center", gap: 11, paddingVertical: 8,
@@ -1695,7 +1622,7 @@ const styles = StyleSheet.create({
   cmtSendBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center" },
 
   // Share
-  shareSubtitle: { color: "#8a8a8a", fontSize: 12, marginTop: 2 },
+  shareSubtitle: { color: "#a3adb8", fontSize: 12, marginTop: 2 },
   shareConvRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   shareConvName: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
 });

@@ -22,6 +22,8 @@ import { initOfflineFlush } from "../../lib/offline-queue";
 import { PendingScores } from "../components/pending-scores";
 import { MotionProvider, useReducedMotion } from "../context/motion-context";
 import { MOTION, RouteTransition } from "../components/motion";
+import { ActiveGameProvider } from "../context/active-game-context";
+import { ActiveGameBanner } from "../components/active-game-banner";
 
 Sentry.init({
   dsn: "https://483f3f6bbb4581e28ed5ddaf6a17c07e@o4511509249785856.ingest.us.sentry.io/4511509250768896",
@@ -38,7 +40,7 @@ configureNotificationHandler();
 // Everything else renders in a centered phone-style column like IG/X web.
 const WEB_FULL_ROUTES = new Set(["/skeeball-live", "/karaoke-display", "/demo"]);
 const WEB_WIDE_ROUTES = new Set(["/admin", "/owner", "/architect"]);
-const TAB_ROUTES = new Set(["index", "games", "trivia", "teams", "food", "profile", "admin"]);
+const TAB_ROUTES = new Set(["index", "games", "leagues", "trivia", "teams", "food", "profile", "admin"]);
 
 /** Centers the whole app in a column on desktop web; no-op on native. */
 function AppColumn({ children }: { children: React.ReactNode }) {
@@ -92,6 +94,7 @@ function RootNavigation() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
+      <ActiveGameProvider>
       <AdminProvider>
       <LocationProvider>
       <CartProvider>
@@ -101,6 +104,7 @@ function RootNavigation() {
         <UpdateBanner />
         <PushRegistrar />
         <PendingScores />
+        <ActiveGameBanner />
         <ScreenshotButton />
         <Stack
           screenLayout={({ children }) => <RouteTransition>{children}</RouteTransition>}
@@ -189,6 +193,7 @@ function RootNavigation() {
       </CartProvider>
       </LocationProvider>
       </AdminProvider>
+      </ActiveGameProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

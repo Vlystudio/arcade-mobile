@@ -1,3 +1,4 @@
+import { IntentStarter } from "../components/intent-starter";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import Head from "expo-router/head";
@@ -42,6 +43,7 @@ export default function WelcomeScreen() {
         <meta name="description" content="Join the Monday night skee-ball league. Live scores, season stats, and cash prizes." />
       </Head>
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+        <IntentStarter always />
         {/* Hero */}
         <View style={s.hero}>
           <View style={s.logoBadge}>

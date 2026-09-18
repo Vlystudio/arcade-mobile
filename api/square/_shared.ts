@@ -106,20 +106,20 @@ export async function fetchSquareCategories(config: SquareConfig) {
   return categories;
 }
 
-export function normalizeSquareCatalogItems(items: any[], categories: Map<string, string>) {
+export function normalizeSquareCatalogItems(items: any[], categories: Map<string, string>, images = new Map<string, string>()) {
   const normalized: NormalizedSquareMenuItem[] = [];
 
   for (const item of items ?? []) {
     if (item?.type !== "ITEM" || item?.is_deleted || item?.item_data?.is_archived) continue;
 
     const itemData = item.item_data ?? {};
-    const categoryId = itemData.category_id ?? itemData.categories?.[0]?.id;
-    const category = normalizeCategory(categories.get(categoryId) ?? itemData.reporting_category?.name ?? itemData.name);
+    const categoryIds = [itemData.reporting_category?.id, ...(itemData.categories ?? []).map((c: any) => c.id), itemData.category_id];
+    const category = categoryIds.map(id => normalizeCategory(categories.get(id))).find(value => value !== "menu") ?? "menu";
 
     for (const variation of itemData.variations ?? []) {
       const variationData = variation?.item_variation_data ?? {};
       const amount = variationData?.price_money?.amount;
-      if (!variation?.id || typeof amount !== "number") continue;
+      if (!variation?.id || typeof amount !== "number" || variation.is_deleted || variationData?.is_archived) continue;
 
       const variationName = variationData.name && variationData.name !== "Regular" ? ` (${variationData.name})` : "";
       normalized.push({
@@ -132,7 +132,7 @@ export function normalizeSquareCatalogItems(items: any[], categories: Map<string
         price: amount / 100,
         category,
         ingredients: [],
-        photo_url: null,
+        photo_url: [...(variationData.image_ids ?? []), ...(itemData.image_ids ?? [])].map(id => images.get(id)).find(Boolean) ?? null,
         available: !variation.is_deleted && !variationData?.is_archived,
       });
     }
@@ -158,7 +158,7 @@ function normalizeCategory(name: string | undefined) {
   if (lower.includes("dessert") || lower.includes("sweet")) return "desserts";
   if (lower.includes("main") || lower.includes("entree") || lower.includes("plate")) return "mains";
 
-  return lower.replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "menu";
+  return "menu";
 }
 
 function getSquareErrorMessage(data: any, fallback: string) {

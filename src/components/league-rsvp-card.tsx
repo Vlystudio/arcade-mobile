@@ -1,14 +1,20 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { StyleSheet, Text, View } from "react-native";
+import { PressableScale as Pressable } from "./pressable-scale";
+import { showToast } from "./toast";
 import { supabase } from "../../lib/supabase";
 import { useAuth } from "../context/auth-context";
 import { Avatar } from "./avatar";
 import { haptic } from "../../lib/haptics";
+import { nextLeagueMonday } from "../../lib/experience";
+import { publicProfilesById } from "../../lib/public-profiles";
 
 type Member = { user_id: string; username: string; avatar_url: string | null; status: string | null };
 type Data = {
   has_team: boolean;
+  team_id?: string;
   team_name?: string;
   my_status?: string | null;
   members?: Member[];
@@ -25,28 +31,51 @@ const OPTIONS: { key: "in" | "maybe" | "out"; label: string; icon: keyof typeof 
  * "You in for Monday?" — one-tap league-night RSVP for the user's team, with a
  * live count of who's confirmed. Renders nothing if the user isn't on a team.
  */
-export function LeagueRsvpCard() {
+export function LeagueRsvpCard({ weekOf = nextLeagueMonday(), teamId }: { weekOf?: string; teamId?: string } = {}) {
   const { user } = useAuth();
   const [data, setData] = useState<Data | null>(null);
   const [saving, setSaving] = useState(false);
 
-  async function load() {
-    const { data: d } = await supabase.rpc("rpc_my_team_rsvps");
-    setData((d as Data) ?? null);
-  }
-
-  useEffect(() => {
-    if (user) load();
-  }, [user?.id]);
+  const userId = user?.id;
+  const load = useCallback(async (): Promise<Data> => {
+    if (!userId) return { has_team: false };
+    let query = supabase.from("team_members").select("team_id, teams(name)").eq("user_id", userId).order("team_id").limit(1);
+    if (teamId) query = query.eq("team_id", teamId);
+    const membership = await query.maybeSingle();
+    if (membership.error) throw membership.error;
+    if (!membership.data) return { has_team: false };
+    const id = membership.data.team_id;
+    const [members, rsvps] = await Promise.all([
+      supabase.from("team_members").select("user_id").eq("team_id", id),
+      supabase.from("league_rsvps").select("user_id, status").eq("team_id", id).eq("week_of", weekOf),
+    ]);
+    if (members.error || rsvps.error) throw members.error ?? rsvps.error;
+    const profiles = await publicProfilesById((members.data ?? []).map(m => m.user_id));
+    const people = (members.data ?? []).map(m => ({ user_id: m.user_id, username: profiles.get(m.user_id)?.username ?? "Teammate", avatar_url: profiles.get(m.user_id)?.avatar_url ?? null, status: rsvps.data?.find(r => r.user_id === m.user_id)?.status ?? null }));
+    const team = membership.data.teams as { name?: string } | { name?: string }[] | null;
+    return { has_team: true, team_id: id, team_name: (Array.isArray(team) ? team[0]?.name : team?.name) ?? "Your team", my_status: people.find(p => p.user_id === userId)?.status, members: people, counts: { in: people.filter(p => p.status === "in").length, out: people.filter(p => p.status === "out").length, maybe: people.filter(p => p.status === "maybe").length, total: people.length } };
+  }, [userId, teamId, weekOf]);
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    void load().then(next => { if (active) setData(next); }).catch(() => { if (active) setData(null); });
+    return () => { active = false; };
+  }, [load]));
 
   async function setStatus(status: "in" | "maybe" | "out") {
-    if (saving) return;
+    if (saving || !data?.team_id || !userId) return;
     haptic(status === "in" ? "success" : "tap");
     setSaving(true);
     setData((d) => (d ? { ...d, my_status: status } : d)); // optimistic
-    await supabase.rpc("rpc_set_league_rsvp", { p_status: status });
-    await load();
-    setSaving(false);
+    const previous = data;
+    try {
+      const result = await supabase.from("league_rsvps").upsert({ user_id: userId, team_id: data.team_id, week_of: weekOf, status, updated_at: new Date().toISOString() }, { onConflict: "user_id,week_of" });
+      if (result.error) throw result.error;
+      setData(await load());
+      showToast("Your RSVP is saved.", "success");
+    } catch {
+      setData(previous);
+      showToast("Your RSVP wasn’t saved. Please try again.", "error");
+    } finally { setSaving(false); }
   }
 
   if (!data?.has_team) return null;
@@ -57,7 +86,7 @@ export function LeagueRsvpCard() {
     <View style={s.card}>
       <View style={s.headerRow}>
         <Ionicons name="calendar" size={15} color="#06b6d4" />
-        <Text style={s.title}>You in for Monday?</Text>
+        <Text style={s.title}>{new Date(`${weekOf}T12:00:00`).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · You in?</Text>
         <Text style={s.count}>{c.in}/{c.total} in</Text>
       </View>
 
@@ -67,6 +96,8 @@ export function LeagueRsvpCard() {
           return (
             <Pressable
               key={o.key}
+              accessibilityLabel={`RSVP: ${o.label}`}
+              accessibilityState={{ selected: active, disabled: saving }}
               style={[s.option, active && { backgroundColor: o.color + "22", borderColor: o.color }]}
               onPress={() => setStatus(o.key)}
               disabled={saving}
@@ -100,6 +131,7 @@ const s = StyleSheet.create({
   count: { color: "#06b6d4", fontSize: 12.5, fontWeight: "800" },
   optionsRow: { flexDirection: "row", gap: 8 },
   option: {
+    minHeight: 48,
     flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
     borderColor: "#262626", borderWidth: 1, borderRadius: 12, paddingVertical: 10, backgroundColor: "#0a0a0a",
   },

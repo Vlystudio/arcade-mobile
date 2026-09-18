@@ -29,10 +29,24 @@ export default async function handler(req: any, res: any) {
       fetchAllSquareItems(config),
       fetchSquareCategories(config),
     ]);
+    const imageIds: string[] = [...new Set<string>(items.flatMap(item => [
+      ...(item.item_data?.image_ids ?? []),
+      ...(item.item_data?.variations ?? []).flatMap((v: any) => v.item_variation_data?.image_ids ?? []),
+    ]))];
+    const images = new Map<string, string>();
+    // Photos are optional: a catalog-image outage must not take down ordering.
+    try {
+      for (let i = 0; i < imageIds.length; i += 1000) {
+        const data = await squareRequest("/v2/catalog/batch-retrieve", config, { method: "POST", body: JSON.stringify({ object_ids: imageIds.slice(i, i + 1000) }) });
+        for (const object of data.objects ?? []) {
+          if (object.type === "IMAGE" && !object.is_deleted && typeof object.image_data?.url === "string" && object.image_data.url.startsWith("https://")) images.set(object.id, object.image_data.url);
+        }
+      }
+    } catch { console.warn("[square-menu] Catalog images unavailable"); }
 
     return sendJson(res, 200, {
       configured: true,
-      items: normalizeSquareCatalogItems(items, categories),
+      items: normalizeSquareCatalogItems(items, categories, images),
     });
   } catch (error: any) {
     console.error("[square-menu] load failed", error?.message ?? error);

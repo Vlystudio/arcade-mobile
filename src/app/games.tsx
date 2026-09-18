@@ -1,10 +1,11 @@
+import { PersonalGoal } from "../components/personal-goal";
+import { MotionSheet } from "../components/motion-sheet";
+import { PressableScale as Pressable } from "../components/pressable-scale";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -104,7 +105,7 @@ export default function GamesScreen() {
         >
           {/* Header */}
           <View style={styles.pageHeader}>
-            <Text style={styles.pageTitle}>Games</Text>
+            <Text style={styles.pageTitle}>Play</Text>
             <Text style={styles.pageSub}>Track your scores across every machine</Text>
           </View>
 
@@ -125,6 +126,8 @@ export default function GamesScreen() {
               <Text style={styles.summaryLabel}>Total Plays</Text>
             </View>
           </View>
+
+          {user && (skeeballGame ?? games[0]) && <PersonalGoal game={(skeeballGame ?? games[0])!} best={bestScores[(skeeballGame ?? games[0])!.id]?.score} userId={user.id} />}
 
           {/* Pool Hall — Vinyl Hall only */}
           {isVinyl && (
@@ -148,7 +151,7 @@ export default function GamesScreen() {
                 <Ionicons name="game-controller-outline" size={32} color="#333" />
               </View>
               <Text style={styles.emptyTitle}>No games yet</Text>
-              <Text style={styles.emptySub}>Run seed-games.sql in Supabase to populate machines.</Text>
+              <Text style={styles.emptySub}>Games will appear here when the venue adds them.</Text>
             </View>
           ) : (
             <>
@@ -292,10 +295,7 @@ export default function GamesScreen() {
       <BottomTabBar />
 
       {/* ── Lane picker modal ── */}
-      <Modal visible={!!laneGame} transparent animationType="slide" onRequestClose={() => setLaneGame(null)}>
-        <View style={styles.modalBg}>
-          <Pressable style={styles.modalDismiss} onPress={() => setLaneGame(null)} />
-          <View style={styles.modalSheet}>
+      <MotionSheet visible={!!laneGame} onClose={() => setLaneGame(null)} style={styles.modalSheet} accessibilityLabel="Choose a Skee-Ball lane">
             <View style={styles.modalHandle} />
             <Text style={styles.modalTitle}>Skee-Ball Lanes</Text>
             <Text style={styles.modalSub}>View top scores or submit a new score for any lane</Text>
@@ -303,7 +303,7 @@ export default function GamesScreen() {
             {lanesLoading ? (
               <ActivityIndicator color="#06b6d4" style={{ marginVertical: 24 }} />
             ) : lanes.length === 0 ? (
-              <Text style={styles.emptyText}>No lanes found. Run seed-games.sql in Supabase.</Text>
+              <Text style={styles.emptyText}>No lanes are available right now. Please ask a staff member.</Text>
             ) : (
               <View style={styles.lanesGrid}>
                 {lanes.map((lane) => {
@@ -318,6 +318,7 @@ export default function GamesScreen() {
                         {occupied ? "Occupied" : "Open"}
                       </Text>
                       <Pressable
+                        accessibilityLabel={`View top scores for lane ${lane.lane_number}`}
                         style={styles.laneScoresBtn}
                         onPress={() => {
                           setLaneGame(null);
@@ -328,6 +329,7 @@ export default function GamesScreen() {
                         <Text style={styles.laneScoresBtnText}>Top Scores</Text>
                       </Pressable>
                       <Pressable
+                        accessibilityLabel={`Submit a score for lane ${lane.lane_number}`}
                         style={styles.laneSubmitBtn}
                         onPress={() => {
                           setLaneGame(null);
@@ -342,15 +344,10 @@ export default function GamesScreen() {
                 })}
               </View>
             )}
-          </View>
-        </View>
-      </Modal>
+      </MotionSheet>
 
       {/* ── Arcade / Pinball group modal ── */}
-      <Modal visible={!!groupModal} transparent animationType="slide" onRequestClose={() => setGroupModal(null)}>
-        <View style={styles.modalBg}>
-          <Pressable style={styles.modalDismiss} onPress={() => setGroupModal(null)} />
-          <View style={[styles.modalSheet, { paddingBottom: 0 }]}>
+      <MotionSheet visible={!!groupModal} onClose={() => setGroupModal(null)} style={styles.modalSheet} accessibilityLabel={groupTitle}>
             <View style={styles.modalHandle} />
             <View style={[styles.groupModalTop, { borderBottomColor: groupColor + "25" }]}>
               <View style={[styles.groupModalIconWrap, { backgroundColor: groupColor + "18" }]}>
@@ -365,11 +362,7 @@ export default function GamesScreen() {
               </View>
             </View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              style={styles.groupList}
-              contentContainerStyle={{ paddingBottom: 36 }}
-            >
+            <View>
               {groupGames.map((game, i) => {
                 const best = bestScores[game.id];
                 return (
@@ -388,6 +381,7 @@ export default function GamesScreen() {
                       )}
                     </View>
                     <Pressable
+                      accessibilityLabel={`Submit a score for ${game.name}`}
                       style={[styles.groupRowBtn, { backgroundColor: groupColor }]}
                       onPress={() => {
                         setGroupModal(null);
@@ -399,10 +393,8 @@ export default function GamesScreen() {
                   </View>
                 );
               })}
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+            </View>
+      </MotionSheet>
     </View>
   );
 }
@@ -431,7 +423,7 @@ const styles = StyleSheet.create({
 
   pageHeader: { marginBottom: 20 },
   pageTitle: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5 },
-  pageSub: { color: "#8a8a8a", fontSize: 14, marginTop: 2 },
+  pageSub: { color: "#a3adb8", fontSize: 14, marginTop: 2 },
 
   summaryStrip: {
     flexDirection: "row", backgroundColor: "#111",
@@ -440,7 +432,7 @@ const styles = StyleSheet.create({
   },
   summaryItem: { flex: 1, alignItems: "center" },
   summaryValue: { color: "#fff", fontSize: 22, fontWeight: "900", letterSpacing: -0.5 },
-  summaryLabel: { color: "#777", fontSize: 11, fontWeight: "600", marginTop: 2 },
+  summaryLabel: { color: "#a3adb8", fontSize: 11, fontWeight: "600", marginTop: 2 },
   summaryDivider: { width: StyleSheet.hairlineWidth, backgroundColor: "#222" },
 
   poolCard: {
@@ -467,11 +459,11 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginBottom: 4,
   },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800" },
-  emptySub: { color: "#8a8a8a", fontSize: 14, textAlign: "center" },
+  emptySub: { color: "#a3adb8", fontSize: 14, textAlign: "center" },
 
   section: { marginBottom: 24 },
   sectionLabel: {
-    color: "#333", fontSize: 11, fontWeight: "800",
+    color: "#a3adb8", fontSize: 11, fontWeight: "800",
     letterSpacing: 1.4, marginBottom: 10,
   },
 
@@ -508,7 +500,7 @@ const styles = StyleSheet.create({
   groupIconWrap: { width: 50, height: 50, borderRadius: 14, alignItems: "center", justifyContent: "center" },
   groupInfo: { flex: 1 },
   groupTitle: { color: "#fff", fontSize: 17, fontWeight: "900", marginBottom: 3 },
-  groupCount: { color: "#8a8a8a", fontSize: 12 },
+  groupCount: { color: "#a3adb8", fontSize: 12 },
   groupArrow: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
 
   // Other games
@@ -520,8 +512,8 @@ const styles = StyleSheet.create({
   otherIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   otherInfo: { flex: 1 },
   otherName: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 2 },
-  otherMeta: { color: "#8a8a8a", fontSize: 12 },
-  otherBtn: {
+  otherMeta: { color: "#a3adb8", fontSize: 12 },
+  otherBtn: { minHeight: 44,
     borderRadius: 12, borderWidth: 1,
     paddingHorizontal: 12, paddingVertical: 7,
   },
@@ -543,13 +535,13 @@ const styles = StyleSheet.create({
   },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", letterSpacing: -0.3, marginBottom: 2 },
-  modalSub: { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
-  emptyText: { color: "#777", fontSize: 14, textAlign: "center", paddingVertical: 20 },
+  modalSub: { color: "#a3adb8", fontSize: 13, marginBottom: 20 },
+  emptyText: { color: "#a3adb8", fontSize: 14, textAlign: "center", paddingVertical: 20 },
 
   // Lane grid (inside lane modal)
   lanesGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   laneCard: {
-    width: "30%", flexGrow: 1,
+    width: "45%", flexGrow: 1,
     backgroundColor: "#0d0d0d", borderRadius: 18,
     padding: 14, alignItems: "center", gap: 7,
     borderWidth: 1, borderColor: "#1a1a1a",
@@ -558,14 +550,14 @@ const styles = StyleSheet.create({
   laneNumber: { color: "#fff", fontSize: 30, fontWeight: "900", letterSpacing: -1 },
   laneStatusDot: { width: 8, height: 8, borderRadius: 4 },
   laneStatusText: { fontSize: 11, fontWeight: "700" },
-  laneScoresBtn: {
+  laneScoresBtn: { minHeight: 44,
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "rgba(6,182,212,0.1)", borderRadius: 10,
     paddingHorizontal: 10, paddingVertical: 6,
     borderWidth: 1, borderColor: "rgba(6,182,212,0.2)", width: "100%", justifyContent: "center",
   },
   laneScoresBtnText: { color: "#06b6d4", fontSize: 11, fontWeight: "700" },
-  laneSubmitBtn: {
+  laneSubmitBtn: { minHeight: 44,
     flexDirection: "row", alignItems: "center", gap: 4,
     backgroundColor: "#1e1e1e", borderRadius: 10,
     paddingHorizontal: 10, paddingVertical: 6,
@@ -588,7 +580,7 @@ const styles = StyleSheet.create({
   groupRowInfo: { flex: 1 },
   groupRowName: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 3 },
   groupRowBest: { fontSize: 12, fontWeight: "600" },
-  groupRowUnplayed: { color: "#333", fontSize: 12 },
+  groupRowUnplayed: { color: "#a3adb8", fontSize: 12 },
   groupRowBtn: {
     width: 38, height: 38, borderRadius: 19,
     alignItems: "center", justifyContent: "center",

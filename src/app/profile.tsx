@@ -610,6 +610,9 @@ export default function ProfileScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadProfile(); }} tintColor="#06b6d4" />
           }
         >
+          {isAdmin && <Pressable accessibilityRole="button" style={{ backgroundColor: "#271d10", borderRadius: 14, padding: 16, marginBottom: 18, minHeight: 52, flexDirection: "row", alignItems: "center", gap: 10 }} onPress={() => router.push("/admin")}>
+            <Ionicons name="shield-outline" size={20} color="#fcd34d" /><Text style={{ color: "#fcd34d", fontWeight: "800", fontSize: 15 }}>Staff workspace</Text>
+          </Pressable>}
           {/* ── Header: avatar + stats (IG style) ── */}
           <View style={styles.headerRow}>
             <Pressable style={styles.avatarWrap} onPress={() => setAvatarPickerVisible(true)} disabled={uploadingAvatar}>

@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export type LocationSlug = "arcade_bar" | "vinyl_hall";
 
@@ -46,7 +47,20 @@ type LocationContextType = {
 const LocationContext = createContext<LocationContextType | null>(null);
 
 export function LocationProvider({ children }: { children: React.ReactNode }) {
-  const [location, setLocation] = useState<AppLocation | null>(null);
+  const [location, updateLocation] = useState<AppLocation | null>(null);
+  const selected = useRef(false);
+  useEffect(() => {
+    let active = true;
+    AsyncStorage.getItem("@arcade:venue:v1").then(slug => {
+      if (active && !selected.current) updateLocation(LOCATIONS.find(loc => loc.slug === slug) ?? null);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
+  function setLocation(loc: AppLocation) {
+    selected.current = true;
+    updateLocation(loc);
+    void AsyncStorage.setItem("@arcade:venue:v1", loc.slug).catch(() => {});
+  }
 
   return (
     <LocationContext.Provider value={{

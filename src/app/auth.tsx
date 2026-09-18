@@ -1,12 +1,13 @@
+import { IntentStarter } from "../components/intent-starter";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function AuthScreen() {
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={styles.container}>
         <View style={styles.logoSection}>
           <View style={styles.logoMark}>
             <Text style={styles.logoMarkText}>AT</Text>
@@ -14,6 +15,7 @@ export default function AuthScreen() {
           <Text style={styles.appName}>ArcadeTracker</Text>
         </View>
 
+        <IntentStarter />
         <View style={styles.noticeBanner}>
           <Ionicons name="game-controller-outline" size={18} color="#06b6d4" style={{ marginTop: 1 }} />
           <View style={{ flex: 1 }}>
@@ -57,16 +59,16 @@ export default function AuthScreen() {
             <Text style={styles.karaokeBtnText}>Karaoke Queue</Text>
           </Pressable>
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: "#000" },
-  container: { flex: 1, padding: 28, justifyContent: "center" },
+  container: { flexGrow: 1, padding: 28, justifyContent: "center" },
 
-  logoSection: { alignItems: "center", marginBottom: 72 },
+  logoSection: { alignItems: "center", marginBottom: 24 },
   logoMark: {
     width: 88, height: 88, borderRadius: 28,
     backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center", marginBottom: 20,

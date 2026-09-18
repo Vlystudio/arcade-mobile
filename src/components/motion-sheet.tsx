@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, type StyleProp, type ViewStyle } from "react-native";
+import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useReducedMotion } from "../context/motion-context";
 import { MOTION } from "./motion";
@@ -52,6 +52,9 @@ export function MotionSheet({ visible, onClose, children, style, accessibilityLa
             transform: [{ translateY: reducedMotion ? 0 : progress.interpolate({ inputRange: [0, 1], outputRange: [32, 0] }) }],
           }]}
         >
+          <Pressable accessibilityRole="button" accessibilityLabel={`Close ${accessibilityLabel}`} onPress={onClose} style={s.close}>
+            <Text style={s.closeText}>Close ×</Text>
+          </Pressable>
           <ScrollView
             style={s.scroll}
             contentContainerStyle={{ gap: sheetStyle?.gap }}
@@ -70,6 +73,8 @@ export function MotionSheet({ visible, onClose, children, style, accessibilityLa
 const s = StyleSheet.create({
   root: { flex: 1, justifyContent: "flex-end" },
   scrim: { backgroundColor: "rgba(0,0,0,0.75)" },
-  sheet: { width: "100%", maxWidth: 560, maxHeight: "92%", alignSelf: "center", overflow: "hidden" },
+  sheet: { width: "100%", maxWidth: 560, maxHeight: "92%", alignSelf: "center", overflow: "hidden", backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  close: { alignSelf: "flex-end", minHeight: 44, minWidth: 72, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
+  closeText: { color: "#cbd5e1", fontSize: 14, fontWeight: "700" },
   scroll: { flexGrow: 0 },
 });

@@ -1150,7 +1150,7 @@ const styles = StyleSheet.create({
 
   pageHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 },
   pageTitle: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5, marginBottom: 2 },
-  pageSub: { color: "#8a8a8a", fontSize: 14 },
+  pageSub: { color: "#a3adb8", fontSize: 14 },
   headerBtns: { flexDirection: "row", gap: 8 },
   leaguesBtn: {
     flexDirection: "row", alignItems: "center", gap: 5,
@@ -1174,12 +1174,12 @@ const styles = StyleSheet.create({
   },
   searchInput: { flex: 1, color: "#fff", fontSize: 15 },
 
-  sectionLabel: { color: "#777", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
+  sectionLabel: { color: "#a3adb8", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 12 },
 
   emptyCard: { backgroundColor: "#0d0d0d", borderRadius: 20, padding: 40, alignItems: "center", borderWidth: 1, borderColor: "#1a1a1a" },
   emptyTitle: { color: "#fff", fontSize: 17, fontWeight: "800", marginBottom: 6 },
-  emptySub: { color: "#8a8a8a", fontSize: 14 },
-  allJoined: { color: "#777", fontSize: 14, textAlign: "center", paddingVertical: 20 },
+  emptySub: { color: "#a3adb8", fontSize: 14 },
+  allJoined: { color: "#a3adb8", fontSize: 14, textAlign: "center", paddingVertical: 20 },
 
   teamCard: { backgroundColor: "#111", borderRadius: 18, padding: 16, flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 10, borderWidth: 1, borderColor: "#1a1a1a" },
   teamCardMine: { borderColor: "rgba(6,182,212,0.25)" },
@@ -1189,7 +1189,7 @@ const styles = StyleSheet.create({
   teamInfo: { flex: 1, minWidth: 0 },
   teamNameRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 2, flexWrap: "wrap" },
   teamName: { color: "#fff", fontSize: 15, fontWeight: "800", flexShrink: 1 },
-  teamMeta: { color: "#8a8a8a", fontSize: 13, flexShrink: 1 },
+  teamMeta: { color: "#a3adb8", fontSize: 13, flexShrink: 1 },
   captainTag: { backgroundColor: "rgba(245,158,11,0.12)", borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
   captainTagText: { color: "#f59e0b", fontSize: 10, fontWeight: "800" },
 
@@ -1213,13 +1213,13 @@ const styles = StyleSheet.create({
   requestBtn: { backgroundColor: "#1a1a1a", borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: "#2a2a2a" },
   requestBtnText: { color: "#fff", fontWeight: "700", fontSize: 13 },
   pendingBtn: { borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, borderWidth: 1, borderColor: "#2a2a2a" },
-  pendingBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 13 },
+  pendingBtnText: { color: "#a3adb8", fontWeight: "700", fontSize: 13 },
 
   inviteActions: { gap: 6 },
   acceptBtn: { backgroundColor: "#06b6d4", borderRadius: 9, paddingHorizontal: 14, paddingVertical: 7 },
   acceptBtnText: { color: "#000", fontWeight: "900", fontSize: 13 },
   declineBtn: { borderRadius: 9, paddingHorizontal: 14, paddingVertical: 7, borderWidth: 1, borderColor: "#2a2a2a" },
-  declineBtnText: { color: "#8a8a8a", fontWeight: "700", fontSize: 13 },
+  declineBtnText: { color: "#a3adb8", fontWeight: "700", fontSize: 13 },
 
   // Modals
   modalBg: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", justifyContent: "flex-end" },
@@ -1233,14 +1233,14 @@ const styles = StyleSheet.create({
   confirmSheet: { borderRadius: 28, marginHorizontal: 20, marginBottom: 40 },
   modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 20 },
   modalTitle: { color: "#fff", fontSize: 20, fontWeight: "900", marginBottom: 4 },
-  modalSub: { color: "#8a8a8a", fontSize: 14, marginBottom: 18 },
+  modalSub: { color: "#a3adb8", fontSize: 14, marginBottom: 18 },
   modalInput: { backgroundColor: "#0a0a0a", color: "#fff", padding: 15, borderRadius: 14, fontSize: 16, borderWidth: 1, borderColor: "#1a1a1a", marginBottom: 6 },
   messageInput: { height: 88, textAlignVertical: "top", paddingTop: 12 },
-  charCount: { color: "#333", fontSize: 11, textAlign: "right", marginBottom: 14 },
-  fieldLabel: { color: "#777", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 },
+  charCount: { color: "#a3adb8", fontSize: 11, textAlign: "right", marginBottom: 14 },
+  fieldLabel: { color: "#a3adb8", fontSize: 12, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8 },
   modalBtns: { flexDirection: "row", gap: 10, marginTop: 4 },
   modalCancel: { flex: 1, backgroundColor: "#1a1a1a", borderRadius: 14, padding: 15, alignItems: "center" },
-  modalCancelText: { color: "#888", fontWeight: "700" },
+  modalCancelText: { color: "#a3adb8", fontWeight: "700" },
   modalConfirm: { flex: 1, backgroundColor: "#06b6d4", borderRadius: 14, padding: 15, alignItems: "center" },
   modalConfirmOff: { backgroundColor: "#1a1a1a" },
   modalConfirmText: { color: "#000", fontWeight: "900" },
@@ -1257,7 +1257,7 @@ const styles = StyleSheet.create({
   resultUsername: { flex: 1, color: "#fff", fontSize: 15, fontWeight: "700" },
   sendBtn: { flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "#06b6d4", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 7 },
   sendBtnText: { color: "#000", fontWeight: "800", fontSize: 13 },
-  noResults: { color: "#777", textAlign: "center", paddingVertical: 20, fontSize: 14 },
+  noResults: { color: "#a3adb8", textAlign: "center", paddingVertical: 20, fontSize: 14 },
   noRequestsWrap: { alignItems: "center", paddingVertical: 32, gap: 8 },
 
   inviteSentBox: { alignItems: "center", paddingVertical: 24, gap: 10 },
@@ -1266,9 +1266,9 @@ const styles = StyleSheet.create({
   inviteAnotherText: { color: "#06b6d4", fontWeight: "700", fontSize: 14 },
 
   requestRow: { flexDirection: "row", alignItems: "flex-start", gap: 14, paddingVertical: 14, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
-  requestDirection: { color: "#8a8a8a", fontSize: 12, marginTop: 2 },
+  requestDirection: { color: "#a3adb8", fontSize: 12, marginTop: 2 },
   messageBubble: { backgroundColor: "#0d0d0d", borderRadius: 10, padding: 10, marginTop: 8, borderWidth: 1, borderColor: "#1a1a1a" },
-  messageBubbleText: { color: "#888", fontSize: 13, lineHeight: 18 },
+  messageBubbleText: { color: "#a3adb8", fontSize: 13, lineHeight: 18 },
   requestBtnRow: { flexDirection: "row", gap: 8, alignSelf: "center" },
   approveBtn: { width: 34, height: 34, borderRadius: 17, backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center" },
   denyBtn: { width: 34, height: 34, borderRadius: 17, borderWidth: 1, borderColor: "#2a2a2a", alignItems: "center", justifyContent: "center" },
@@ -1276,12 +1276,12 @@ const styles = StyleSheet.create({
   transferRow: { flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: "#1a1a1a" },
   transferRowSelected: { backgroundColor: "rgba(6,182,212,0.06)", borderRadius: 12, paddingHorizontal: 8, marginHorizontal: -8 },
 
-  slotLabel: { color: "#8a8a8a", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
+  slotLabel: { color: "#a3adb8", fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 8, marginTop: 4 },
   slotRow: { flexDirection: "row", gap: 8, marginBottom: 14 },
   slotChip: { flex: 1, paddingVertical: 9, borderRadius: 12, backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#2a2a2a", alignItems: "center" },
   slotChipActive: { backgroundColor: "rgba(6,182,212,0.14)", borderColor: "#06b6d4" },
   slotChipActive2: { backgroundColor: "rgba(245,158,11,0.12)", borderColor: "#f59e0b" },
-  slotChipText: { color: "#8a8a8a", fontSize: 13, fontWeight: "700" },
+  slotChipText: { color: "#a3adb8", fontSize: 13, fontWeight: "700" },
   slotChipTextActive: { color: "#06b6d4", fontWeight: "800" },
   slotChipTextActive2: { color: "#f59e0b", fontWeight: "800" },
 
@@ -1320,7 +1320,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center",
   },
   seasonBannerTitle: { color: "#f59e0b", fontSize: 14, fontWeight: "800", marginBottom: 2 },
-  seasonBannerSub: { color: "#777", fontSize: 12, lineHeight: 17 },
+  seasonBannerSub: { color: "#a3adb8", fontSize: 12, lineHeight: 17 },
 
   fantasyTeaser: {
     flexDirection: "row", alignItems: "center", gap: 11,

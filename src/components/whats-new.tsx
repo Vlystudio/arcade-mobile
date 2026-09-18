@@ -6,9 +6,12 @@ import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 // Bump the version whenever the list changes — the sheet shows once per version.
-const WHATS_NEW_VERSION = "2026-06-12";
+const WHATS_NEW_VERSION = "2026-09-18";
 
 const ITEMS: { icon: string; color: string; title: string; body: string }[] = [
+  { icon: "home", color: "#06b6d4", title: "Your night, up front", body: "Home brings your game, schedule, RSVP, and venue together. Your feed is just below." },
+  { icon: "play-circle", color: "#22c55e", title: "Pick up where you left off", body: "Leave the scorer to order or chat, then tap Resume. Use End game when you want to release the lane." },
+  { icon: "compass", color: "#a855f7", title: "Five places to go", body: "Home, Play, League, Order, and You. Find Trivia in Play, teams in League, and staff tools in You." },
   { icon: "flag", color: "#ef4444", title: "Report & block", body: "Report any post, comment, or profile. Block users to hide their content." },
   { icon: "sparkles", color: "#a855f7", title: "Weekly Pick'em", body: "Predict Monday's top team before games start. Predictors leaderboard included." },
   { icon: "trophy", color: "#f59e0b", title: "Hall of Fame", body: "All-time league records — highest game, hundo streaks, and more." },
@@ -25,7 +28,8 @@ export function WhatsNewSheet() {
 
   useEffect(() => {
     AsyncStorage.getItem(KEY).then((seen) => {
-      if (seen !== WHATS_NEW_VERSION) setVisible(true);
+      if (seen && seen !== WHATS_NEW_VERSION) setVisible(true);
+      else if (!seen) void AsyncStorage.setItem(KEY, WHATS_NEW_VERSION).catch(() => {});
     }).catch(() => {});
   }, []);
 

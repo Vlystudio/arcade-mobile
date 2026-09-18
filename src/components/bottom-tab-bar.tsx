@@ -13,7 +13,6 @@ import Animated, {
 } from "react-native-reanimated";
 import { Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAdmin } from "../context/admin-context";
 import { useAuth } from "../context/auth-context";
 import { supabase } from "../../lib/supabase";
 
@@ -25,20 +24,18 @@ type Tab = {
 };
 
 const BASE_TABS: Tab[] = [
-  { label: "Feed",     icon: "home-outline",            iconActive: "home",            route: "/" },
-  { label: "Games",    icon: "game-controller-outline", iconActive: "game-controller", route: "/games" },
-  { label: "Trivia",   icon: "help-circle-outline",     iconActive: "help-circle",     route: "/trivia" },
-  { label: "Teams",    icon: "people-outline",          iconActive: "people",          route: "/teams" },
-  { label: "Food",     icon: "restaurant-outline",      iconActive: "restaurant",      route: "/food" },
-  { label: "Profile",  icon: "person-outline",          iconActive: "person",          route: "/profile" },
+  { label: "Home", icon: "home-outline", iconActive: "home", route: "/" },
+  { label: "Play", icon: "game-controller-outline", iconActive: "game-controller", route: "/games" },
+  { label: "League", icon: "people-outline", iconActive: "people", route: "/leagues" },
+  { label: "Order", icon: "restaurant-outline", iconActive: "restaurant", route: "/food" },
+  { label: "You", icon: "person-outline", iconActive: "person", route: "/profile" },
 ];
-
-const ADMIN_TAB: Tab = {
-  label: "Admin",
-  icon: "shield-outline",
-  iconActive: "shield",
-  route: "/admin",
-};
+function tabRoute(path: string) {
+  if (["/teams", "/leagues", "/skeeball-schedule"].includes(path)) return "/leagues";
+  if (["/games", "/trivia", "/tournaments", "/leaderboard", "/pool"].includes(path)) return "/games";
+  if (["/food", "/food-cart"].includes(path)) return "/food";
+  return path;
+}
 
 const SPRING_CONFIG = { damping: 24, stiffness: 260, mass: 0.65, overshootClamping: true };
 let lastTabNavigation: { from: string; to: string } | undefined;
@@ -108,7 +105,6 @@ export function invalidateTabBadges() {
 export default function BottomTabBar() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { isAdmin } = useAdmin();
   const { user } = useAuth();
   const userId = user?.id;
   const { width: windowWidth } = useWindowDimensions();
@@ -153,19 +149,17 @@ export default function BottomTabBar() {
     return () => { badgeListeners.delete(listener); };
   }, [userId, pathname]);
 
-  const tabs: Tab[] = isAdmin
-    ? [...BASE_TABS.slice(0, BASE_TABS.length - 1), ADMIN_TAB, BASE_TABS[BASE_TABS.length - 1]]
-    : BASE_TABS;
+  const tabs = BASE_TABS;
 
   const isWideWeb = Platform.OS === "web" && windowWidth >= 1100;
   // Monday = league night: pulse a LIVE dot on the Teams tab
   const isLeagueNight = new Date().getDay() === 1;
 
-  const activeIndex = tabs.findIndex((t) => t.route === pathname);
+  const activeIndex = tabs.findIndex((t) => t.route === tabRoute(pathname));
   const reducedMotion = useReducedMotion();
   const [barWidth, setBarWidth] = useState(0);
   const [entryRoute] = useState(() => lastTabNavigation?.to === pathname ? lastTabNavigation.from : pathname);
-  const entryIndex = tabs.findIndex(t => t.route === entryRoute);
+  const entryIndex = tabs.findIndex(t => t.route === tabRoute(entryRoute));
   const previousWidth = useRef(0);
   const tabWidth = barWidth / tabs.length;
 
@@ -211,7 +205,7 @@ export default function BottomTabBar() {
         </View>
       );
     }
-    return <Ionicons name={active ? "person" : "person-outline"} size={size} color={active ? "#fff" : "#5a5a5a"} />;
+    return <Ionicons name={active ? "person" : "person-outline"} size={size} color={active ? "#fff" : "#a3adb8"} />;
   }
 
   // ── Desktop web: fixed left rail instead of a bottom bar ──
@@ -223,10 +217,10 @@ export default function BottomTabBar() {
           <Text style={styles.railBrandText}>Arcade</Text>
         </View>
         {tabs.map((tab) => {
-          const active = pathname === tab.route;
+          const active = tabRoute(pathname) === tab.route;
           const isAdminTab = tab.route === "/admin";
           const isProfileTab = tab.route === "/profile";
-          const badge = badges[tab.route as keyof Badges] ?? 0;
+          const badge = badges[(tab.route === "/leagues" ? "/teams" : tab.route) as keyof Badges] ?? 0;
           return (
             <Pressable
               key={tab.route}
@@ -250,7 +244,7 @@ export default function BottomTabBar() {
                     color={active ? (isAdminTab ? "#f59e0b" : "#fff") : "#777"}
                   />
                 )}
-                {tab.route === "/teams" && isLeagueNight && <View style={styles.liveDot} />}
+                {tab.route === "/leagues" && isLeagueNight && <View style={styles.liveDot} />}
                 {badge > 0 && (
                   <View style={styles.badge}>
                     <Text style={styles.badgeText}>{badge > 9 ? "9+" : badge}</Text>
@@ -289,10 +283,10 @@ export default function BottomTabBar() {
       )}
 
       {tabs.map((tab) => {
-        const active = pathname === tab.route;
+        const active = tabRoute(pathname) === tab.route;
         const isAdminTab = tab.route === "/admin";
         const isProfileTab = tab.route === "/profile";
-        const badge = badges[tab.route as keyof Badges] ?? 0;
+        const badge = badges[(tab.route === "/leagues" ? "/teams" : tab.route) as keyof Badges] ?? 0;
 
         return (
           <Pressable
@@ -310,16 +304,17 @@ export default function BottomTabBar() {
                 <Ionicons
                   name={active ? tab.iconActive : tab.icon}
                   size={24}
-                  color={active ? (isAdminTab ? "#f59e0b" : "#fff") : "#5a5a5a"}
+                  color={active ? (isAdminTab ? "#f59e0b" : "#fff") : "#a3adb8"}
                 />
               )}
-              {tab.route === "/teams" && isLeagueNight && <View style={styles.liveDot} />}
+              {tab.route === "/leagues" && isLeagueNight && <View style={styles.liveDot} />}
                 {badge > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{badge > 9 ? "9+" : badge}</Text>
                 </View>
               )}
             </View>
+            <Text style={{ color: active ? "#fff" : "#a3adb8", fontSize: 11, fontWeight: "700", marginTop: 4 }}>{tab.label}</Text>
           </Pressable>
         );
       })}
@@ -417,6 +412,6 @@ const styles = StyleSheet.create({
   },
   railItemActive: { backgroundColor: "#101010" },
   railItemHover: { backgroundColor: "#0d0d0d" },
-  railLabel: { color: "#888", fontSize: 14.5, fontWeight: "700" },
+  railLabel: { color: "#a3adb8", fontSize: 14.5, fontWeight: "700" },
   railLabelActive: { color: "#fff" },
 });

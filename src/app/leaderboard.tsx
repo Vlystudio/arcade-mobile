@@ -1,6 +1,6 @@
 import { FlashList } from "@shopify/flash-list";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import Animated, {
   useSharedValue,
@@ -56,6 +56,7 @@ const GAME_TYPE_COLORS: Record<string, string> = {
 };
 
 export default function LeaderboardScreen() {
+  const { gameId: requestedGame } = useLocalSearchParams<{ gameId?: string }>();
   const { user, loading: authLoading } = useRequireAuth();
   const [boardTab, setBoardTab] = useState<BoardTab>("players");
   const [entries, setEntries] = useState<LeaderEntry[]>([]);
@@ -150,6 +151,13 @@ export default function LeaderboardScreen() {
   // Default the board to the most-played game (falls back to All Games
   // if there are no approved scores yet). Users can still switch games.
   async function loadDefaultLeaderboard() {
+    if (requestedGame) {
+      const { data: requested } = await supabase.from("games").select("id, name").eq("id", requestedGame).maybeSingle();
+      if (requested) {
+        setSelectedGameId(requested.id); setSelectedGameName(requested.name);
+        await loadLeaderboard(timeFilter, requested.id); return;
+      }
+    }
     const { data } = await supabase.rpc("rpc_most_played_game");
     const g = data as { id: string; name: string; type: string } | null;
     if (g && g.id) {
@@ -167,7 +175,7 @@ export default function LeaderboardScreen() {
       loadDefaultLeaderboard();
       loadTeamScores();
     }
-  }, [user]);
+  }, [user, requestedGame]);
 
   async function switchTimeFilter(tf: TimeFilter) {
     setTimeFilter(tf);

@@ -3,7 +3,7 @@ import { PressableScale as Pressable } from "../components/pressable-scale";
 import { Image } from "expo-image";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   RefreshControl,
@@ -21,6 +21,7 @@ import { useLocation } from "../context/location-context";
 import { useAuth } from "../context/auth-context";
 import { fetchSquareMenu } from "../../lib/square-food";
 import { supabase } from "../../lib/supabase";
+import { prepareMenu } from "../../lib/experience";
 
 type MenuItem = {
   id: string;
@@ -44,6 +45,7 @@ const CATEGORIES = [
   { key: "pizza", label: "Pizza", icon: "pizza-outline" },
   { key: "drinks", label: "Drinks", icon: "beer-outline" },
   { key: "desserts", label: "Desserts", icon: "ice-cream-outline" },
+  { key: "menu", label: "More from the kitchen", icon: "restaurant-outline" },
 ] as const;
 
 const CATEGORY_LABELS: Record<string, string> = Object.fromEntries(CATEGORIES.map((category) => [category.key, category.label]));
@@ -59,7 +61,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 export default function FoodScreen() {
   const { loading: authLoading } = useAuth();
-  const { addItem, itemCount } = useCart();
+  const { addItem, itemCount, total } = useCart();
   const { location, isVinyl } = useLocation();
 
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
@@ -70,46 +72,41 @@ export default function FoodScreen() {
   const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
   const [addedId, setAddedId] = useState<string | null>(null);
   const [locSwitcherVisible, setLocSwitcherVisible] = useState(false);
+  const [menuError, setMenuError] = useState(false);
+  const [catalogReady, setCatalogReady] = useState(false);
+  const request = useRef(0);
+  const locationSlug = location?.slug;
 
-  async function loadMenu() {
-    if (location) {
-      try {
-        const squareMenu = await fetchSquareMenu(location.slug);
-        if (squareMenu.configured && squareMenu.items.length > 0) {
-          setMenuItems(squareMenu.items);
-          setLoading(false);
-          setRefreshing(false);
-          return;
-        }
-      } catch (squareError) {
-        console.warn("[food] Square menu unavailable, falling back to Supabase.", squareError);
-      }
-    }
-
-    let query = supabase
+  const loadMenu = useCallback(async () => {
+    const id = ++request.current;
+    if (!locationSlug) { setMenuItems([]); setLoading(false); return; }
+    setLoading(true);
+    setMenuError(false);
+    const query = supabase
       .from("menu_items")
       .select("id, name, description, price, category, ingredients, photo_url, available")
       .eq("available", true)
       .order("category")
-      .order("name");
-
-    if (location) {
-      query = query.or(`location_slug.eq.${location.slug},location_slug.is.null`);
-    }
-
-    const { data, error } = await query;
-    if (!error) setMenuItems(data ?? []);
+      .order("name")
+      .or(`location_slug.eq.${locationSlug},location_slug.is.null`);
+    const [square, fallback] = await Promise.allSettled([fetchSquareMenu(locationSlug), query]);
+    if (request.current !== id) return;
+    const reference = fallback.status === "fulfilled" && !fallback.value.error ? fallback.value.data ?? [] : [];
+    const squareReady = square.status === "fulfilled" && square.value.configured;
+    setCatalogReady(squareReady);
+    setMenuError(!squareReady && (fallback.status === "rejected" || !!fallback.value.error));
+    setMenuItems(prepareMenu(squareReady ? square.value.items.filter(item => item.available) : reference, reference));
     setLoading(false);
     setRefreshing(false);
-  }
-
-  useEffect(() => { loadMenu(); }, [location]);
-  useFocusEffect(useCallback(() => { loadMenu(); }, [location]));
+  }, [locationSlug]);
+  useFocusEffect(useCallback(() => { void loadMenu(); return () => { request.current += 1; }; }, [loadMenu]));
 
   useEffect(() => {
-    if (locSwitcherVisible) setLocSwitcherVisible(false);
+    setLocSwitcherVisible(false);
+    setSelectedItem(null);
+    setSearchText("");
     setActiveCategory("all");
-  }, [location]);
+  }, [locationSlug]);
 
   function handleAddToCart(item: MenuItem) {
     addItem({
@@ -211,13 +208,14 @@ export default function FoodScreen() {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search menu…"
-                placeholderTextColor="#555"
+                placeholderTextColor="#9ca3af"
+                accessibilityLabel="Search menu"
                 value={searchText}
                 onChangeText={setSearchText}
                 returnKeyType="search"
               />
               {searchText.length > 0 && (
-                <Pressable onPress={() => setSearchText("")}>
+                <Pressable accessibilityLabel="Clear search" style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }} onPress={() => setSearchText("")}>
                   <Ionicons name="close-circle" size={16} color="#444" />
                 </Pressable>
               )}
@@ -231,6 +229,8 @@ export default function FoodScreen() {
                 return (
                   <Pressable
                     key={cat.key}
+                    accessibilityRole="tab"
+                    aria-selected={active}
                     style={[styles.pill, active && { backgroundColor: color + "22", borderColor: color + "55" }]}
                     onPress={() => setActiveCategory(cat.key)}
                   >
@@ -242,17 +242,18 @@ export default function FoodScreen() {
             </ScrollView>
 
             {/* Menu */}
+            {!loading && !catalogReady && menuItems.length > 0 && <Text style={{ color: "#fcd34d", lineHeight: 20, marginBottom: 16 }}>Menu preview · Online ordering is temporarily unavailable. Please order with staff.</Text>}
             {loading ? (
               <ActivityIndicator color="#06b6d4" style={{ marginTop: 60 }} />
             ) : filtered.length === 0 ? (
               <View style={styles.emptyState}>
                 <Ionicons name="restaurant-outline" size={48} color="#2a2a2a" style={{ marginBottom: 12 }} />
                 <Text style={styles.emptyTitle}>
-                  {menuItems.length === 0 ? "Menu coming soon" : "No items found"}
+                  {menuError ? "We couldn’t load the menu" : menuItems.length === 0 ? "Menu coming soon" : "No items found"}
                 </Text>
                 <Text style={styles.emptySub}>
                   {menuItems.length === 0
-                    ? "Add items in Supabase to get started."
+                    ? "Pull to refresh, or ask a staff member for today’s menu."
                     : "Try a different category or search."}
                 </Text>
               </View>
@@ -286,6 +287,10 @@ export default function FoodScreen() {
             )}
           </View>
         </ScrollView>
+        {itemCount > 0 && <Pressable style={styles.cartSummary} accessibilityLabel={`View cart, ${itemCount} items, subtotal $${total.toFixed(2)}`} onPress={() => router.push("/food-cart")}>
+          <View><Text style={styles.cartSummaryText}>{itemCount} {itemCount === 1 ? "item" : "items"} · View cart</Text><Text style={styles.cartSummaryNote}>Taxes, fees and tip at checkout</Text></View>
+          <Text style={styles.cartSummaryText}>${total.toFixed(2)}</Text>
+        </Pressable>}
       </SafeAreaView>
       <BottomTabBar />
 
@@ -397,7 +402,7 @@ function MenuCard({ item, justAdded, onPress, onAdd }: {
         </View>
       )}
       <View style={styles.cardBody}>
-        <Text style={styles.cardName} numberOfLines={1}>{item.name}</Text>
+        <Text style={styles.cardName} numberOfLines={2}>{item.name}</Text>
         {item.description && (
           <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
         )}
@@ -416,6 +421,9 @@ function MenuCard({ item, justAdded, onPress, onAdd }: {
 }
 
 const styles = StyleSheet.create({
+  cartSummary: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: "#22d3ee", borderRadius: 14, marginHorizontal: 16, marginVertical: 10, padding: 14, minHeight: 58, gap: 12 },
+  cartSummaryText: { color: "#001016", fontWeight: "800", fontSize: 15 },
+  cartSummaryNote: { color: "#16404a", fontSize: 11, marginTop: 3 },
   root: { flex: 1, backgroundColor: "#000" },
   safe: { flex: 1 },
   loader: { flex: 1, backgroundColor: "#000", alignItems: "center", justifyContent: "center" },
@@ -423,7 +431,7 @@ const styles = StyleSheet.create({
 
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 16 },
   pageTitle: { color: "#fff", fontSize: 32, fontWeight: "900", letterSpacing: -0.5, marginBottom: 2 },
-  pageSub: { color: "#8a8a8a", fontSize: 14 },
+  pageSub: { color: "#a3adb8", fontSize: 14 },
   cartBtn: {
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: "#111", alignItems: "center", justifyContent: "center",
@@ -445,7 +453,7 @@ const styles = StyleSheet.create({
     alignItems: "center", justifyContent: "center", marginBottom: 8,
   },
   gateTitle: { color: "#fff", fontSize: 22, fontWeight: "900", letterSpacing: -0.3, marginBottom: 4 },
-  gateSub: { color: "#8a8a8a", fontSize: 14, lineHeight: 20, marginBottom: 20 },
+  gateSub: { color: "#a3adb8", fontSize: 14, lineHeight: 20, marginBottom: 20 },
 
   // Location banner
   locBanner: {
@@ -454,7 +462,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, marginBottom: 16,
   },
   locBannerName: { fontSize: 13, fontWeight: "800" },
-  locBannerChange: { color: "#8a8a8a", fontSize: 12, fontWeight: "600" },
+  locBannerChange: { color: "#a3adb8", fontSize: 12, fontWeight: "600" },
 
   // Location switcher modal
   locModalSheet: {
@@ -463,12 +471,12 @@ const styles = StyleSheet.create({
   },
   locModalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: "#2a2a2a", alignSelf: "center", marginBottom: 24 },
   locModalTitle: { color: "#fff", fontSize: 18, fontWeight: "900", letterSpacing: -0.3, marginBottom: 4 },
-  locModalSub: { color: "#8a8a8a", fontSize: 13, marginBottom: 20 },
+  locModalSub: { color: "#a3adb8", fontSize: 13, marginBottom: 20 },
   locModalDoneBtn: {
     backgroundColor: "#1a1a1a", borderRadius: 16, paddingVertical: 16,
     alignItems: "center", marginTop: 8, borderWidth: 1, borderColor: "#222",
   },
-  locModalDoneBtnText: { color: "#888", fontWeight: "700", fontSize: 15 },
+  locModalDoneBtnText: { color: "#a3adb8", fontWeight: "700", fontSize: 15 },
 
   searchWrap: {
     flexDirection: "row", alignItems: "center", gap: 10,
@@ -480,13 +488,13 @@ const styles = StyleSheet.create({
 
   pillsScroll: { marginBottom: 20 },
   pillsContent: { gap: 8, paddingRight: 4 },
-  pill: {
+  pill: { minHeight: 44,
     flexDirection: "row", alignItems: "center", gap: 6,
     backgroundColor: "#0d0d0d", borderRadius: 20,
     paddingHorizontal: 14, paddingVertical: 8,
     borderWidth: 1, borderColor: "#1a1a1a",
   },
-  pillText: { color: "#8a8a8a", fontSize: 13, fontWeight: "600" },
+  pillText: { color: "#a3adb8", fontSize: 13, fontWeight: "600" },
 
   catLabelRow: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12, marginTop: 8 },
   catLabelDot: { width: 6, height: 6, borderRadius: 3 },
@@ -505,17 +513,17 @@ const styles = StyleSheet.create({
   cardDetails: { flex: 1, flexDirection: "row", alignItems: "center", gap: 14 },
   cardBody: { flex: 1 },
   cardName: { color: "#fff", fontSize: 15, fontWeight: "800", marginBottom: 3 },
-  cardDesc: { color: "#8a8a8a", fontSize: 13, lineHeight: 18, marginBottom: 6 },
+  cardDesc: { color: "#a3adb8", fontSize: 13, lineHeight: 18, marginBottom: 6 },
   cardPrice: { color: "#06b6d4", fontSize: 15, fontWeight: "900" },
   addBtn: {
-    width: 38, height: 38, borderRadius: 19,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: "#06b6d4", alignItems: "center", justifyContent: "center",
   },
   addBtnDone: { backgroundColor: "#22c55e" },
 
   emptyState: { alignItems: "center", paddingTop: 60, paddingBottom: 40 },
   emptyTitle: { color: "#fff", fontSize: 18, fontWeight: "900", marginBottom: 8 },
-  emptySub: { color: "#777", fontSize: 14, textAlign: "center", lineHeight: 20 },
+  emptySub: { color: "#a3adb8", fontSize: 14, textAlign: "center", lineHeight: 20 },
 
   // Item detail sheet
   sheet: {
@@ -536,9 +544,9 @@ const styles = StyleSheet.create({
   sheetCatText: { fontSize: 11, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8 },
   sheetName: { color: "#fff", fontSize: 22, fontWeight: "900", letterSpacing: -0.3 },
   sheetPrice: { color: "#06b6d4", fontSize: 24, fontWeight: "900" },
-  sheetDesc: { color: "#888", fontSize: 14, lineHeight: 21, marginBottom: 20 },
+  sheetDesc: { color: "#a3adb8", fontSize: 14, lineHeight: 21, marginBottom: 20 },
   sheetSectionLabel: {
-    color: "#777", fontSize: 11, fontWeight: "800",
+    color: "#a3adb8", fontSize: 11, fontWeight: "800",
     textTransform: "uppercase", letterSpacing: 1, marginBottom: 10,
   },
   ingredientsList: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 24 },
@@ -547,7 +555,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 6,
     borderWidth: 1, borderColor: "#2a2a2a",
   },
-  ingredientText: { color: "#888", fontSize: 13 },
+  ingredientText: { color: "#a3adb8", fontSize: 13 },
   addToCartBtn: {
     backgroundColor: "#06b6d4", borderRadius: 18,
     flexDirection: "row", alignItems: "center", justifyContent: "center",
