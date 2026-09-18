@@ -16,6 +16,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
 import { useLocation } from "../context/location-context";
 import { useRequireAuth } from "../hooks/use-require-auth";
+import { useActiveGame } from "../context/active-game-context";
+import { PlayButton, PLAY, playStyles } from "../components/play-ui";
 import { supabase } from "../../lib/supabase";
 
 type Game = { id: string; name: string; type: string; description: string | null; machines_count: number };
@@ -25,6 +27,7 @@ type Lane = { id: string; lane_number: number; status: string };
 export default function GamesScreen() {
   const { user, loading: authLoading } = useRequireAuth();
   const { isVinyl } = useLocation();
+  const { draft } = useActiveGame();
   const [games, setGames] = useState<Game[]>([]);
   const [bestScores, setBestScores] = useState<Record<string, BestScore>>({});
   const [loading, setLoading] = useState(true);
@@ -109,25 +112,15 @@ export default function GamesScreen() {
             <Text style={styles.pageSub}>Track your scores across every machine</Text>
           </View>
 
-          {/* Stats strip */}
-          <View style={styles.summaryStrip}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{games.length}</Text>
-              <Text style={styles.summaryLabel}>Machines</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{Object.keys(bestScores).length}</Text>
-              <Text style={styles.summaryLabel}>Played</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{Object.values(bestScores).reduce((a, b) => a + b.count, 0)}</Text>
-              <Text style={styles.summaryLabel}>Total Plays</Text>
-            </View>
+          <View style={[playStyles.card, { marginBottom: 20, backgroundColor: "#10262e" }]}>
+            <Text style={[playStyles.label, { color: PLAY.accent }]}>SKEE-BALL · YOUR NEXT GAME</Text>
+            <Text style={playStyles.title}>{draft ? "Your game is waiting." : "Your group. One phone."}</Text>
+            <Text style={playStyles.subtitle}>{draft ? `Lane ${draft.lane} · ${Object.values(draft.playerBalls).reduce((sum, balls) => sum + balls.length, 0)}/9 balls recorded` : "Start a league game or keep it casual with guest names."}</Text>
+            <PlayButton label={draft ? "Resume game" : "Start playing"} onPress={() => draft ? router.push({ pathname: "/skeeball-tracker", params: { teamId: draft.teamId, sessionId: draft.sessionId } }) : router.push("/start-game")} />
+            <Pressable onPress={() => router.push("/practice")} style={{ minHeight: 44, justifyContent: "center" }}><Text style={{ color: PLAY.muted, fontSize: 14 }}>Practice games &amp; history →</Text></Pressable>
           </View>
 
-          {user && (skeeballGame ?? games[0]) && <PersonalGoal game={(skeeballGame ?? games[0])!} best={bestScores[(skeeballGame ?? games[0])!.id]?.score} userId={user.id} />}
+          {user && (skeeballGame ?? games[0]) && <PersonalGoal compact game={(skeeballGame ?? games[0])!} best={bestScores[(skeeballGame ?? games[0])!.id]?.score} userId={user.id} />}
 
           {/* Pool Hall — Vinyl Hall only */}
           {isVinyl && (
@@ -158,28 +151,20 @@ export default function GamesScreen() {
               {/* ─── Skee-Ball ─── */}
               {skeeballGame && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionLabel}>SKEE-BALL</Text>
+                  <Text style={styles.sectionLabel}>ALREADY FINISHED A GAME?</Text>
                   <Pressable style={styles.skeeCard} onPress={() => openLaneModal(skeeballGame)}>
                     <View style={styles.skeeLeft}>
                       <View style={styles.skeeIconWrap}>
                         <Ionicons name={"bowling-ball-outline" as any} size={30} color="#06b6d4" />
                       </View>
                       <View>
-                        <Text style={styles.skeeName}>Skee-Ball</Text>
-                        <Text style={styles.skeeLaneCount}>{skeeballGame.machines_count} lanes</Text>
+                        <Text style={styles.skeeName}>Log a final score</Text>
+                        <Text style={styles.skeeLaneCount}>Skee-Ball · select your lane</Text>
                       </View>
                     </View>
                     <View style={styles.skeeRight}>
-                      {bestScores[skeeballGame.id] && (
-                        <View style={styles.skeeStat}>
-                          <Text style={styles.skeeStatLabel}>YOUR BEST</Text>
-                          <Text style={styles.skeeStatValue}>
-                            {bestScores[skeeballGame.id].score.toLocaleString()}
-                          </Text>
-                        </View>
-                      )}
                       <View style={styles.skeeCta}>
-                        <Text style={styles.skeeCtaText}>Choose Lane</Text>
+                        <Text style={styles.skeeCtaText}>Choose</Text>
                         <Ionicons name="arrow-forward" size={14} color="#000" />
                       </View>
                     </View>
@@ -297,8 +282,8 @@ export default function GamesScreen() {
       {/* ── Lane picker modal ── */}
       <MotionSheet visible={!!laneGame} onClose={() => setLaneGame(null)} style={styles.modalSheet} accessibilityLabel="Choose a Skee-Ball lane">
             <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Skee-Ball Lanes</Text>
-            <Text style={styles.modalSub}>View top scores or submit a new score for any lane</Text>
+            <Text style={styles.modalTitle}>Log a finished score</Text>
+            <Text style={styles.modalSub}>Choose the lane you played on. For a live group game, use Start playing.</Text>
 
             {lanesLoading ? (
               <ActivityIndicator color="#06b6d4" style={{ marginVertical: 24 }} />
@@ -307,17 +292,17 @@ export default function GamesScreen() {
             ) : (
               <View style={styles.lanesGrid}>
                 {lanes.map((lane) => {
-                  const occupied = lane.status === "occupied";
                   return (
                     <View key={lane.id} style={styles.laneCard}>
                       <View style={styles.laneTop}>
-                        <Text style={styles.laneNumber}>{lane.lane_number}</Text>
-                        <View style={[styles.laneStatusDot, { backgroundColor: occupied ? "#ef4444" : "#22c55e" }]} />
+                        <Text style={styles.laneNumber}>Lane {lane.lane_number}</Text>
                       </View>
-                      <Text style={[styles.laneStatusText, { color: occupied ? "#ef4444" : "#22c55e" }]}>
-                        {occupied ? "Occupied" : "Open"}
-                      </Text>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Log a score for lane ${lane.lane_number}`} style={styles.laneSubmitBtn} onPress={() => { setLaneGame(null); submitScore(laneGame!, lane); }}>
+                        <Ionicons name="add" size={16} color={PLAY.background} />
+                        <Text style={styles.laneSubmitBtnText}>Log score</Text>
+                      </Pressable>
                       <Pressable
+                        accessibilityRole="button"
                         accessibilityLabel={`View top scores for lane ${lane.lane_number}`}
                         style={styles.laneScoresBtn}
                         onPress={() => {
@@ -327,17 +312,6 @@ export default function GamesScreen() {
                       >
                         <Ionicons name="trophy-outline" size={11} color="#06b6d4" />
                         <Text style={styles.laneScoresBtnText}>Top Scores</Text>
-                      </Pressable>
-                      <Pressable
-                        accessibilityLabel={`Submit a score for lane ${lane.lane_number}`}
-                        style={styles.laneSubmitBtn}
-                        onPress={() => {
-                          setLaneGame(null);
-                          submitScore(laneGame!, lane);
-                        }}
-                      >
-                        <Ionicons name="add" size={11} color="#fff" />
-                        <Text style={styles.laneSubmitBtnText}>Submit Score</Text>
                       </Pressable>
                     </View>
                   );
@@ -416,7 +390,7 @@ function gameIcon(type: string): React.ComponentProps<typeof Ionicons>["name"] {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#0a0a0a" },
+  root: { flex: 1, backgroundColor: PLAY.background },
   safe: { flex: 1 },
   loader: { flex: 1, backgroundColor: "#0a0a0a", alignItems: "center", justifyContent: "center" },
   content: { paddingHorizontal: 18, paddingTop: 10, paddingBottom: 28 },
@@ -556,14 +530,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6,
     borderWidth: 1, borderColor: "rgba(6,182,212,0.2)", width: "100%", justifyContent: "center",
   },
-  laneScoresBtnText: { color: "#06b6d4", fontSize: 11, fontWeight: "700" },
+  laneScoresBtnText: { color: PLAY.accent, fontSize: 13, fontWeight: "700" },
   laneSubmitBtn: { minHeight: 44,
     flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: "#1e1e1e", borderRadius: 10,
+    backgroundColor: PLAY.accent, borderRadius: 10,
     paddingHorizontal: 10, paddingVertical: 6,
     borderWidth: 1, borderColor: "#2a2a2a", width: "100%", justifyContent: "center",
   },
-  laneSubmitBtnText: { color: "#ccc", fontSize: 11, fontWeight: "700" },
+  laneSubmitBtnText: { color: PLAY.background, fontSize: 14, fontWeight: "800" },
 
   // Group game list (inside arcade/pinball modal)
   groupModalTop: {

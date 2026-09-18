@@ -1,11 +1,12 @@
 import { useFonts } from "expo-font";
 import { useEffect, useRef, useState } from "react";
 import { Text, type StyleProp, type TextStyle } from "react-native";
+import { useReducedMotion } from "../context/motion-context";
 
 /**
  * Arcade-style numerals for scores. Uses Chakra Petch Bold (OFL) once
  * loaded; falls back to the system font seamlessly. `animate` counts the
- * value up on mount/changes (450ms) for that ticker feel.
+ * value up on mount/changes (180ms), respecting reduced motion.
  */
 export function ScoreText({
   value,
@@ -23,16 +24,17 @@ export function ScoreText({
   const [fontsLoaded] = useFonts({
     "ChakraPetch-Bold": require("../../assets/fonts/ChakraPetch-Bold.ttf"),
   });
-  const [display, setDisplay] = useState(animate ? 0 : value);
+  const reducedMotion = useReducedMotion();
+  const [display, setDisplay] = useState(animate && !reducedMotion ? 0 : value);
   const raf = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (!animate) { setDisplay(value); return; }
+    if (!animate || reducedMotion) { setDisplay(value); return; }
     const start = display;
     const diff = value - start;
     if (diff === 0) return;
     const t0 = Date.now();
-    const DURATION = 450;
+    const DURATION = 180;
     if (raf.current) clearInterval(raf.current);
     raf.current = setInterval(() => {
       const p = Math.min((Date.now() - t0) / DURATION, 1);
@@ -42,7 +44,7 @@ export function ScoreText({
     }, 16);
     return () => { if (raf.current) clearInterval(raf.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, animate]);
+  }, [value, animate, reducedMotion]);
 
   return (
     <Text style={[fontsLoaded && { fontFamily: "ChakraPetch-Bold" }, style]}>

@@ -24,11 +24,20 @@ test('group scoring enforces a single phone, safe drafts and rematches', async t
   for(let n=1;n<=3;n++) await db.query('INSERT INTO skeeball_session_players VALUES($1,$2,$3)',[id(40),id(n),n]);
   await db.exec(file('supabase/migrations/20260918152047_project_review_security.sql'));
   await db.exec(file('supabase/migrations/20260918181426_skeeball_group_handoff.sql'));
+  await db.exec(file('supabase/migrations/20260918191528_skeeball_quality_of_life.sql'));
   const as = async n => { await db.exec('RESET ROLE'); await db.query("SELECT set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:id(n),role:'authenticated',aal:'aal1'})]); await db.exec('SET ROLE authenticated'); };
   const scalar = async (sql,args=[]) => Object.values((await db.query(sql,args)).rows[0])[0];
   const a='a'.repeat(64), b='b'.repeat(64);
   const balls=JSON.parse(JSON.stringify(groupSlots([id(1),id(2),id(3)]))).map(s=>({...s,score:40}));
   const control = (key,action='read',payload=null,revision=null) => scalar('SELECT rpc_skeeball_group_control($1,$2,$3,$4,$5)',[id(40),key,action,payload&&JSON.stringify(payload),revision]);
+  const transfer = (key,action,requestId=null) => scalar('SELECT rpc_skeeball_group_transfer($1,$2,$3,$4)',[id(40),key,action,requestId]);
+  await t.test('remembered lineups validate membership and apply atomically before scoring',async()=>{
+   await as(1);
+   await assert.rejects(scalar('SELECT rpc_skeeball_apply_recent_lineup($1,$2)',[id(40),[id(1),id(4)]]));
+   assert.equal((await scalar('SELECT rpc_skeeball_apply_recent_lineup($1,$2)',[id(40),[id(2),id(1)]])).ok,true);
+   assert.deepEqual((await db.query('SELECT player_user_id FROM skeeball_session_players WHERE session_id=$1 ORDER BY shoot_position',[id(40)])).rows.map(r=>r.player_user_id),[id(2),id(1)]);
+   await scalar('SELECT rpc_skeeball_apply_recent_lineup($1,$2)',[id(40),[id(1),id(2),id(3)]]);
+  });
   await t.test('outsiders cannot view, claim, or inspect the device key',async()=>{
    await as(4); await assert.rejects(control(a)); await assert.rejects(control(a,'claim'));
    await as(1); await assert.rejects(db.query('SELECT * FROM private.skeeball_scoring_controls'));
@@ -37,12 +46,44 @@ test('group scoring enforces a single phone, safe drafts and rematches', async t
   await t.test('first claim wins, including two phones signed into the same account',async()=>{
    await as(1); assert.equal((await control(a,'claim')).can_score,true);
    assert.equal((await control(b,'claim')).can_score,false);
+   await assert.rejects(scalar('SELECT rpc_skeeball_apply_recent_lineup($1,$2)',[id(40),[id(1),id(2)]]));
    await as(2); const viewer=await control(b,'claim');
    assert.equal(viewer.can_score,false); assert.equal(viewer.owner_id,id(1));
    assert.equal('device_hash' in viewer,false);
    await assert.rejects(control(b,'save',balls.slice(0,3),0));
    await assert.rejects(control(b,'submit',balls));
    await assert.rejects(db.query('SELECT rpc_skeeball_submit_balls($1,$2)',[id(40),JSON.stringify(balls)]));
+  });
+  await t.test('phone transfer requires current-owner approval and revokes the old phone',async()=>{
+   await as(4); await assert.rejects(transfer(b,'request'));
+   await as(2); const pending=await transfer(b,'request');
+   assert.equal(pending.transfer.is_requester,true); assert.equal(pending.can_score,false);
+   await assert.rejects(transfer(b,'approve',pending.transfer.id));
+   await as(3); const hidden=await control('c'.repeat(64)); assert.equal(hidden.transfer,null);
+   await assert.rejects(transfer('c'.repeat(64),'request'));
+   await as(1); assert.equal((await control(a)).transfer.name,'Player 2');
+   await assert.rejects(transfer(a,'approve',id(999)));
+   const handed=await transfer(a,'approve',pending.transfer.id); assert.equal(handed.can_score,false); assert.equal(handed.generation,1);
+   await assert.rejects(control(a,'save',balls.slice(0,1),handed.revision));
+   await assert.rejects(control(a,'submit',balls));
+   await as(2); const received=await control(b); assert.equal(received.can_score,true); assert.equal(received.generation,1);
+   assert.equal(received.balls.length,0);
+   const progress=await control(b,'save',balls.slice(0,2),received.revision);
+   await as(1); const returnRequest=await transfer(a,'request');
+   await as(2); await transfer(b,'approve',returnRequest.transfer.id);
+   await as(1); const returned=await control(a); assert.equal(returned.generation,2); assert.deepEqual(returned.balls,balls.slice(0,2));
+   // Leave the original revision-based draft test a fresh zero revision.
+   await db.exec('RESET ROLE'); await db.query("UPDATE private.skeeball_scoring_controls SET balls='[]',revision=0 WHERE session_id=$1",[id(40)]);
+  });
+  await t.test('expired or cancelled requests cannot later take over',async()=>{
+   await as(2); const pending=await transfer(b,'request');
+   await transfer(b,'cancel',pending.transfer.id);
+   await as(1); await assert.rejects(transfer(a,'approve',pending.transfer.id));
+   await as(2); const expired=await transfer(b,'request');
+   await db.exec('RESET ROLE'); await db.query("UPDATE private.skeeball_scoring_requests SET expires_at=now()-interval '1 second' WHERE session_id=$1",[id(40)]);
+   await as(1); assert.equal((await control(a)).transfer,null); await assert.rejects(transfer(a,'approve',expired.transfer.id));
+   await as(2); const fresh=await transfer(b,'request'); assert.notEqual(fresh.transfer.id,expired.transfer.id);
+   await as(1); await transfer(a,'decline',fresh.transfer.id);
   });
   await t.test('drafts validate order and revision, and allow correcting or undoing a handoff',async()=>{
    await as(1); const saved=await control(a,'save',balls.slice(0,3),0); assert.equal(saved.revision,1);
@@ -83,6 +124,18 @@ test('group scoring enforces a single phone, safe drafts and rematches', async t
    const lineup=(await db.query('SELECT player_user_id FROM skeeball_session_players WHERE session_id=$1 ORDER BY shoot_position',[next.session.id])).rows.map(x=>x.player_user_id);
    assert.deepEqual(lineup,[id(1),id(2),id(3)]);
    const nextState=await scalar('SELECT rpc_skeeball_group_control($1,$2)',[next.session.id,a]); assert.equal(nextState.can_score,true); assert.deepEqual(nextState.balls,[]);
+  });
+  await t.test('practice history is private, validated, and isolated from league scores',async()=>{
+   const game={version:1,id:id(60),players:[1,2,3].map(n=>({id:id(n),name:'Guest '+n})),balls,startedAt:1000,completedAt:2000};
+   await as(1); const official=await scalar('SELECT count(*) FROM scores');
+   await db.query('INSERT INTO skeeball_practice_games(user_id,id,game) VALUES($1,$2,$3)',[id(1),game.id,JSON.stringify(game)]);
+   assert.equal(await scalar('SELECT count(*) FROM skeeball_practice_games'),1);
+   await assert.rejects(db.query('INSERT INTO skeeball_practice_games(user_id,id,game) VALUES($1,$2,$3)',[id(2),game.id,JSON.stringify(game)]));
+   await assert.rejects(db.query('INSERT INTO skeeball_practice_games(user_id,id,game) VALUES($1,$2,$3)',[id(1),id(61),JSON.stringify({...game,id:id(61),balls:balls.slice(0,8)})]));
+   await as(2); assert.equal(await scalar('SELECT count(*) FROM skeeball_practice_games'),0);
+   await assert.rejects(db.query('UPDATE skeeball_practice_games SET user_id=$1',[id(2)]));
+   await db.exec('RESET ROLE; SET ROLE anon'); await assert.rejects(db.query('SELECT * FROM skeeball_practice_games'));
+   await as(1); assert.equal(await scalar('SELECT count(*) FROM scores'),official);
   });
  } finally { await db.close(); }
 });

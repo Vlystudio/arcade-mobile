@@ -3,12 +3,16 @@ import { Platform, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useActiveGame } from "../context/active-game-context";
 import { PressableScale } from "./pressable-scale";
+import { usePractice } from "../context/practice-context";
 
 export function ActiveGameBanner() {
   const { draft } = useActiveGame();
+  const { state: practice, storage: practiceStorage } = usePractice();
   const path = usePathname();
   const insets = useSafeAreaInsets();
-  if (!draft || ["/skeeball-tracker", "/scan-lane", "/team-detail"].includes(path)) return null;
+  if (["/skeeball-tracker", "/scan-lane", "/team-detail", "/practice", "/start-game"].includes(path)) return null;
+  if (!draft && practice.draft) return <PressableScale accessibilityLabel="Resume your practice game" style={[s.bar, { paddingTop: 12 + (Platform.OS === "web" ? 0 : insets.top) }]} onPress={() => router.push("/practice")}><View style={{ flex: 1 }}><Text style={s.title}>Practice in progress</Text><Text style={s.sub}>{practice.draft.balls.length}/9 balls · {practiceStorage === "saved" ? "saved on this device" : practiceStorage === "saving" ? "saving…" : "device save needs attention"}</Text></View><Text style={s.resume}>Resume →</Text></PressableScale>;
+  if (!draft) return null;
   const balls = Object.values(draft.playerBalls).reduce((n, b) => n + b.length, 0);
   return <PressableScale accessibilityLabel={`Resume game on lane ${draft.lane}, ${balls} of 9 balls entered`} style={[s.bar, { paddingTop: 12 + (Platform.OS === "web" ? 0 : insets.top) }]}
     onPress={() => router.push({ pathname: "/skeeball-tracker", params: { teamId: draft.teamId, teamName: draft.teamName, sessionId: draft.sessionId } })}>

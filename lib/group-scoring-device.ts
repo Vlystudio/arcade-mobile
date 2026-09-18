@@ -21,4 +21,6 @@ export function groupScoringDeviceKey(userId: string): Promise<string> {
 export type GroupControl = {
   ok: boolean; claimed: boolean; can_score: boolean; owner_id: string | null; owner_name: string | null;
   balls: import("./group-scoring").GroupBall[]; revision: number; status: string;
+  generation: number;
+  transfer?: { id: string; name: string; expires_at: string; is_requester: boolean } | null;
 };

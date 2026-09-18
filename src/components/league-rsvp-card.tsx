@@ -102,7 +102,7 @@ export function LeagueRsvpCard({ weekOf = nextLeagueMonday(), teamId }: { weekOf
               onPress={() => setStatus(o.key)}
               disabled={saving}
             >
-              <Ionicons name={o.icon} size={16} color={active ? o.color : "#777"} />
+              <Ionicons name={o.icon} size={16} color={active ? o.color : "#becbd3"} />
               <Text style={[s.optionText, active && { color: o.color }]}>{o.label}</Text>
             </Pressable>
           );
@@ -135,7 +135,7 @@ const s = StyleSheet.create({
     flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
     borderColor: "#262626", borderWidth: 1, borderRadius: 12, paddingVertical: 10, backgroundColor: "#0a0a0a",
   },
-  optionText: { color: "#9a9a9a", fontSize: 13, fontWeight: "800" },
+  optionText: { color: "#d1dce3", fontSize: 14, fontWeight: "700" },
   avatarRow: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 12 },
   avatarHint: { color: "#7a7a7a", fontSize: 12, fontWeight: "600", marginLeft: 6 },
 });

@@ -16,13 +16,14 @@ export function prepareMenu<T extends MenuRow>(items: T[], reference: MenuRow[] 
 
 export type GameDraft = {
   version: 1; userId: string; sessionId: string; teamId: string; teamName: string; lane: number;
-  playerBalls: Record<string, number[]>; lineup: string[]; updatedAt: number; previousBest: number | null;
+  playerBalls: Record<string, number[]>; lineup: string[]; updatedAt: number; previousBest: number | null; scoringGeneration?: number;
 };
 export function parseGameDraft(raw: string | null, userId: string): GameDraft | null {
   try {
     const d = JSON.parse(raw ?? "null");
     if (!d || d.version !== 1 || d.userId !== userId || typeof d.sessionId !== "string" || typeof d.teamId !== "string" || typeof d.teamName !== "string" || !Number.isInteger(d.lane) || d.lane < 1 || d.lane > 6 || !Number.isFinite(d.updatedAt) || !d.playerBalls || typeof d.playerBalls !== "object" || Array.isArray(d.playerBalls)) return null;
     if (!Array.isArray(d.lineup) || !d.lineup.length || d.lineup.length > 3 || d.lineup.some((id: unknown) => typeof id !== "string") || new Set(d.lineup).size !== d.lineup.length) return null;
+    if (d.scoringGeneration !== undefined && (!Number.isInteger(d.scoringGeneration) || d.scoringGeneration < 0)) return null;
     if (Object.keys(d.playerBalls).some(id => !d.lineup.includes(id))) return null;
     const scores = Object.values(d.playerBalls);
     if (scores.some(b => !Array.isArray(b) || b.length > 9 || b.some(n => ![0, 10, 20, 30, 40, 50, 100].includes(n))) || scores.reduce<number>((n, b) => n + (b as number[]).length, 0) > 9) return null;

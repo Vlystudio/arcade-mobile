@@ -41,7 +41,7 @@ export function pendingSubmissions(userId: string): Promise<PendingSubmit[]> {
 export async function pendingCount(userId: string): Promise<number> {
   return (await pendingSubmissions(userId)).length;
 }
-/** Use only after the server confirms that the player explicitly ended the game. */
+/** Use after the server confirms an explicit end or an approved scoring-phone transfer. */
 export function discardQueuedSubmission(userId: string, sessionId: string) {
   return exclusive(async () => write(userId, (await read(userId)).filter(item => item.session_id !== sessionId)));
 }

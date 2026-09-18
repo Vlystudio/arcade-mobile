@@ -6,12 +6,12 @@ import { nextScoreTarget } from "../../lib/experience";
 import { PressableScale } from "./pressable-scale";
 
 type Nearby = { id: string; user_id: string; score: number; rank: number; name: string };
-export function PersonalGoal({ game, best, userId }: { game: { id: string; name: string; type: string }; best?: number; userId: string }) {
+export function PersonalGoal({ game, best, userId, compact = false }: { game: { id: string; name: string; type: string }; best?: number; userId: string; compact?: boolean }) {
   const [nearby, setNearby] = useState<Nearby[]>([]);
   useEffect(() => {
     let alive = true;
     setNearby([]);
-    if (best == null) return;
+    if (best == null || compact) return;
     async function load() {
       const base = () => supabase.from("scores").select("id, user_id, score").eq("status", "approved").eq("game_id", game.id);
       const [above, below, own] = await Promise.all([
@@ -32,13 +32,13 @@ export function PersonalGoal({ game, best, userId }: { game: { id: string; name:
     }
     void load().catch(() => {});
     return () => { alive = false; };
-  }, [game.id, best, userId]);
+  }, [game.id, best, userId, compact]);
   const target = best == null ? null : nextScoreTarget(best, game.type);
-  return <View style={s.card}>
+  return <View style={[s.card, compact && { backgroundColor: "#131c23", borderWidth: 0, padding: 16, gap: 6 }]}>
     <Text style={s.eyebrow}>YOUR NEXT CHALLENGE · {game.name.toUpperCase()}</Text>
-    <Text style={s.title}>{best == null ? "Set your first personal best" : target == null ? "A perfect game. Can you repeat it?" : `Aim for ${target.toLocaleString()}`}</Text>
+    <Text style={[s.title, compact && { fontSize: 20 }]}>{best == null ? "Set your first personal best" : target == null ? "A perfect game. Can you repeat it?" : `Aim for ${target.toLocaleString()}`}</Text>
     <Text style={s.sub}>{best == null ? "Play a game and submit a score to start your progress." : `Your approved best: ${best.toLocaleString()}${target ? ` · ${Math.round(target - best).toLocaleString()} to your next target` : ""}`}</Text>
-    {nearby.length > 0 && <View style={s.board}>
+    {!compact && nearby.length > 0 && <View style={s.board}>
       <Text style={s.sub}>Nearby approved scores</Text>
       {nearby.map(row => <View key={row.id} style={[s.row, row.user_id === userId && s.you]}>
         <Text style={s.rank}>#{row.rank}</Text><Text numberOfLines={1} style={s.name}>{row.name}</Text><Text style={s.score}>{row.score.toLocaleString()}</Text>

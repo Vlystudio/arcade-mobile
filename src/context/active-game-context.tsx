@@ -7,7 +7,7 @@ import { useAuth } from "./auth-context";
 import { pendingSubmissions } from "../../lib/offline-queue";
 import { showToast } from "../components/toast";
 
-type ActiveGame = { draft: GameDraft | null; ready: boolean; save: (draft: GameDraft) => Promise<void>; clear: (sessionId: string) => Promise<void> };
+type ActiveGame = { draft: GameDraft | null; ready: boolean; storage: "saving" | "saved" | "error"; save: (draft: GameDraft) => Promise<void>; clear: (sessionId: string) => Promise<void> };
 const Context = createContext<ActiveGame | null>(null);
 export function ActiveGameProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -16,6 +16,8 @@ export function ActiveGameProvider({ children }: { children: React.ReactNode }) 
 function GameState({ userId, children }: { userId: string; children: React.ReactNode }) {
   const [draft, setDraft] = useState<GameDraft | null>(null);
   const [ready, setReady] = useState(false);
+  const [storage, setStorage] = useState<ActiveGame["storage"]>("saved");
+  const revision = useRef(0);
   const current = useRef<GameDraft | null>(null);
   const writes = useRef(Promise.resolve());
   const storageKey = `@arcade:active-game:v1:${userId}`;
@@ -23,14 +25,19 @@ function GameState({ userId, children }: { userId: string; children: React.React
     if (next.userId !== userId) return Promise.reject(new Error("Wrong player"));
     current.current = next;
     setDraft(next);
+    setStorage("saving");
+    const version = ++revision.current;
     const write = writes.current.catch(() => {}).then(() => AsyncStorage.setItem(storageKey, JSON.stringify(next)));
     writes.current = write;
+    void write.then(() => { if (revision.current === version) setStorage("saved"); }, () => { if (revision.current === version) setStorage("error"); });
     return write;
   }, [storageKey, userId]);
   const clear = useCallback((sessionId: string) => {
     if (current.current?.sessionId !== sessionId) return Promise.resolve();
     current.current = null;
     setDraft(null);
+    ++revision.current;
+    setStorage("saved");
     const write = writes.current.catch(() => {}).then(() => AsyncStorage.removeItem(storageKey));
     writes.current = write;
     return write;
@@ -83,7 +90,7 @@ function GameState({ userId, children }: { userId: string; children: React.React
     const subscription = AppState.addEventListener("change", state => { if (state === "active") void validate(); });
     return () => { alive = false; clearInterval(timer); subscription.remove(); };
   }, [clear, ready, userId]);
-  return <Context.Provider value={{ draft, ready, save, clear }}>{children}</Context.Provider>;
+  return <Context.Provider value={{ draft, ready, storage, save, clear }}>{children}</Context.Provider>;
 }
 export function useActiveGame() {
   const value = useContext(Context);

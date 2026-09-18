@@ -12,6 +12,7 @@ import { LeagueRsvpCard } from "./league-rsvp-card";
 import { LocationPicker } from "./location-picker";
 import { MotionSheet } from "./motion-sheet";
 import { IntentStarter } from "./intent-starter";
+import { PLAY } from "./play-ui";
 
 type NextGame = { team_id: string; slot_time: string; week_of: string; week_label: string | null };
 export function TonightCard() {
@@ -57,14 +58,14 @@ export function TonightCard() {
   return <View style={s.wrap}>
     <IntentStarter />
     <View style={s.hero}>
-      <View style={s.row}><Text style={s.eyebrow}>YOUR NIGHT</Text><Ionicons name="sparkles-outline" size={20} color="#67e8f9" /></View>
-      <Text style={s.title}>{game ? "Your game is waiting" : tonight ? "You’re up tonight" : "Make a night of it"}</Text>
+      <View style={s.row}><Text style={s.eyebrow}>YOUR NIGHT</Text><PressableScale accessibilityLabel="Change venue" style={s.venue} onPress={() => setVenueOpen(true)}><Ionicons name="location-outline" size={16} color={PLAY.accent} /><Text style={s.venueText}>{location?.shortName ?? "Choose venue"}</Text><Ionicons name="chevron-down" size={14} color={PLAY.muted} /></PressableScale></View>
+      <Text style={s.title}>{game ? "Pick up your game." : tonight ? "It’s league night." : "Ready to roll?"}</Text>
       <Text style={s.description}>{draft ? `Lane ${draft.lane} · ${Object.values(draft.playerBalls).reduce((n, b) => n + b.length, 0)} of 9 balls entered` : game ? `Lane ${game.lane_number} · Your team is checked in` : !loaded ? "Checking your next game…" : failed ? "Schedule unavailable. You can still browse games and your team." : next ? `${date} · ${next.slot_time}${next.week_label ? ` · ${next.week_label}` : ""}` : hasTeam ? "No upcoming time posted for your team yet." : "Find a game, bring your team, or order something good."}</Text>
-      <PressableScale style={s.primary} onPress={() => game ? router.push({ pathname: "/skeeball-tracker", params: { teamId: game.team_id, teamName: draft?.teamName, sessionId: game.id } }) : router.push(tonight ? "/scan-lane" : next ? "/skeeball-schedule" : "/games")}>
-        <Text style={s.primaryText}>{game ? "Resume game" : tonight ? "Scan lane to check in" : next ? "View your schedule" : "Find your next game"}</Text><Ionicons name="arrow-forward" size={19} color="#001016" />
+      <PressableScale style={s.primary} onPress={() => game ? router.push({ pathname: "/skeeball-tracker", params: { teamId: game.team_id, teamName: draft?.teamName, sessionId: game.id } }) : router.push("/start-game")}>
+        <Text style={s.primaryText}>{game ? "Resume game" : "Start playing"}</Text><Ionicons name="arrow-forward" size={19} color="#001016" />
       </PressableScale>
       {draft && <Text style={s.note}>Your lane stays checked in. Inactive games may expire after 10 minutes.</Text>}
-      <PressableScale style={s.venue} onPress={() => setVenueOpen(true)}><Ionicons name="location-outline" size={18} color="#67e8f9" /><Text style={s.venueText}>{location?.name ?? "Choose your venue"}</Text><Text style={s.note}>Change</Text></PressableScale>
+      {next && <PressableScale accessibilityLabel="View your next league game" onPress={() => router.push("/skeeball-schedule")} style={{ minHeight: 44, justifyContent: "center" }}><Text style={{ color: PLAY.accent, fontSize: 14 }}>Your next league game · {date} at {next.slot_time} →</Text></PressableScale>}
     </View>
     <LeagueRsvpCard weekOf={next?.week_of} teamId={next?.team_id} />
     <View style={s.links}>
@@ -77,4 +78,4 @@ export function TonightCard() {
     </MotionSheet>
   </View>;
 }
-const s = StyleSheet.create({ wrap: { padding: 16 }, hero: { backgroundColor: "#0b1a20", borderColor: "#164651", borderWidth: 1, borderRadius: 22, padding: 20, gap: 14, marginBottom: 12 }, row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, eyebrow: { color: "#67e8f9", letterSpacing: 1.6, fontSize: 12, fontWeight: "800" }, title: { color: "#fff", fontSize: 28, fontWeight: "900", letterSpacing: -0.6 }, description: { color: "#c4d3da", fontSize: 15, lineHeight: 22 }, primary: { backgroundColor: "#22d3ee", padding: 14, minHeight: 48, borderRadius: 13, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 }, primaryText: { color: "#001016", fontWeight: "800", fontSize: 15 }, note: { color: "#aebfc7", fontSize: 12, lineHeight: 18 }, venue: { flexDirection: "row", alignItems: "center", gap: 8, minHeight: 44 }, venueText: { color: "#e0f2fe", flex: 1, fontSize: 14 }, links: { flexDirection: "row", gap: 10 }, link: { flex: 1, backgroundColor: "#14181b", padding: 16, borderRadius: 14, gap: 8, minHeight: 80 }, linkText: { color: "#e5e7eb", fontSize: 14, fontWeight: "700" }, feedTitle: { color: "#fff", fontSize: 20, fontWeight: "800", marginTop: 22 } });
+const s = StyleSheet.create({ wrap: { padding: 16 }, hero: { backgroundColor: "#10262e", borderColor: "#164651", borderWidth: 0, borderRadius: 22, padding: 20, gap: 14, marginBottom: 12 }, row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, eyebrow: { color: "#67e8f9", letterSpacing: 1.6, fontSize: 12, fontWeight: "800" }, title: { color: "#fff", fontSize: 28, fontWeight: "900", letterSpacing: -0.6 }, description: { color: "#c4d3da", fontSize: 15, lineHeight: 22 }, primary: { backgroundColor: "#22d3ee", padding: 14, minHeight: 48, borderRadius: 13, flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10 }, primaryText: { color: "#001016", fontWeight: "800", fontSize: 15 }, note: { color: "#aebfc7", fontSize: 12, lineHeight: 18 }, venue: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44, maxWidth: "65%" }, venueText: { color: "#e0f2fe", flexShrink: 1, fontSize: 14 }, links: { flexDirection: "row", gap: 10 }, link: { flex: 1, backgroundColor: "#14181b", padding: 16, borderRadius: 14, gap: 8, minHeight: 80 }, linkText: { color: "#e5e7eb", fontSize: 14, fontWeight: "700" }, feedTitle: { color: "#fff", fontSize: 20, fontWeight: "800", marginTop: 22 } });

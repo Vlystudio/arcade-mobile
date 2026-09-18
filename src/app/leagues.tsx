@@ -3,6 +3,9 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import Head from "expo-router/head";
 import { useEffect, useState } from "react";
+import { MotionSheet } from "../components/motion-sheet";
+import { PLAY, PlayButton, playStyles } from "../components/play-ui";
+import { LeagueScheduleList } from "../components/league-schedule-list";
 import {
   ActivityIndicator,
   Platform,
@@ -12,6 +15,7 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import BottomTabBar from "../components/bottom-tab-bar";
@@ -40,6 +44,9 @@ type PageTab = "seasons" | "skeeball";
 
 export default function LeaguesScreen() {
   const { user, loading: authLoading } = useRequireAuth();
+  const { width } = useWindowDimensions();
+  const [skeeView, setSkeeView] = useState<"standings" | "results" | "schedule">("standings");
+  const [more, setMore] = useState(false);
   const [pageTab, setPageTab] = useState<PageTab>("skeeball");
   const [seasons, setSeasons] = useState<Season[]>([]);
   const [activeSeason, setActiveSeason] = useState<Season | null>(null);
@@ -49,7 +56,9 @@ export default function LeaguesScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedSeasonId, setSelectedSeasonId] = useState<string | null>(null);
-  const [skeeStandings, setSkeeStandings] = useState<SkeeballStanding[]>([]);
+  const [skeeStandingRows, setSkeeStandings] = useState<SkeeballStanding[]>([]);
+  // Membership can resolve after standings; derive the highlight from the current team.
+  const skeeStandings = skeeStandingRows.map(row => ({ ...row, isMyTeam: row.team_id === myTeamId }));
   const [skeeMatches, setSkeeMatches] = useState<SkeeballMatchResult[]>([]);
   const [skeeLoading, setSkeeLoading] = useState(false);
   const [skeeSeasons, setSkeeSeasons] = useState<SkeeSeason[]>([]);
@@ -66,7 +75,7 @@ export default function LeaguesScreen() {
     if (!user) return;
     const [seasonsRes, myTeamRes] = await Promise.all([
       supabase.from("seasons").select("*").order("start_date", { ascending: false }),
-      supabase.from("team_members").select("team_id").eq("user_id", user.id).maybeSingle(),
+      supabase.from("team_members").select("team_id").eq("user_id", user.id).order("team_id").limit(1).maybeSingle(),
     ]);
 
     const allSeasons = (seasonsRes.data ?? []) as Season[];
@@ -311,48 +320,36 @@ export default function LeaguesScreen() {
             />
           }
         >
-          <Text style={styles.pageTitle}>League</Text>
-          <Text style={styles.pageSub}>Standings, schedules &amp; results</Text>
-
-          <View style={{ flexDirection: "row", gap: 10, marginVertical: 16 }}>
-            <Pressable accessibilityRole="button" style={{ flex: 1, backgroundColor: "#10252b", borderRadius: 14, padding: 16, minHeight: 64 }} onPress={() => router.push("/teams")}>
-              <Text style={{ color: "#67e8f9", fontWeight: "800", fontSize: 16 }}>Your teams</Text>
-              <Text style={{ color: "#becbd3", marginTop: 5 }}>Roster, chat &amp; check-in</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" style={{ flex: 1, backgroundColor: "#161b20", borderRadius: 14, padding: 16, minHeight: 64 }} onPress={() => router.push("/skeeball-schedule")}>
-              <Text style={{ color: "#fff", fontWeight: "800", fontSize: 16 }}>Schedule</Text>
-              <Text style={{ color: "#becbd3", marginTop: 5 }}>Upcoming league nights</Text>
-            </Pressable>
+          <View style={[playStyles.row, { justifyContent: "space-between", marginBottom: 20 }]}>
+            <View><Text style={styles.pageTitle}>League</Text><Text style={playStyles.subtitle}>Your team. Your next game.</Text></View>
+            <Pressable accessibilityRole="button" accessibilityLabel="More league options" onPress={() => setMore(true)} style={{ minHeight: 48, minWidth: 48, alignItems: "center", justifyContent: "center" }}><Ionicons name="ellipsis-horizontal" size={24} color={PLAY.text} /></Pressable>
           </View>
-          {/* Tab switcher */}
-          <View style={styles.tabRow}>
-            <Pressable
-              style={[styles.tabBtn, pageTab === "skeeball" && styles.tabBtnActive]}
-              onPress={() => setPageTab("skeeball")}
-            >
-              <Text style={[styles.tabText, pageTab === "skeeball" && styles.tabTextActive]}>Skee-Ball League</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.tabBtn, pageTab === "seasons" && styles.tabBtnActive]}
-              onPress={() => setPageTab("seasons")}
-            >
-              <Text style={[styles.tabText, pageTab === "seasons" && styles.tabTextActive]}>Seasons</Text>
-            </Pressable>
-          </View>
-
+          {pageTab === "skeeball" && <>
+            <View style={{ flexDirection: width >= 900 ? "row" : "column", gap: 14, marginBottom: 22 }}>
+              <View style={[playStyles.card, { flex: 1, backgroundColor: "#10262e" }]}>
+                <Text style={playStyles.label}>YOUR TEAM</Text>
+                <Text style={[playStyles.title, { fontSize: 24 }]}>{skeeStandings.find(t => t.isMyTeam)?.team_name ?? "Make it a team night."}</Text>
+                {skeeStandings.some(t => t.isMyTeam) ? <Text style={{ color: PLAY.accent, fontSize: 30, fontWeight: "900" }}>#{skeeStandings.findIndex(t => t.isMyTeam) + 1} <Text style={playStyles.subtitle}>· {skeeStandings.find(t => t.isMyTeam)?.total_points} league points</Text></Text> : <Text style={playStyles.subtitle}>Your standing appears after a completed league match.</Text>}
+                <PlayButton label="Start playing" onPress={() => router.push("/start-game")} />
+              </View>
+              <View style={[playStyles.card, { flex: 1 }]}><LeagueScheduleList compact teamId={myTeamId} /><PlayButton secondary label="Your team & roster" onPress={() => router.push("/teams")} /></View>
+            </View>
+            <View accessibilityRole="tablist" style={[styles.tabRow, { marginBottom: 18 }]}>{(["standings", "results", "schedule"] as const).map(tab => <Pressable key={tab} accessibilityRole="tab" accessibilityState={{ selected: skeeView === tab }} onPress={() => setSkeeView(tab)} style={[styles.tabBtn, { minHeight: 48 }, skeeView === tab && styles.tabBtnActive]}><Text style={[styles.tabText, skeeView === tab && styles.tabTextActive]}>{tab[0].toUpperCase() + tab.slice(1)}</Text></Pressable>)}</View>
+          </>}
+          {pageTab === "seasons" && <PlayButton secondary style={{ marginBottom: 16 }} label="Back to Skee-Ball League" onPress={() => setPageTab("skeeball")} />}
           {pageTab === "skeeball" ? (
             /* ── Skee-Ball League ── */
             <>
               {/* Season selector */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={[styles.pillScroll, { flexGrow: 0 }]} contentContainerStyle={styles.pillContent}>
-                <Pressable
+                <Pressable accessibilityRole="button"
                   style={[styles.pill, skeeSeasonId === "all" && styles.pillActive]}
                   onPress={() => { setSkeeSeasonId("all"); loadSkeeballLeague(myTeamId, null); }}
                 >
                   <Text style={[styles.pillText, skeeSeasonId === "all" && styles.pillTextActive]}>All Time</Text>
                 </Pressable>
                 {skeeSeasons.map((sn) => (
-                  <Pressable
+                  <Pressable accessibilityRole="button"
                     key={sn.id}
                     style={[styles.pill, skeeSeasonId === sn.id && styles.pillActive]}
                     onPress={() => { setSkeeSeasonId(sn.id); loadSkeeballLeague(myTeamId, sn); }}
@@ -383,136 +380,12 @@ export default function LeaguesScreen() {
                 );
               })()}
 
-              {/* Live league night */}
-              <Pressable style={styles.liveCard} onPress={() => router.push("/skeeball-live" as any)}>
-                <View style={styles.liveCardIcon}>
-                  <Ionicons name="radio-outline" size={18} color="#ef4444" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.liveCardTitle}>League Night Live</Text>
-                  <Text style={styles.liveCardSub}>Watch all lanes update in real time</Text>
-                </View>
-                {Platform.OS === "web" && (
-                  <>
-                    <Pressable style={styles.printBtn} onPress={(e) => { e.stopPropagation(); exportStandingsCsv(); }} hitSlop={6}>
-                      <Ionicons name="download-outline" size={15} color="#888" />
-                      <Text style={styles.printBtnText}>CSV</Text>
-                    </Pressable>
-                    <Pressable style={styles.printBtn} onPress={(e) => { e.stopPropagation(); printSchedule(); }} hitSlop={6}>
-                      <Ionicons name="print-outline" size={15} color="#888" />
-                      <Text style={styles.printBtnText}>Print</Text>
-                    </Pressable>
-                  </>
-                )}
-                <Ionicons name="chevron-forward" size={16} color="#444" />
-              </Pressable>
-
-              {/* Full weekly schedule */}
-              <Pressable style={styles.scheduleCard} onPress={() => router.push("/skeeball-schedule" as any)}>
-                <View style={styles.scheduleCardIcon}>
-                  <Ionicons name="calendar-outline" size={18} color="#06b6d4" />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.liveCardTitle}>Monday Night Schedule</Text>
-                  <Text style={styles.liveCardSub}>Every team's time slot, week by week</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color="#444" />
-              </Pressable>
-
-              {/* Hall of Fame + Events shortcuts */}
-              <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
-                <Pressable style={[styles.scheduleCard, { flex: 1, marginBottom: 0, borderColor: "rgba(245,158,11,0.25)" }]} onPress={() => router.push("/hall-of-fame" as any)}>
-                  <Ionicons name="trophy" size={17} color="#f59e0b" />
-                  <Text style={[styles.liveCardTitle, { fontSize: 13 }]}>Hall of Fame</Text>
-                </Pressable>
-                <Pressable style={[styles.scheduleCard, { flex: 1, marginBottom: 0 }]} onPress={() => router.push("/events" as any)}>
-                  <Ionicons name="calendar" size={17} color="#06b6d4" />
-                  <Text style={[styles.liveCardTitle, { fontSize: 13 }]}>What's On</Text>
-                </Pressable>
-              </View>
-
-              {/* Weekly Pick'em */}
-              {(() => {
-                const sel = skeeSeasons.find((sn) => sn.id === skeeSeasonId);
-                if (!sel || sel.status !== "active") return null;
-                return (
-                  <View style={styles.pickemCard}>
-                    <View style={styles.potwHeader}>
-                      <Ionicons name="sparkles" size={13} color="#a855f7" />
-                      <Text style={[styles.potwLabel, { color: "#a855f7" }]}>
-                        Weekly Pick'em — who scores highest Monday?
-                      </Text>
-                    </View>
-                    {picksLocked ? (
-                      <Text style={styles.pickemHint}>
-                        Picks are locked — games have started. {myPick ? "Your pick is in!" : "You didn't pick this week."}
-                      </Text>
-                    ) : (
-                      <View style={styles.pickemTeams}>
-                        {skeeStandings.slice(0, 8).map((st) => (
-                          <Pressable
-                            key={st.team_id}
-                            style={[styles.pickemChip, myPick === st.team_id && styles.pickemChipActive]}
-                            onPress={() => makePick(st.team_id)}
-                            disabled={picking !== null}
-                          >
-                            <Text style={[styles.pickemChipText, myPick === st.team_id && { color: "#000" }]} numberOfLines={1}>
-                              {myPick === st.team_id ? "✓ " : ""}{st.team_name}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                    {pickemBoard.length > 0 && (
-                      <View style={{ marginTop: 8 }}>
-                        <Text style={styles.pickemBoardLabel}>Predictors Leaderboard</Text>
-                        {pickemBoard.map((b, i) => (
-                          <Pressable key={b.username + i} style={styles.pickemBoardRow} onPress={() => openUserProfile(b.user_id)}>
-                            <Text style={styles.pickemBoardRank}>{i + 1}</Text>
-                            <Text style={styles.pickemBoardName} numberOfLines={1}>{b.username}</Text>
-                            <Text style={styles.pickemBoardScore}>{b.correct}/{b.picks}</Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                );
-              })()}
-
-              {/* Player of the Week */}
-              {skeeAwards?.top && (
-                <View style={styles.potwCard}>
-                  <View style={styles.potwHeader}>
-                    <Ionicons name="star" size={13} color="#f59e0b" />
-                    <Text style={styles.potwLabel}>
-                      Player of the Week · {skeeAwards.week_of ? fmtDate(skeeAwards.week_of) : ""}
-                    </Text>
-                  </View>
-                  <Pressable style={styles.potwRow} onPress={() => openUserProfile(skeeAwards.top!.user_id)}>
-                    <Avatar uri={skeeAwards.top.avatar_url} name={skeeAwards.top.username} size={40} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.potwName}>{skeeAwards.top.username}</Text>
-                      <Text style={styles.potwMeta}>
-                        {skeeAwards.top.avg} avg over {skeeAwards.top.games} {skeeAwards.top.games === 1 ? "game" : "games"}
-                      </Text>
-                    </View>
-                    <Text style={styles.potwEmoji}>👑</Text>
-                  </Pressable>
-                  {skeeAwards.most_improved && skeeAwards.most_improved.user_id !== skeeAwards.top.user_id && (
-                    <Pressable style={styles.improvedRow} onPress={() => openUserProfile(skeeAwards.most_improved!.user_id)}>
-                      <Ionicons name="trending-up" size={13} color="#22c55e" />
-                      <Text style={styles.improvedText}>
-                        Most improved: {skeeAwards.most_improved.username} (+{skeeAwards.most_improved.delta_pct}% vs last week)
-                      </Text>
-                    </Pressable>
-                  )}
-                </View>
-              )}
-
               {skeeLoading ? (
                 <ActivityIndicator color="#06b6d4" style={{ marginVertical: 40 }} />
               ) : (
                 <>
+                  {skeeView === "schedule" && <LeagueScheduleList />}
+                  {skeeView === "standings" && <>
                   <SectionLabel text="Team Standings" />
                   {skeeStandings.length === 0 ? (
                     <View style={styles.emptyCard}>
@@ -531,7 +404,7 @@ export default function LeaguesScreen() {
                         <Text style={[styles.tableCell, styles.numCol]}>PTS</Text>
                       </View>
                       {skeeStandings.map((s, i) => (
-                        <Pressable
+                        <Pressable accessibilityRole="button"
                           key={s.team_id}
                           style={({ pressed }) => [styles.tableRow, s.isMyTeam && styles.tableRowMe, pressed && { opacity: 0.7 }]}
                           onPress={() => router.push({ pathname: "/team-detail" as any, params: { teamId: s.team_id, teamName: s.team_name } })}
@@ -611,6 +484,9 @@ export default function LeaguesScreen() {
                     ))}
                   </View>
 
+                  </>}
+                  {skeeView === "results" && <>
+                  {skeeMatches.length === 0 && <View style={playStyles.card}><Text style={playStyles.subtitle}>Finished league rounds will appear here.</Text></View>}
                   {skeeMatches.length > 0 && (
                     <>
                       <SectionLabel text="Match Results" />
@@ -629,6 +505,85 @@ export default function LeaguesScreen() {
                       ))}
                     </>
                   )}
+              {/* Weekly Pick'em */}
+              {(() => {
+                const sel = skeeSeasons.find((sn) => sn.id === skeeSeasonId);
+                if (!sel || sel.status !== "active") return null;
+                return (
+                  <View style={styles.pickemCard}>
+                    <View style={styles.potwHeader}>
+                      <Ionicons name="sparkles" size={13} color="#a855f7" />
+                      <Text style={[styles.potwLabel, { color: "#a855f7" }]}>
+                        Weekly Pick'em — who scores highest Monday?
+                      </Text>
+                    </View>
+                    {picksLocked ? (
+                      <Text style={styles.pickemHint}>
+                        Picks are locked — games have started. {myPick ? "Your pick is in!" : "You didn't pick this week."}
+                      </Text>
+                    ) : (
+                      <View style={styles.pickemTeams}>
+                        {skeeStandings.slice(0, 8).map((st) => (
+                          <Pressable accessibilityRole="button"
+                            key={st.team_id}
+                            style={[styles.pickemChip, myPick === st.team_id && styles.pickemChipActive]}
+                            onPress={() => makePick(st.team_id)}
+                            disabled={picking !== null}
+                          >
+                            <Text style={[styles.pickemChipText, myPick === st.team_id && { color: "#000" }]} numberOfLines={1}>
+                              {myPick === st.team_id ? "✓ " : ""}{st.team_name}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                    {pickemBoard.length > 0 && (
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={styles.pickemBoardLabel}>Predictors Leaderboard</Text>
+                        {pickemBoard.map((b, i) => (
+                          <Pressable key={b.username + i} style={styles.pickemBoardRow} onPress={() => openUserProfile(b.user_id)}>
+                            <Text style={styles.pickemBoardRank}>{i + 1}</Text>
+                            <Text style={styles.pickemBoardName} numberOfLines={1}>{b.username}</Text>
+                            <Text style={styles.pickemBoardScore}>{b.correct}/{b.picks}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+                );
+              })()}
+
+              {/* Player of the Week */}
+              {skeeAwards?.top && (
+                <View style={styles.potwCard}>
+                  <View style={styles.potwHeader}>
+                    <Ionicons name="star" size={13} color="#f59e0b" />
+                    <Text style={styles.potwLabel}>
+                      Player of the Week · {skeeAwards.week_of ? fmtDate(skeeAwards.week_of) : ""}
+                    </Text>
+                  </View>
+                  <Pressable style={styles.potwRow} onPress={() => openUserProfile(skeeAwards.top!.user_id)}>
+                    <Avatar uri={skeeAwards.top.avatar_url} name={skeeAwards.top.username} size={40} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.potwName}>{skeeAwards.top.username}</Text>
+                      <Text style={styles.potwMeta}>
+                        {skeeAwards.top.avg} avg over {skeeAwards.top.games} {skeeAwards.top.games === 1 ? "game" : "games"}
+                      </Text>
+                    </View>
+                    <Text style={styles.potwEmoji}>👑</Text>
+                  </Pressable>
+                  {skeeAwards.most_improved && skeeAwards.most_improved.user_id !== skeeAwards.top.user_id && (
+                    <Pressable style={styles.improvedRow} onPress={() => openUserProfile(skeeAwards.most_improved!.user_id)}>
+                      <Ionicons name="trending-up" size={13} color="#22c55e" />
+                      <Text style={styles.improvedText}>
+                        Most improved: {skeeAwards.most_improved.username} (+{skeeAwards.most_improved.delta_pct}% vs last week)
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              )}
+
+                  </>}
                 </>
               )}
             </>
@@ -647,7 +602,7 @@ export default function LeaguesScreen() {
                     {seasons.map((s) => {
                       const active = (selectedSeasonId ?? activeSeason?.id) === s.id;
                       return (
-                        <Pressable
+                        <Pressable accessibilityRole="button"
                           key={s.id}
                           style={[styles.pill, active && styles.pillActive]}
                           onPress={async () => { setSelectedSeasonId(s.id); setLoading(true); await loadSeasonDetails(s.id, myTeamId); }}
@@ -712,6 +667,16 @@ export default function LeaguesScreen() {
         </ScrollView>
       </SafeAreaView>
       <BottomTabBar />
+      <MotionSheet visible={more} onClose={() => setMore(false)} accessibilityLabel="More league options" style={{ padding: 20 }}>
+        <Text style={[playStyles.title, { marginBottom: 18 }]}>League tools</Text>
+        <View style={{ gap: 12 }}>
+          <PlayButton secondary label="Watch live scores" onPress={() => { setMore(false); router.push("/skeeball-live"); }} />
+          <PlayButton secondary label="Other seasons" onPress={() => { setMore(false); setPageTab("seasons"); }} />
+          <PlayButton secondary label="Hall of Fame" onPress={() => { setMore(false); router.push("/hall-of-fame"); }} />
+          <PlayButton secondary label="Events" onPress={() => { setMore(false); router.push("/events"); }} />
+          {Platform.OS === "web" && <><PlayButton secondary label="Download standings CSV" onPress={() => { setMore(false); exportStandingsCsv(); }} /><PlayButton secondary label="Print schedule and standings" onPress={() => { setMore(false); void printSchedule(); }} /></>}
+        </View>
+      </MotionSheet>
     </View>
   );
 }
@@ -757,7 +722,7 @@ function fmtDate(iso: string) {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#000" },
+  root: { flex: 1, backgroundColor: PLAY.background },
   safe: { flex: 1 },
   loader: { flex: 1, backgroundColor: "#000", alignItems: "center", justifyContent: "center" },
   content: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 24 },

@@ -24,6 +24,7 @@ import { MotionProvider, useReducedMotion } from "../context/motion-context";
 import { MOTION, RouteTransition } from "../components/motion";
 import { ActiveGameProvider } from "../context/active-game-context";
 import { ActiveGameBanner } from "../components/active-game-banner";
+import { PracticeProvider } from "../context/practice-context";
 
 Sentry.init({
   dsn: "https://483f3f6bbb4581e28ed5ddaf6a17c07e@o4511509249785856.ingest.us.sentry.io/4511509250768896",
@@ -39,7 +40,7 @@ configureNotificationHandler();
 // Web: full-bleed routes (TV/dashboard use-cases) and wide dashboard routes.
 // Everything else renders in a centered phone-style column like IG/X web.
 const WEB_FULL_ROUTES = new Set(["/skeeball-live", "/karaoke-display", "/demo"]);
-const WEB_WIDE_ROUTES = new Set(["/admin", "/owner", "/architect"]);
+const WEB_WIDE_ROUTES = new Set(["/admin", "/owner", "/architect", "/leagues"]);
 const TAB_ROUTES = new Set(["index", "games", "leagues", "trivia", "teams", "food", "profile", "admin"]);
 
 /** Centers the whole app in a column on desktop web; no-op on native. */
@@ -95,6 +96,7 @@ function RootNavigation() {
     <SafeAreaProvider>
       <AuthProvider>
       <ActiveGameProvider>
+      <PracticeProvider>
       <AdminProvider>
       <LocationProvider>
       <CartProvider>
@@ -123,6 +125,8 @@ function RootNavigation() {
           <Stack.Screen name="login" options={{ headerShown: false }} />
           <Stack.Screen name="signup" options={{ headerShown: false }} />
           <Stack.Screen name="games" options={{ headerShown: false }} />
+          <Stack.Screen name="start-game" options={{ headerShown: false }} />
+          <Stack.Screen name="practice" options={{ headerShown: false }} />
           <Stack.Screen name="teams" options={{ headerShown: false }} />
           <Stack.Screen name="leagues" options={{ headerShown: false }} />
           <Stack.Screen name="leaderboard" options={{ headerShown: false }} />
@@ -193,6 +197,7 @@ function RootNavigation() {
       </CartProvider>
       </LocationProvider>
       </AdminProvider>
+      </PracticeProvider>
       </ActiveGameProvider>
       </AuthProvider>
     </SafeAreaProvider>

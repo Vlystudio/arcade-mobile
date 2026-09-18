@@ -7,6 +7,8 @@ import { MotionView } from "./motion";
 import { MotionSheet } from "./motion-sheet";
 import { PressableScale } from "./pressable-scale";
 import { haptic } from "../../lib/haptics";
+import { ScoreText } from "./score-text";
+import { PLAY } from "./play-ui";
 
 type Player = { player_user_id: string; username: string; avatar_url: string | null };
 export function GroupScorecard({ sessionId, players, balls, onChange, disabled = false }: {
@@ -14,6 +16,7 @@ export function GroupScorecard({ sessionId, players, balls, onChange, disabled =
 }) {
   const [accepted, setAccepted] = useState("");
   const [editing, setEditing] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const lastTap = useRef(0);
   const lineup = players.map(p => p.player_user_id);
   const turn = groupTurn(lineup, balls.length);
@@ -43,13 +46,13 @@ export function GroupScorecard({ sessionId, players, balls, onChange, disabled =
         <View style={s.dots}>{[0, 1, 2].map(ball => <View key={ball} style={[s.dot, balls.length > round * 3 + ball && s.filled]} />)}</View>
       </View>)}
     </View>
-    {player && turn ? <MotionView transitionKey={`${turnKey}:${handoff}`} distance={6}>
+    <View style={s.turnPanel}>{player && turn ? <MotionView transitionKey={`${turnKey}:${handoff}`} distance={6}>
       {handoff ? <View style={s.handoff}>
         <Ionicons name="phone-portrait-outline" size={30} color="#67e8f9" />
-        <Text style={s.eyebrow}>{balls.length ? "PASS THE PHONE" : "FIRST UP"}</Text>
+        <Text style={s.eyebrow}>{turn.ball > 1 ? "CONTINUE TURN" : balls.length ? "PASS THE PHONE" : "FIRST UP"}</Text>
         <Avatar uri={player.avatar_url} name={player.username} size={64} radius={22} />
         <Text accessibilityRole="header" accessibilityLiveRegion="polite" style={s.title}>{player.username}’s turn</Text>
-        <Text style={s.description}>{previous ? `${previous.username}’s round is recorded. ` : ""}Three balls, then pass it on.</Text>
+        <Text style={s.description}>{turn.ball > 1 ? `${turn.ball - 1} of your three balls are recorded. ${4 - turn.ball} left in this turn.` : `${previous ? `${previous.username}’s round is recorded. ` : ""}Three balls, then pass it on.`}</Text>
         <PressableScale disabled={disabled} accessibilityLabel={`Ready for ${player.username}'s turn`} style={s.ready} onPress={() => { setAccepted(turnKey); haptic("tap"); }}>
           <Text style={s.readyText}>I’m ready — {player.username}</Text><Ionicons name="arrow-forward" size={20} color="#001016" />
         </PressableScale>
@@ -59,14 +62,17 @@ export function GroupScorecard({ sessionId, players, balls, onChange, disabled =
         <View style={s.rings}>{GROUP_RINGS.map(score => <PressableScale key={score} disabled={disabled} accessibilityLabel={`Record ${score} points for ${player.username}`} style={[s.ring, score === 100 && s.hundo]} onPress={() => add(score)}><Text style={[s.ringText, score === 100 && { color: "#67e8f9" }]}>{score}</Text></PressableScale>)}</View>
         <Text style={s.muted}>{nextPlayer ? `Next: ${nextPlayer.username}` : "Last round — review all scores before saving."}</Text>
       </View>}
-    </MotionView> : <View style={s.review}><Ionicons name="checkmark-circle-outline" size={36} color="#67e8f9" /><Text style={s.title}>All nine, nice work.</Text><Text style={s.description}>Check the scores below, then save your game.</Text></View>}
+    </MotionView> : <View style={s.review}><Ionicons name="checkmark-circle-outline" size={36} color="#67e8f9" /><Text style={s.title}>All nine, nice work.</Text><Text style={s.description}>Check the scores below, then save your game.</Text></View>}</View>
+    <View style={s.controlBar}>
+      <View><Text style={s.muted}>Group score</Text><ScoreText value={balls.reduce((sum, b) => sum + b.score, 0)} animate style={s.total} /></View>
+      <PressableScale disabled={disabled || !balls.length} style={[s.undo, !balls.length && { opacity: 0.4 }]} accessibilityLabel="Undo the last ball" onPress={undo}><Ionicons name="arrow-undo-outline" size={18} color="#cbd5e1" /><Text style={s.muted}>Undo last ball</Text></PressableScale>
+    </View>
     <View style={s.summary}>
-      <View style={s.playerRow}><Text style={s.summaryTitle}>Group score</Text><Text style={s.total}>{balls.reduce((sum, b) => sum + b.score, 0)}</Text></View>
-      {players.map(p => <View key={p.player_user_id} style={s.result}>
+      <PressableScale accessibilityRole="button" accessibilityLabel={balls.length === 9 ? "Full scorecard shown for review" : "Show or hide the full scorecard"} disabled={balls.length === 9} accessibilityState={{ expanded: expanded || balls.length === 9 }} style={[s.playerRow, { minHeight: 44 }]} onPress={() => setExpanded(value => !value)}><View style={{ flex: 1 }}><Text style={s.summaryTitle}>{balls.length === 9 ? "Review your scorecard" : "View scorecard"}</Text><Text style={s.muted}>{balls.length}/9 balls · tap a score to correct it</Text></View>{balls.length < 9 && <Ionicons name={expanded ? "chevron-up" : "chevron-down"} size={20} color={PLAY.muted} />}</PressableScale>
+      {(expanded || balls.length === 9) && players.map(p => <View key={p.player_user_id} style={s.result}>
         <View style={s.playerRow}><Text style={s.playerName}>{p.username}</Text><Text style={s.points}>{balls.filter(b => b.player_user_id === p.player_user_id).reduce((sum, b) => sum + b.score, 0)} pts</Text></View>
         <View style={s.chips}>{balls.map((ball, index) => ball.player_user_id === p.player_user_id && <PressableScale key={index} disabled={disabled} style={s.chip} accessibilityLabel={`Edit ${p.username}'s ball ${ball.ball_number}, ${ball.score} points`} onPress={() => setEditing(index)}><Text style={s.chipText}>{ball.score}</Text><Ionicons name="pencil" size={11} color="#aebfc7" /></PressableScale>)}</View>
       </View>)}
-      {balls.length > 0 && <PressableScale disabled={disabled} style={s.undo} accessibilityLabel="Undo the last ball" onPress={undo}><Ionicons name="arrow-undo-outline" size={18} color="#cbd5e1" /><Text style={s.muted}>Undo last ball</Text></PressableScale>}
     </View>
     <MotionSheet visible={editing !== null} onClose={() => setEditing(null)} accessibilityLabel="Correct a ball score" style={{ padding: 20 }}>
       <Text style={s.summaryTitle}>Correct this ball</Text><Text style={s.description}>{players.find(p => p.player_user_id === balls[editing ?? -1]?.player_user_id)?.username} · Ball {balls[editing ?? -1]?.ball_number}</Text>
@@ -75,6 +81,7 @@ export function GroupScorecard({ sessionId, players, balls, onChange, disabled =
   </View>;
 }
 const s = StyleSheet.create({
+  turnPanel: { minHeight: 294 }, controlBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 16 },
   wrap: { gap: 18 }, progress: { flexDirection: "row", gap: 10 }, round: { flex: 1, gap: 8 }, roundName: { color: "#b4c1cb", fontSize: 12, fontWeight: "700" }, dots: { flexDirection: "row", gap: 4 }, dot: { height: 5, flex: 1, backgroundColor: "#26323a", borderRadius: 3 }, filled: { backgroundColor: "#22d3ee" },
   handoff: { alignItems: "center", gap: 14, padding: 22, backgroundColor: "#0c2027", borderRadius: 22, borderWidth: 1, borderColor: "#195363" }, eyebrow: { color: "#67e8f9", letterSpacing: 2, fontSize: 12, fontWeight: "800" }, title: { color: "#fff", fontSize: 26, fontWeight: "900", textAlign: "center" }, description: { color: "#b9c7d0", fontSize: 14, lineHeight: 21, textAlign: "center" }, ready: { minHeight: 58, backgroundColor: "#22d3ee", borderRadius: 14, padding: 16, flexDirection: "row", alignItems: "center", gap: 12, alignSelf: "stretch" }, readyText: { flex: 1, color: "#001016", fontSize: 16, fontWeight: "800" },
   scorer: { gap: 16 }, playerRow: { flexDirection: "row", alignItems: "center", gap: 12, justifyContent: "space-between" }, playerName: { color: "#fff", fontWeight: "800", fontSize: 17, flexShrink: 1 }, muted: { color: "#b4c1cb", fontSize: 13, lineHeight: 20 }, prompt: { color: "#e2e8f0", fontSize: 18, fontWeight: "700" }, rings: { flexDirection: "row", flexWrap: "wrap", gap: 10 }, ring: { width: "31%", flexGrow: 1, minHeight: 76, borderRadius: 18, alignItems: "center", justifyContent: "center", backgroundColor: "#172129", borderWidth: 1, borderColor: "#374650" }, ringText: { fontSize: 28, color: "#fff", fontWeight: "900" }, hundo: { backgroundColor: "#0c2931", borderColor: "#22d3ee" }, review: { alignItems: "center", gap: 12, padding: 20 },

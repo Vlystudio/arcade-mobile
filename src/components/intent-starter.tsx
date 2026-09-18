@@ -7,7 +7,7 @@ import { useAuth } from "../context/auth-context";
 import { PressableScale } from "./pressable-scale";
 
 const OPTIONS = [
-  { key: "play", title: "Playing tonight", detail: "Find a game, then track your score", route: "/games", icon: "game-controller-outline" },
+  { key: "play", title: "Playing tonight", detail: "Start a group game or play casually", route: "/start-game", icon: "game-controller-outline" },
   { key: "league", title: "Joining a league", detail: "Find a team and your next league night", route: "/teams", icon: "people-outline" },
   { key: "order", title: "Just ordering", detail: "Choose your venue and browse the menu", route: "/food", icon: "restaurant-outline" },
 ] as const;
@@ -25,8 +25,8 @@ export function IntentStarter({ always = false }: { always?: boolean }) {
       if (active) setSaved(value);
       if (userId) {
         const pending = await AsyncStorage.getItem("@arcade:pending-intent:v1");
-        if (active && (pending === "/games" || pending === "/teams")) {
-          await AsyncStorage.setItem(key, pending === "/games" ? "play" : "league");
+        if (active && (pending === "/games" || pending === "/teams" || pending === "/practice" || pending === "/start-game")) {
+          await AsyncStorage.setItem(key, pending === "/teams" ? "league" : "play");
           await AsyncStorage.removeItem("@arcade:pending-intent:v1");
           if (active) router.replace(pending);
         }
@@ -39,8 +39,8 @@ export function IntentStarter({ always = false }: { always?: boolean }) {
   async function choose(option: typeof OPTIONS[number]) {
     setSaved(option.key);
     await AsyncStorage.setItem(key, option.key).catch(() => {});
-    // Order is a public route; accounts are requested only for playing/teams.
-    if (!user && option.key !== "order") {
+    // Practice and ordering are available before sign-in.
+    if (!user && option.key === "league") {
       await AsyncStorage.setItem("@arcade:pending-intent:v1", option.route).catch(() => {});
       router.push("/auth");
     } else {

@@ -2,6 +2,10 @@ import { SessionFinish } from "../components/session-finish";
 import { GroupScorecard } from "../components/group-scorecard";
 import { groupBallMap, orderedGroupBalls, type GroupBall } from "../../lib/group-scoring";
 import { groupScoringDeviceKey, type GroupControl } from "../../lib/group-scoring-device";
+import { readRecentGroup, rememberGroup } from "../../lib/recent-group";
+import { PlayButton, PLAY, SaveStatus } from "../components/play-ui";
+import { ScoringAwake } from "../components/scoring-awake";
+import { MotionSheet } from "../components/motion-sheet";
 import { useIsFocused } from "@react-navigation/native";
 import { publicProfilesById } from "../../lib/public-profiles";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -102,7 +106,7 @@ export default function SkeeballTrackerScreen({
   const teamId = initialTeamId ?? routeTeamId;
   const teamName = initialTeamName ?? routeTeamName;
   const { user } = useRequireAuth();
-  const { draft, ready: draftReady, save: saveDraft, clear: clearDraft } = useActiveGame();
+  const { draft, ready: draftReady, storage: draftStorage, save: saveDraft, clear: clearDraft } = useActiveGame();
   const [draftSessionReady, setDraftSessionReady] = useState<string | null>(null);
   const completing = useRef(false);
   const focused = useIsFocused();
@@ -110,6 +114,12 @@ export default function SkeeballTrackerScreen({
   const [claimingPhone, setClaimingPhone] = useState(false);
   const [syncingGroup, setSyncingGroup] = useState(false);
   const [rematching, setRematching] = useState(false);
+  const [syncFailed, setSyncFailed] = useState(false);
+  const [groupSynced, setGroupSynced] = useState(false);
+  const [transferring, setTransferring] = useState(false);
+  const [transferHelp, setTransferHelp] = useState(false);
+  const [recentLineup, setRecentLineup] = useState<string[] | null>(null);
+  const groupRef = useRef<GroupControl | null>(null);
   const deviceKey = useRef("");
   const groupRevision = useRef(0);
   const groupWrites = useRef(Promise.resolve());
@@ -177,15 +187,15 @@ export default function SkeeballTrackerScreen({
     if (mySession.status !== "active") { void clearDraft(mySession.id).catch(() => {}); return; }
     void saveDraft({ version: 1, userId: user.id, sessionId: mySession.id, teamId: mySession.team_id,
       teamName: mySession.team_name ?? teamName ?? "Your team", lane: mySession.lane_number,
-      playerBalls, lineup: sessionPlayers.map(p => p.player_user_id), updatedAt: Date.now(), previousBest: myPrevBest }).catch(() => {
+      playerBalls, lineup: sessionPlayers.map(p => p.player_user_id), updatedAt: Date.now(), previousBest: myPrevBest, scoringGeneration: group?.generation ?? 0 }).catch(() => {
       setSubmitError("Device storage is unavailable. Keep this game open until you submit your scores.");
     });
-  }, [user, mySession, draftSessionReady, playerBalls, sessionPlayers, myPrevBest, saveDraft, clearDraft, teamName, group?.claimed, group?.can_score]);
+  }, [user, mySession, draftSessionReady, playerBalls, sessionPlayers, myPrevBest, saveDraft, clearDraft, teamName, group?.claimed, group?.can_score, group?.generation]);
 
   // Viewers receive persisted progress; their phones never become score inputs.
   const activeSessionId = mySession?.status === "active" ? mySession.id : null;
   useEffect(() => {
-    if (!focused || !activeSessionId || !deviceKey.current || group?.can_score) return;
+    if (!focused || !activeSessionId || !deviceKey.current) return;
     let alive = true, running = false;
     async function refresh() {
       if (running || AppState.currentState !== "active") return;
@@ -193,7 +203,17 @@ export default function SkeeballTrackerScreen({
       try {
         const { data, error } = await supabase.rpc("rpc_skeeball_group_control", { p_session_id: activeSessionId, p_device_key: deviceKey.current });
         if (!alive || error || !data?.ok) return;
-        setGroup(data as GroupControl);
+        const next = data as GroupControl;
+        const previous = groupRef.current;
+        groupRef.current = next;
+        setGroup(next);
+        if (previous?.can_score !== next.can_score || previous?.generation !== next.generation) {
+          groupRevision.current = next.revision;
+          setPlayerBalls(groupBallMap(sessionPlayers.map(p => p.player_user_id), next.balls));
+          setGroupSynced(true); setSyncFailed(false);
+          if (!next.can_score) void clearDraft(activeSessionId!).catch(() => {});
+          if (next.can_score) showToast("This phone is now scoring. Your group’s progress is ready.", "success");
+        }
         if (data.status === "completed") {
           const scores = await supabase.from("skeeball_ball_scores").select("*").eq("session_id", activeSessionId);
           if (alive && !scores.error) { setBallScores(scores.data ?? []); setMySession(prev => prev?.id === activeSessionId ? { ...prev, status: "completed" } : prev); }
@@ -202,7 +222,7 @@ export default function SkeeballTrackerScreen({
     }
     const timer = setInterval(() => { void refresh().catch(() => {}); }, 5000);
     return () => { alive = false; clearInterval(timer); };
-  }, [focused, activeSessionId, group?.can_score]);
+  }, [focused, activeSessionId, sessionPlayers, clearDraft]);
 
   useEffect(() => {
     return () => { channelRef.current?.unsubscribe(); };
@@ -307,7 +327,9 @@ export default function SkeeballTrackerScreen({
       });
       setTeamMembers(members);
       // Pre-select all members (up to 3) so the user just needs to pick a lane
-      setSelectedPlayers(members.slice(0, PLAYERS_PER_GAME).map((m) => m.user_id));
+      const recent = await readRecentGroup(user!.id, teamId!, members.map(m => m.user_id));
+      setRecentLineup(recent);
+      setSelectedPlayers(recent ?? [user!.id, ...members.filter(m => m.user_id !== user!.id).map(m => m.user_id)].filter(id => members.some(m => m.user_id === id)).slice(0, PLAYERS_PER_GAME));
 
       let mine = sessions.find((s) => qrSessionId && s.id === qrSessionId) ?? sessions.find((s) => s.team_id === teamId) ?? null;
 
@@ -397,7 +419,9 @@ export default function SkeeballTrackerScreen({
     if (playersRes.error || scoresRes.error) throw playersRes.error ?? scoresRes.error;
     if (groupRes.error || !groupRes.data?.ok) throw groupRes.error ?? new Error("Could not load the group scorecard. Please retry.");
     const control = groupRes.data as GroupControl;
+    groupRef.current = control;
     setGroup(control);
+    setGroupSynced(control.claimed); setSyncFailed(false);
     groupRevision.current = control.revision;
 
     const players: SessionPlayer[] = (playersRes.data ?? [])
@@ -417,7 +441,7 @@ export default function SkeeballTrackerScreen({
         .sort((a, b) => a.ball_number - b.ball_number)
         .map((b) => b.score);
     }
-    const localDraft = draft?.sessionId === sessionId && draft.lineup.join(",") === players.map(p => p.player_user_id).join(",");
+    const localDraft = draft?.sessionId === sessionId && draft.lineup.join(",") === players.map(p => p.player_user_id).join(",") && (draft.scoringGeneration ?? 0) === (control.generation ?? 0);
     const restored = control.claimed && (!control.can_score || !localDraft) && !scores.length
       ? groupBallMap(players.map(p => p.player_user_id), control.balls)
       : restoreBalls(initialBalls, draft, sessionId);
@@ -459,7 +483,9 @@ export default function SkeeballTrackerScreen({
       const { data, error } = await supabase.rpc("rpc_skeeball_group_control", { p_session_id: mySession.id, p_device_key: deviceKey.current, p_action: "claim" });
       if (error || !data?.ok) throw error ?? new Error("Could not select this phone.");
       groupRevision.current = data.revision;
+      groupRef.current = data as GroupControl;
       setGroup(data as GroupControl);
+      if (data.can_score && user) void rememberGroup(user.id, mySession.team_id, sessionPlayers.map(p => p.player_user_id)).catch(() => {});
       if (data.can_score) syncGroupDraft(mySession.id, orderedGroupBalls(sessionPlayers.map(p => p.player_user_id), playerBalls));
       if (!data.can_score) showToast("Another phone is scoring. You can follow the group here.", "info");
     } catch (e: any) { setSubmitError(e?.message ?? "Connect to choose the group scoring phone."); }
@@ -467,7 +493,7 @@ export default function SkeeballTrackerScreen({
   }
 
   function changeGroupBalls(next: GroupBall[]) {
-    if (!mySession || !group?.can_score || submitting) return;
+    if (!mySession || !group?.can_score || submitting || transferring) return;
     setPlayerBalls(groupBallMap(sessionPlayers.map(p => p.player_user_id), next));
     setSubmitError(null);
     syncGroupDraft(mySession.id, next);
@@ -475,19 +501,67 @@ export default function SkeeballTrackerScreen({
 
   function syncGroupDraft(sessionId: string, next: GroupBall[]) {
     const key = deviceKey.current;
+    const generation = groupRef.current?.generation ?? 0;
     setSyncingGroup(true);
+    setGroupSynced(false);
     groupWriteCount.current++;
     const write = groupWrites.current.catch(() => {}).then(async () => {
+      if (!groupRef.current?.can_score || (groupRef.current.generation ?? 0) !== generation) throw new Error("Scoring moved to another phone.");
       const { data, error } = await supabase.rpc("rpc_skeeball_group_control", { p_session_id: sessionId, p_device_key: key, p_action: "save", p_balls: next, p_revision: groupRevision.current });
       if (error || !data?.ok) throw error ?? new Error("Could not sync group progress.");
       groupRevision.current = data.revision;
+      setSyncFailed(false); setGroupSynced(true);
       setMySession(prev => prev?.id === sessionId ? { ...prev, last_activity_at: new Date().toISOString() } : prev);
     });
     groupWrites.current = write;
-    void write.catch(() => { setSubmitError("Progress is saved on this phone. Reconnect to update viewers; you can keep scoring."); }).finally(() => {
+    void write.catch(() => { setSyncFailed(true); setGroupSynced(false); }).finally(() => {
       groupWriteCount.current--;
       if (!groupWriteCount.current) setSyncingGroup(false);
     });
+    return write;
+  }
+
+  async function retryGroupSync() {
+    if (!mySession || !groupRef.current?.can_score) return;
+    try {
+      await groupWrites.current.catch(() => {});
+      const { data, error } = await supabase.rpc("rpc_skeeball_group_control", { p_session_id: mySession.id, p_device_key: deviceKey.current });
+      if (error || !data?.can_score || data.generation !== groupRef.current.generation) throw error ?? new Error("Scoring control changed. Reopen this game to continue.");
+      groupRevision.current = data.revision;
+      await saveDraft({ version: 1, userId: user!.id, sessionId: mySession.id, teamId: mySession.team_id, teamName: mySession.team_name ?? teamName ?? "Your team", lane: mySession.lane_number, playerBalls, lineup: sessionPlayers.map(p => p.player_user_id), updatedAt: Date.now(), previousBest: myPrevBest, scoringGeneration: groupRef.current.generation });
+      await syncGroupDraft(mySession.id, orderedGroupBalls(sessionPlayers.map(p => p.player_user_id), playerBalls));
+    } catch (e: any) { setSyncFailed(true); showToast(e?.message ?? "Couldn’t sync yet. Keep this phone available.", "error"); }
+  }
+
+  async function transferScoring(action: "request" | "approve" | "decline" | "cancel") {
+    if (!mySession || transferring || submitting) return;
+    setTransferring(true);
+    try {
+      if (action === "approve") {
+        await groupWrites.current.catch(() => {});
+        await syncGroupDraft(mySession.id, orderedGroupBalls(sessionPlayers.map(p => p.player_user_id), playerBalls));
+      }
+      const { data, error } = await supabase.rpc("rpc_skeeball_group_transfer", { p_session_id: mySession.id, p_device_key: deviceKey.current, p_action: action, p_request_id: group?.transfer?.id ?? null });
+      if (error || !data?.ok) throw error ?? new Error("Couldn’t complete the handover.");
+      groupRef.current = data; setGroup(data); groupRevision.current = data.revision;
+      if (action === "approve") {
+        setPlayerBalls(groupBallMap(sessionPlayers.map(p => p.player_user_id), data.balls)); setTransferHelp(false);
+        await Promise.all([clearDraft(mySession.id), user ? discardQueuedSubmission(user.id, mySession.id) : Promise.resolve()]).catch(() => showToast("Handover succeeded. This phone couldn’t clear its saved copy yet.", "info"));
+        showToast("Scoring has moved to the other phone.", "success");
+      }
+    } catch (e: any) { showToast(e?.message ?? "Connect both phones and try again.", "error"); }
+    finally { setTransferring(false); }
+  }
+
+  async function applyRecentLineup() {
+    if (!mySession || !recentLineup || savingOrder) return;
+    setSavingOrder(true);
+    try {
+      const { data, error } = await supabase.rpc("rpc_skeeball_apply_recent_lineup", { p_session_id: mySession.id, p_players: recentLineup });
+      if (error || !data?.ok) throw error ?? new Error("Couldn’t restore your lineup.");
+      await loadSessionData(mySession.id);
+    } catch (e: any) { showToast(e?.message ?? "Your lineup changed. Choose the players again.", "error"); }
+    finally { setSavingOrder(false); }
   }
 
   async function playAgain() {
@@ -850,7 +924,7 @@ export default function SkeeballTrackerScreen({
       try {
         await saveDraft({ version: 1, userId: user.id, sessionId: mySession.id, teamId: mySession.team_id,
           teamName: mySession.team_name ?? teamName ?? "Your team", lane: mySession.lane_number,
-          playerBalls, lineup: sessionPlayers.map(p => p.player_user_id), updatedAt: Date.now(), previousBest: myPrevBest });
+          playerBalls, lineup: sessionPlayers.map(p => p.player_user_id), updatedAt: Date.now(), previousBest: myPrevBest, scoringGeneration: group?.generation ?? 0 });
       } catch { showToast("Could not save on this device. Keep the game open and retry.", "error"); return; }
     }
     leaveScreen();
@@ -989,6 +1063,10 @@ export default function SkeeballTrackerScreen({
           <Text style={s.bigTitle}>Follow your group</Text>
           <Text style={s.spectatorNote}>{group?.claimed ? `${group.owner_name ?? "Your teammate"}’s phone is scoring. Pass that phone between players; progress updates here when connected.` : "A player in the lineup can choose the group scoring phone."}</Text>
           {group?.claimed && <Text style={s.groupTotal}>{group.balls.reduce((sum, b) => sum + b.score, 0)} points · {group.balls.length}/9 balls</Text>}
+          {group?.claimed && iAmPlayer && <View style={{ gap: 12, marginBottom: 24 }}>
+            <Text style={s.groupDescription}>{group.transfer?.is_requester ? "Handover requested. The current scoring phone must approve it. This request expires in five minutes." : "Need to switch phones? Request control here, then approve the handover on the current scoring phone."}</Text>
+            <PlayButton secondary disabled={transferring} label={group.transfer?.is_requester ? "Cancel handover request" : "Request scoring on this phone"} onPress={() => { void transferScoring(group.transfer?.is_requester ? "cancel" : "request"); }} />
+          </View>}
           <Text style={s.sectionLabel}>Team Progress</Text>
           {playerProgress.map((pp) => (
             <ProgressRow key={pp.player_user_id} pp={pp} isMe={pp.player_user_id === user?.id} card />
@@ -1053,6 +1131,7 @@ export default function SkeeballTrackerScreen({
               <Text style={s.orderHint}>
                 Set who shoots first, second, and last — this is tracked for season lineup stats.
               </Text>
+              {recentLineup && recentLineup.join(",") !== sessionPlayers.map(p => p.player_user_id).join(",") && <View style={{ gap: 8, marginBottom: 16 }}><Text style={s.groupDescription}>Last time: {recentLineup.map(id => teamMembers.find(m => m.user_id === id)?.username ?? "Teammate").join(" → ")}</Text><PlayButton secondary disabled={savingOrder} label="Use my recent lineup" onPress={() => { void applyRecentLineup(); }} /></View>}
               {sessionPlayers.map((sp, idx) => (
                 <View key={sp.player_user_id} style={s.orderRow}>
                   <View style={s.orderPosBadge}>
@@ -1061,6 +1140,7 @@ export default function SkeeballTrackerScreen({
                   <Avatar uri={sp.avatar_url} name={sp.username} size={28} radius={9} />
                   <Text style={s.orderName}>{sp.username}</Text>
                   <Pressable
+                    accessibilityRole="button"
                     style={[s.orderArrow, idx === 0 && { opacity: 0.25 }]}
                     accessibilityLabel={`Move ${sp.username} earlier in the lineup`}
                     onPress={() => moveInOrder(idx, -1)}
@@ -1070,6 +1150,7 @@ export default function SkeeballTrackerScreen({
                     <Ionicons name="chevron-up" size={17} color="#06b6d4" />
                   </Pressable>
                   <Pressable
+                    accessibilityRole="button"
                     style={[s.orderArrow, idx === sessionPlayers.length - 1 && { opacity: 0.25 }]}
                     accessibilityLabel={`Move ${sp.username} later in the lineup`}
                     onPress={() => moveInOrder(idx, 1)}
@@ -1097,6 +1178,8 @@ export default function SkeeballTrackerScreen({
                         <Avatar uri={m.avatar_url} name={m.username} size={28} radius={9} />
                         <Text style={[s.orderName, { color: "#999" }]}>{m.username}</Text>
                         <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Add ${m.username} to this lineup`}
                           style={s.orderArrow}
                           onPress={() => swapIntoLineup(m.user_id)}
                           disabled={savingOrder}
@@ -1121,12 +1204,13 @@ export default function SkeeballTrackerScreen({
             </PressableScale>
           </View>}
           {group?.claimed && group.can_score && <>
-            <Text style={s.groupStatus}>{syncingGroup ? "Syncing group progress…" : "Scoring phone · passes between players"}</Text>
+            <SaveStatus local={draftStorage} syncing={syncingGroup} remoteError={syncFailed} synced={groupSynced && !syncingGroup} onRetry={() => { void retryGroupSync(); }} />
             <GroupScorecard key={mySession.id} sessionId={mySession.id} players={sessionPlayers}
-              balls={orderedGroupBalls(sessionPlayers.map(p => p.player_user_id), playerBalls)} onChange={changeGroupBalls} disabled={submitting} />
+              balls={orderedGroupBalls(sessionPlayers.map(p => p.player_user_id), playerBalls)} onChange={changeGroupBalls} disabled={submitting || transferring} />
           </>}
           {sessionPlayers.length === 1 && !group?.claimed && !allLocalDone && currentSp && (
             <View style={s.playerSection}>
+              <SaveStatus local={draftStorage} onRetry={() => { if (draft) void saveDraft(draft).catch(() => {}); }} />
               <View style={s.playerSectionHeader}>
                 <Avatar uri={currentSp.avatar_url} name={currentSp.username} size={32} radius={10} />
                 <Text style={s.playerSectionName}>{currentSp.username}</Text>
@@ -1231,7 +1315,7 @@ export default function SkeeballTrackerScreen({
               accessibilityRole="button"
               style={[s.submitBtn, submitting && s.btnOff]}
               onPress={submitBalls}
-              disabled={submitting}
+              disabled={submitting || transferring}
             >
               {submitting
                 ? <ActivityIndicator size="small" color="#000" />
@@ -1239,7 +1323,18 @@ export default function SkeeballTrackerScreen({
               <Text style={s.submitBtnText}>{group?.claimed ? "Save group game" : "Submit All Scores"}</Text>
             </Pressable>
           )}
+          <View style={{ marginTop: 16 }}><ScoringAwake active={!allLocalDone && !transferring} /></View>
+          {group?.can_score && <>
+            {group.transfer && !group.transfer.is_requester && <View style={[s.groupStart, { marginTop: 16 }]}>
+              <Text style={s.groupTitle}>{group.transfer.name} wants to take over scoring</Text>
+              <Text style={s.groupDescription}>Your latest scores will sync before this phone becomes view-only.</Text>
+              <PlayButton disabled={transferring || submitting} label="Approve phone handover" onPress={() => { void transferScoring("approve"); }} />
+              <PlayButton secondary disabled={transferring} label="Keep scoring here" onPress={() => { void transferScoring("decline"); }} />
+            </View>}
+            <PlayButton secondary style={{ marginTop: 12 }} label="Switch scoring phone" onPress={() => setTransferHelp(true)} />
+          </>}
         </ScrollView>
+        <MotionSheet visible={transferHelp} onClose={() => setTransferHelp(false)} accessibilityLabel="Switch scoring phone" style={{ padding: 20 }}><Text style={s.groupTitle}>Keep your game. Change phones.</Text><Text style={[s.groupDescription, { marginVertical: 18 }]}>On the new phone, sign in as a player in this lineup and open your active game. Choose “Request scoring on this phone,” then approve the request here. Both phones need a connection.</Text><PlayButton label="Got it" onPress={() => setTransferHelp(false)} /></MotionSheet>
       </SafeAreaView>
     );
   }
@@ -1365,7 +1460,7 @@ const s = StyleSheet.create({
   groupDescription: { color: "#b9c7d0", fontSize: 14, lineHeight: 22 },
   groupStatus: { color: "#aebfc7", fontSize: 12, marginBottom: 14 },
   groupTotal: { color: "#67e8f9", fontSize: 24, fontWeight: "800", textAlign: "center", marginBottom: 24 },
-  safe: { flex: 1, backgroundColor: "#000" },
+  safe: { flex: 1, backgroundColor: PLAY.background },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
   scroll: { padding: 20, paddingBottom: 48 },
 
@@ -1427,7 +1522,7 @@ const s = StyleSheet.create({
   },
   orderPosText: { color: "#06b6d4", fontSize: 11, fontWeight: "900" },
   orderName: { flex: 1, color: "#fff", fontSize: 13.5, fontWeight: "700" },
-  orderArrow: { width: 30, height: 30, alignItems: "center", justifyContent: "center" },
+  orderArrow: { width: 44, height: 44, alignItems: "center", justifyContent: "center" },
 
   pbBanner: {
     flexDirection: "row", alignItems: "center", gap: 12,

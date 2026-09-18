@@ -67,6 +67,7 @@ export default function WelcomeScreen() {
         {/* Guest actions — no account needed */}
         <View style={s.guestCard}>
           <Text style={s.guestTitle}>At the bar right now? No account needed.</Text>
+          <Pressable accessibilityRole="button" style={[s.ctaPrimary, { marginBottom: 12, minHeight: 52 }]} onPress={() => router.push("/practice")}><Text style={s.ctaPrimaryText}>Play Skee-Ball with guest names</Text></Pressable>
           <View style={s.guestRow}>
             <Pressable style={s.guestBtn} onPress={() => router.push("/food" as any)}>
               <Ionicons name="restaurant-outline" size={22} color="#f59e0b" />

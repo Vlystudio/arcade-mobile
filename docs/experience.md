@@ -16,11 +16,23 @@ Home shows the caller's active game and published team schedule before the feed.
 
 Choose the lineup and shooting order, then select **Use this phone for the group**. A named Ready screen starts each three-ball turn. Games retain the existing nine-ball rules: three players rotate A/B/C, two rotate A/B/A. The scorecard supports undo across a handoff and corrections to any recorded ball. Handoffs reset safely when reopening a draft.
 
-One account and device key control the game. Other phones show persisted progress while connected. The database checks membership, freezes the lineup after the phone is chosen, validates chronological drafts, and rejects writes from other phones and older clients. Local drafts and queued completion support interrupted connectivity; choosing a phone and starting a rematch require a connection. Keep the original scoring phone/account available for the duration of the game.
+One account and device key control the game. Other phones show persisted progress while connected. The database checks membership, freezes the lineup after the phone is chosen, validates chronological drafts, and rejects writes from other phones and older clients. Local drafts and queued completion support interrupted connectivity; choosing a phone and starting a rematch require a connection.
+
+To change devices, a lineup member requests scoring from the new phone and the current scoring phone approves. Approval waits for outstanding saves, atomically transfers the private device ownership, increments the scoring generation, and immediately revokes the old phone. Requests expire after five minutes and can be cancelled or declined. Both phones need connectivity and the current phone must be available. Restoring a draft from an older ownership generation uses the current server scorecard.
 
 The group recap highlights the combined score and individual contributions. **Play again with this group** preserves the lineup and phone after the league round finishes, provided the lane remains available and the roster is unchanged. A new league week requires checking in again.
 
 Database tests cover ownership, read-only viewers, invalid scores, draft revisions, lineup locking, atomic completion, and rematch eligibility/idempotence. Browser checks cover two- and three-player handoffs, correction, undo, refresh recovery, viewer mode, group recap, and rematch at phone and desktop widths. Physical-device touch and haptic checks remain separate.
+
+## Start playing and casual practice
+
+Home and Play lead with starting or resuming a game. `/start-game` shows an existing league session, remembers the recent team, and routes new league games through lane scanning and existing server eligibility checks. Logging a finished score is a separate secondary action. A recent lineup is scoped to account and team, checked against the current roster, and applied atomically before claiming the scoring phone.
+
+`/practice` works without an account or league membership. One to three guest names share the nine-ball rotation. Local history retains up to 30 finished games with a recap and same-group replay. Draft/history storage is account-scoped (with a separate guest scope); a failed read must succeed before writing so a retry cannot erase unread history. A guest may explicitly carry a completed game through sign-in, then save it to their account. The separate practice table permits only owner reads and validated inserts, and has no path into official score totals or standings.
+
+The scorepad and undo stay in place while entering balls; older scores expand for corrections. Save indicators distinguish device saving, device failure, remote syncing, and remote failure with Retry. The optional screen-awake switch is active only on a focused, foreground scoring screen and releases when the game finishes or the screen closes. Browser Wake Lock and the existing optional Expo native module are used; unsupported/refused requests show a fallback status.
+
+League puts the player's team rank and next published match first, followed by Standings, Results, and Schedule. Season exports and less frequent destinations are under More. The desktop overview uses two columns and the wider league layout. Shared layered surfaces and larger controls preserve cyan actions, green status, gold achievements, and the existing reduced-motion preference.
 
 ## Menu and visual behavior
 
