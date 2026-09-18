@@ -4,11 +4,13 @@ import { ScrollView, Share, StyleSheet, Text, View } from "react-native";
 import { PressableScale } from "./pressable-scale";
 import { MotionView } from "./motion";
 
-export function SessionFinish({ players, previousBest, userId, placement, leaguePoints, onDone }: {
+export function SessionFinish({ players, previousBest, userId, placement, leaguePoints, onDone, onAgain, playingAgain, groupGame }: {
   players: { id: string; name: string; score: number }[]; previousBest: number | null;
   userId?: string; placement?: number | null; leaguePoints?: number | null; onDone: () => void;
+  onAgain?: () => void; playingAgain?: boolean;
+  groupGame?: boolean;
 }) {
-  const mine = players.find(p => p.id === userId);
+  const mine = groupGame ? undefined : players.find(p => p.id === userId);
   const total = players.reduce((sum, p) => sum + p.score, 0);
   const difference = mine && previousBest != null ? mine.score - previousBest : null;
   const improvement = difference == null ? "Your next personal best starts here." : difference > 0 ? `New personal best! ${difference} points above your previous best.` : difference === 0 ? "You matched your personal best." : `${-difference} points to your personal best of ${previousBest}.`;
@@ -20,15 +22,16 @@ export function SessionFinish({ players, previousBest, userId, placement, league
       <Ionicons name="checkmark-circle" size={54} color="#22d3ee" />
       <Text style={s.title}>That’s a wrap.</Text>
       <Text style={s.sub}>Your game is saved. The lane is ready for the next team.</Text>
-      <Text style={s.score}>{mine?.score ?? total}</Text><Text style={s.label}>{mine ? "YOUR SCORE" : "TEAM SCORE"}</Text>
+      <Text style={s.score}>{mine?.score ?? total}</Text><Text style={s.label}>{groupGame ? "GROUP SCORE" : mine ? "YOUR SCORE" : "TEAM SCORE"}</Text>
       {mine && <Text style={s.improvement}>{improvement}</Text>}
     </View></MotionView>
     <View style={s.results}>
       <Text style={s.resultTitle}>Team total · {total}</Text>
       <Text style={s.sub}>{placement ? `Finished #${placement}${leaguePoints != null ? ` · ${leaguePoints} league points` : ""}` : "League placement will appear when the round is final."}</Text>
-      {players.map(p => <View style={s.row} key={p.id}><Text style={s.name}>{p.name}{p.id === userId ? " (you)" : ""}</Text><Text style={s.value}>{p.score}</Text></View>)}
+      {players.map(p => <View style={s.row} key={p.id}><Text style={s.name}>{p.name}{!groupGame && p.id === userId ? " (you)" : ""}</Text><Text style={s.value}>{p.score}</Text></View>)}
     </View>
-    <PressableScale style={s.primary} onPress={() => router.push("/skeeball-recap")}><Text style={s.primaryText}>See your night recap</Text></PressableScale>
+    {onAgain && <PressableScale style={s.primary} disabled={playingAgain} onPress={onAgain}><Text style={s.primaryText}>{playingAgain ? "Starting…" : "Play again with this group"}</Text></PressableScale>}
+    <PressableScale style={onAgain ? s.secondary : s.primary} onPress={() => router.push("/skeeball-recap")}><Text style={onAgain ? s.secondaryText : s.primaryText}>See your night recap</Text></PressableScale>
     <PressableScale style={s.secondary} onPress={onDone}><Text style={s.secondaryText}>Back to your team</Text></PressableScale>
     <PressableScale style={s.secondary} onPress={share}><Text style={s.share}>Share this game</Text></PressableScale>
   </ScrollView>;

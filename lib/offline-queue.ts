@@ -5,7 +5,7 @@ import { supabase } from "./supabase";
 
 export type BallSubmission = { player_user_id: string; ball_number: number; score: number };
 export type PendingSubmit = {
-  session_id: string; balls: BallSubmission[]; ts: number; revision: string; last_error?: string;
+  session_id: string; balls: BallSubmission[]; ts: number; revision: string; last_error?: string; group_device_key?: string;
 };
 const storageKey = (userId: string) => `pending_skee_submits_v2:${userId}`;
 const LEGACY_KEY = "pending_skee_submits_v1"; // gitleaks:allow -- AsyncStorage key, not a credential.
@@ -25,7 +25,7 @@ async function read(userId: string): Promise<PendingSubmit[]> {
 function write(userId: string, items: PendingSubmit[]) {
   return AsyncStorage.setItem(storageKey(userId), JSON.stringify(items));
 }
-export function queueSubmit(userId: string, p: Pick<PendingSubmit, "session_id" | "balls">) {
+export function queueSubmit(userId: string, p: Pick<PendingSubmit, "session_id" | "balls" | "group_device_key">) {
   if (!userId) return Promise.reject(new Error("Sign in before saving scores."));
   return exclusive(async () => {
     const list = await read(userId);
@@ -86,9 +86,9 @@ async function flush(userId: string): Promise<number> {
     if (session?.user.id !== userId) break;
     let failure: string | undefined;
     try {
-      const { data, error } = await supabase.rpc("rpc_skeeball_submit_and_complete", {
-        p_session_id: item.session_id, p_balls: item.balls,
-      });
+      const { data, error } = item.group_device_key
+        ? await supabase.rpc("rpc_skeeball_group_control", { p_session_id: item.session_id, p_balls: item.balls, p_device_key: item.group_device_key, p_action: "submit" })
+        : await supabase.rpc("rpc_skeeball_submit_and_complete", { p_session_id: item.session_id, p_balls: item.balls });
       if (error || data?.error || data?.ok !== true) {
         failure = error?.message ?? data?.message ?? "Scores are still pending. Retry when connected.";
       }

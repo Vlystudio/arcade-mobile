@@ -1,10 +1,15 @@
 import { SessionFinish } from "../components/session-finish";
+import { GroupScorecard } from "../components/group-scorecard";
+import { groupBallMap, orderedGroupBalls, type GroupBall } from "../../lib/group-scoring";
+import { groupScoringDeviceKey, type GroupControl } from "../../lib/group-scoring-device";
+import { useIsFocused } from "@react-navigation/native";
 import { publicProfilesById } from "../../lib/public-profiles";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   BackHandler,
   Modal,
   Pressable,
@@ -100,6 +105,15 @@ export default function SkeeballTrackerScreen({
   const { draft, ready: draftReady, save: saveDraft, clear: clearDraft } = useActiveGame();
   const [draftSessionReady, setDraftSessionReady] = useState<string | null>(null);
   const completing = useRef(false);
+  const focused = useIsFocused();
+  const [group, setGroup] = useState<GroupControl | null>(null);
+  const [claimingPhone, setClaimingPhone] = useState(false);
+  const [syncingGroup, setSyncingGroup] = useState(false);
+  const [rematching, setRematching] = useState(false);
+  const deviceKey = useRef("");
+  const groupRevision = useRef(0);
+  const groupWrites = useRef(Promise.resolve());
+  const groupWriteCount = useRef(0);
 
   const [loading, setLoading] = useState(true);
   const [allActiveSessions, setAllActiveSessions] = useState<LaneSession[]>([]);
@@ -149,7 +163,7 @@ export default function SkeeballTrackerScreen({
 
   const playerProgress = sessionPlayers.map((sp, i) => ({
     ...sp,
-    balls: ballScores.filter((b) => b.player_user_id === sp.player_user_id).length,
+    balls: group?.claimed && !group.can_score ? group.balls.filter(b => b.player_user_id === sp.player_user_id).length : ballScores.filter((b) => b.player_user_id === sp.player_user_id).length,
     expectedBalls: getExpectedBallsForPlayer(i, sessionPlayers.length),
   }));
 
@@ -159,13 +173,36 @@ export default function SkeeballTrackerScreen({
 
   useEffect(() => {
     if (!user || !mySession || draftSessionReady !== mySession.id) return;
+    if (group?.claimed && !group.can_score) return;
     if (mySession.status !== "active") { void clearDraft(mySession.id).catch(() => {}); return; }
     void saveDraft({ version: 1, userId: user.id, sessionId: mySession.id, teamId: mySession.team_id,
       teamName: mySession.team_name ?? teamName ?? "Your team", lane: mySession.lane_number,
       playerBalls, lineup: sessionPlayers.map(p => p.player_user_id), updatedAt: Date.now(), previousBest: myPrevBest }).catch(() => {
       setSubmitError("Device storage is unavailable. Keep this game open until you submit your scores.");
     });
-  }, [user, mySession, draftSessionReady, playerBalls, sessionPlayers, myPrevBest, saveDraft, clearDraft, teamName]);
+  }, [user, mySession, draftSessionReady, playerBalls, sessionPlayers, myPrevBest, saveDraft, clearDraft, teamName, group?.claimed, group?.can_score]);
+
+  // Viewers receive persisted progress; their phones never become score inputs.
+  const activeSessionId = mySession?.status === "active" ? mySession.id : null;
+  useEffect(() => {
+    if (!focused || !activeSessionId || !deviceKey.current || group?.can_score) return;
+    let alive = true, running = false;
+    async function refresh() {
+      if (running || AppState.currentState !== "active") return;
+      running = true;
+      try {
+        const { data, error } = await supabase.rpc("rpc_skeeball_group_control", { p_session_id: activeSessionId, p_device_key: deviceKey.current });
+        if (!alive || error || !data?.ok) return;
+        setGroup(data as GroupControl);
+        if (data.status === "completed") {
+          const scores = await supabase.from("skeeball_ball_scores").select("*").eq("session_id", activeSessionId);
+          if (alive && !scores.error) { setBallScores(scores.data ?? []); setMySession(prev => prev?.id === activeSessionId ? { ...prev, status: "completed" } : prev); }
+        }
+      } finally { running = false; }
+    }
+    const timer = setInterval(() => { void refresh().catch(() => {}); }, 5000);
+    return () => { alive = false; clearInterval(timer); };
+  }, [focused, activeSessionId, group?.can_score]);
 
   useEffect(() => {
     return () => { channelRef.current?.unsubscribe(); };
@@ -178,7 +215,7 @@ export default function SkeeballTrackerScreen({
       .on("postgres_changes", { event: "*", schema: "public", table: "skeeball_sessions" }, async () => {
         const { data } = await supabase
           .from("skeeball_sessions")
-          .select("id, team_id, lane_number, status, teams(name)")
+          .select("id, team_id, lane_number, status, last_activity_at, teams(name)")
           .eq("status", "active");
 
         const sessions: LaneSession[] = (data ?? []).map((s: any) => ({
@@ -351,11 +388,17 @@ export default function SkeeballTrackerScreen({
 
   async function loadSessionData(sessionId: string, members?: Member[]) {
     const mems = members ?? teamMembers;
-    const [playersRes, scoresRes] = await Promise.all([
+    deviceKey.current = await groupScoringDeviceKey(user!.id);
+    const [playersRes, scoresRes, groupRes] = await Promise.all([
       supabase.from("skeeball_session_players").select("session_id, player_user_id, shoot_position").eq("session_id", sessionId),
       supabase.from("skeeball_ball_scores").select("*").eq("session_id", sessionId),
+      supabase.rpc("rpc_skeeball_group_control", { p_session_id: sessionId, p_device_key: deviceKey.current }),
     ]);
     if (playersRes.error || scoresRes.error) throw playersRes.error ?? scoresRes.error;
+    if (groupRes.error || !groupRes.data?.ok) throw groupRes.error ?? new Error("Could not load the group scorecard. Please retry.");
+    const control = groupRes.data as GroupControl;
+    setGroup(control);
+    groupRevision.current = control.revision;
 
     const players: SessionPlayer[] = (playersRes.data ?? [])
       .map((p: any) => {
@@ -374,7 +417,15 @@ export default function SkeeballTrackerScreen({
         .sort((a, b) => a.ball_number - b.ball_number)
         .map((b) => b.score);
     }
-    setPlayerBalls(restoreBalls(initialBalls, draft, sessionId));
+    const localDraft = draft?.sessionId === sessionId && draft.lineup.join(",") === players.map(p => p.player_user_id).join(",");
+    const restored = control.claimed && (!control.can_score || !localDraft) && !scores.length
+      ? groupBallMap(players.map(p => p.player_user_id), control.balls)
+      : restoreBalls(initialBalls, draft, sessionId);
+    setPlayerBalls(restored);
+    if (control.can_score && localDraft && !scores.length) {
+      const restoredBalls = orderedGroupBalls(players.map(p => p.player_user_id), restored);
+      if (JSON.stringify(restoredBalls) !== JSON.stringify(control.balls)) syncGroupDraft(sessionId, restoredBalls);
+    }
     setDraftSessionReady(sessionId);
     // Realtime for this session's ball scores
     if (channelRef.current) channelRef.current.unsubscribe();
@@ -398,6 +449,61 @@ export default function SkeeballTrackerScreen({
         ]);
       })
       .subscribe();
+  }
+
+  async function claimScoringPhone() {
+    if (!mySession || claimingPhone || savingOrder) return;
+    setClaimingPhone(true);
+    setSubmitError(null);
+    try {
+      const { data, error } = await supabase.rpc("rpc_skeeball_group_control", { p_session_id: mySession.id, p_device_key: deviceKey.current, p_action: "claim" });
+      if (error || !data?.ok) throw error ?? new Error("Could not select this phone.");
+      groupRevision.current = data.revision;
+      setGroup(data as GroupControl);
+      if (data.can_score) syncGroupDraft(mySession.id, orderedGroupBalls(sessionPlayers.map(p => p.player_user_id), playerBalls));
+      if (!data.can_score) showToast("Another phone is scoring. You can follow the group here.", "info");
+    } catch (e: any) { setSubmitError(e?.message ?? "Connect to choose the group scoring phone."); }
+    finally { setClaimingPhone(false); }
+  }
+
+  function changeGroupBalls(next: GroupBall[]) {
+    if (!mySession || !group?.can_score || submitting) return;
+    setPlayerBalls(groupBallMap(sessionPlayers.map(p => p.player_user_id), next));
+    setSubmitError(null);
+    syncGroupDraft(mySession.id, next);
+  }
+
+  function syncGroupDraft(sessionId: string, next: GroupBall[]) {
+    const key = deviceKey.current;
+    setSyncingGroup(true);
+    groupWriteCount.current++;
+    const write = groupWrites.current.catch(() => {}).then(async () => {
+      const { data, error } = await supabase.rpc("rpc_skeeball_group_control", { p_session_id: sessionId, p_device_key: key, p_action: "save", p_balls: next, p_revision: groupRevision.current });
+      if (error || !data?.ok) throw error ?? new Error("Could not sync group progress.");
+      groupRevision.current = data.revision;
+      setMySession(prev => prev?.id === sessionId ? { ...prev, last_activity_at: new Date().toISOString() } : prev);
+    });
+    groupWrites.current = write;
+    void write.catch(() => { setSubmitError("Progress is saved on this phone. Reconnect to update viewers; you can keep scoring."); }).finally(() => {
+      groupWriteCount.current--;
+      if (!groupWriteCount.current) setSyncingGroup(false);
+    });
+  }
+
+  async function playAgain() {
+    if (!mySession || rematching) return;
+    setRematching(true);
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc("rpc_skeeball_group_rematch", { p_session_id: mySession.id, p_device_key: deviceKey.current });
+      if (error || !data?.ok || !data.session) throw error ?? new Error("Could not start the next game.");
+      setGroup(null); setPlayerBalls({}); setBallScores([]); setSubmitError(null); setDraftSessionReady(null);
+      setMySession({ ...data.session, team_name: mySession.team_name ?? teamName });
+      const stats = await fetchPlayerStats(user!.id);
+      setMyPrevBest(stats?.totals.best ?? null);
+      await loadSessionData(data.session.id);
+    } catch (e: any) { showToast(e?.message ?? "Could not start the next game. Please retry.", "error"); }
+    finally { setRematching(false); setLoading(false); }
   }
 
   async function startSession() {
@@ -439,6 +545,7 @@ export default function SkeeballTrackerScreen({
   async function moveInOrder(index: number, delta: -1 | 1) {
     const target = index + delta;
     if (target < 0 || target >= sessionPlayers.length || !mySession) return;
+    const previous = sessionPlayers;
     const next = [...sessionPlayers];
     [next[index], next[target]] = [next[target], next[index]];
     const ordered = next.map((p, i) => ({ ...p, shoot_position: i + 1 }));
@@ -450,8 +557,11 @@ export default function SkeeballTrackerScreen({
         p_ordered_user_ids: ordered.map((p) => p.player_user_id),
       });
       if (error || (data as any)?.error) {
-        reportError("SkeeballTracker.moveInOrder", (data as any)?.message ?? error?.message ?? "order failed");
+        throw new Error((data as any)?.message ?? error?.message ?? "Could not save the shooting order.");
       }
+    } catch (e: any) {
+      setSessionPlayers(previous);
+      showToast(e?.message ?? "Could not save the shooting order. Please retry.", "error");
     } finally {
       setSavingOrder(false);
     }
@@ -484,7 +594,7 @@ export default function SkeeballTrackerScreen({
   }
 
   async function submitBalls() {
-    if (!user || !mySession) return;
+    if (!user || !mySession || submitting || (group?.claimed && !group.can_score)) return;
     const totalEntered = sessionPlayers.reduce((s, sp) => s + (playerBalls[sp.player_user_id] ?? []).length, 0);
     const allLocalDone = totalEntered >= TOTAL_BALLS;
     if (!allLocalDone) { setSubmitError("Enter all ball scores before submitting."); return; }
@@ -498,7 +608,11 @@ export default function SkeeballTrackerScreen({
       }))
     );
     try {
-      const { data, error } = await supabase.rpc("rpc_skeeball_submit_balls", {
+      await groupWrites.current.catch(() => {});
+      const { data, error } = group?.claimed ? await supabase.rpc("rpc_skeeball_group_control", {
+        p_session_id: mySession.id, p_device_key: deviceKey.current, p_action: "submit",
+        p_balls: orderedGroupBalls(sessionPlayers.map(p => p.player_user_id), playerBalls),
+      }) : await supabase.rpc("rpc_skeeball_submit_balls", {
         p_session_id: mySession!.id,
         p_balls: balls,
       });
@@ -519,6 +633,10 @@ export default function SkeeballTrackerScreen({
         }))
       );
       setBallScores(asBallScores);
+      if (group?.claimed) {
+        setMySession(prev => prev ? { ...prev, status: "completed", placement: data.placement, league_points: data.league_points } : prev);
+        if (data.placement != null && mySession.league_match_id) void notifyRoundFinal(mySession.league_match_id);
+      }
       setShowWarning(false);
       setWarningCountdown(WARNING_DURATION_S);
       haptic("success");
@@ -527,7 +645,7 @@ export default function SkeeballTrackerScreen({
       // when we're back online, instead of losing the scores.
       if (looksOffline(e)) {
         try {
-          await queueSubmit(user.id, { session_id: mySession!.id, balls });
+          await queueSubmit(user.id, { session_id: mySession!.id, balls: group?.claimed ? orderedGroupBalls(sessionPlayers.map(p => p.player_user_id), playerBalls) : balls, ...(group?.claimed ? { group_device_key: deviceKey.current } : {}) });
         } catch {
           setSubmitError("Could not save scores on this device. Keep this screen open and try again.");
           return;
@@ -728,7 +846,7 @@ export default function SkeeballTrackerScreen({
 
   // Leaving the scorer preserves the lane and draft; ending a game is explicit.
   async function goBack() {
-    if (mySession?.status === "active" && user && draftSessionReady === mySession.id) {
+    if (mySession?.status === "active" && user && draftSessionReady === mySession.id && !(group?.claimed && !group.can_score)) {
       try {
         await saveDraft({ version: 1, userId: user.id, sessionId: mySession.id, teamId: mySession.team_id,
           teamName: mySession.team_name ?? teamName ?? "Your team", lane: mySession.lane_number,
@@ -797,6 +915,14 @@ export default function SkeeballTrackerScreen({
     );
   }
 
+  if (error && mySession && !group) {
+    return <SafeAreaView style={s.safe} edges={["top", "bottom"]}><View style={s.centered}>
+      <Text style={s.bigTitle}>Couldn’t open this game</Text><Text style={s.bigSub}>{error}</Text>
+      <PressableScale style={s.doneBtn} onPress={loadData}><Text style={s.doneBtnText}>Try again</Text></PressableScale>
+      <PressableScale style={s.doneBtn} onPress={leaveScreen}><Text style={s.doneBtnText}>Back to your team</Text></PressableScale>
+    </View></SafeAreaView>;
+  }
+
   // ─── Not Monday (admins and QR sessions can always access) ───────────────────
 
   if (!isMonday() && !isAdmin && !cameFromQr) {
@@ -818,7 +944,7 @@ export default function SkeeballTrackerScreen({
     return <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
       <SessionFinish userId={user?.id} previousBest={myPrevBest} placement={mySession?.placement} leaguePoints={mySession?.league_points}
         players={sessionPlayers.map(sp => ({ id: sp.player_user_id, name: sp.username, score: ballScores.filter(b => b.player_user_id === sp.player_user_id).reduce((sum, b) => sum + b.score, 0) }))}
-        onDone={leaveScreen} />
+        onDone={leaveScreen} onAgain={group?.can_score ? playAgain : undefined} playingAgain={rematching} groupGame={group?.claimed} />
     </SafeAreaView>;
   }
 
@@ -851,16 +977,18 @@ export default function SkeeballTrackerScreen({
 
   // ─── Spectating (not in lineup) ───────────────────────────────────────────────
 
-  if (mySession && !iAmPlayer) {
+  if (mySession && (!iAmPlayer || (group?.claimed && !group.can_score))) {
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
         <View style={s.topBar}>
           <Pressable accessibilityRole="button" accessibilityLabel="Save and go back" style={s.iconBtn} onPress={goBack}><Ionicons name="chevron-back" size={22} color="#fff" /></Pressable>
           <Text style={s.topBarTitle}>Lane {mySession.lane_number}</Text>
-          <Pressable accessibilityRole="button" style={{ minHeight: 44, minWidth: 84, alignItems: "center", justifyContent: "center" }} onPress={endGame}><Text style={{ color: "#fca5a5", fontWeight: "700" }}>End game</Text></Pressable>
+          <View style={{ minWidth: 44 }} />
         </View>
         <ScrollView contentContainerStyle={s.scroll}>
-          <Text style={s.spectatorNote}>You're not in the lineup this game.</Text>
+          <Text style={s.bigTitle}>Follow your group</Text>
+          <Text style={s.spectatorNote}>{group?.claimed ? `${group.owner_name ?? "Your teammate"}’s phone is scoring. Pass that phone between players; progress updates here when connected.` : "A player in the lineup can choose the group scoring phone."}</Text>
+          {group?.claimed && <Text style={s.groupTotal}>{group.balls.reduce((sum, b) => sum + b.score, 0)} points · {group.balls.length}/9 balls</Text>}
           <Text style={s.sectionLabel}>Team Progress</Text>
           {playerProgress.map((pp) => (
             <ProgressRow key={pp.player_user_id} pp={pp} isMe={pp.player_user_id === user?.id} card />
@@ -915,7 +1043,7 @@ export default function SkeeballTrackerScreen({
           )}
 
           {/* ── Shooting order (editable until the first ball) ── */}
-          {totalEntered === 0 && ballScores.length === 0 && sessionPlayers.length > 1 && (
+          {!group?.claimed && totalEntered === 0 && ballScores.length === 0 && sessionPlayers.length > 1 && (
             <View style={s.orderCard}>
               <View style={s.orderHeader}>
                 <Ionicons name="swap-vertical-outline" size={15} color="#06b6d4" />
@@ -984,7 +1112,20 @@ export default function SkeeballTrackerScreen({
           )}
 
           {/* ── Active player — ring tap ──────────────────────── */}
-          {!allLocalDone && currentSp && (
+          {sessionPlayers.length > 1 && !group?.claimed && <View style={s.groupStart}>
+            <Ionicons name="phone-portrait-outline" size={28} color="#67e8f9" />
+            <Text style={s.groupTitle}>One phone. Your whole group.</Text>
+            <Text style={s.groupDescription}>Set your shooting order above, then choose this phone. Each player gets three balls before the handoff. Teammates can follow from their own phones.</Text>
+            <PressableScale disabled={claimingPhone || savingOrder} style={s.submitBtn} onPress={claimScoringPhone}>
+              {claimingPhone ? <ActivityIndicator color="#001016" /> : <Text style={s.submitBtnText}>Use this phone for the group</Text>}
+            </PressableScale>
+          </View>}
+          {group?.claimed && group.can_score && <>
+            <Text style={s.groupStatus}>{syncingGroup ? "Syncing group progress…" : "Scoring phone · passes between players"}</Text>
+            <GroupScorecard key={mySession.id} sessionId={mySession.id} players={sessionPlayers}
+              balls={orderedGroupBalls(sessionPlayers.map(p => p.player_user_id), playerBalls)} onChange={changeGroupBalls} disabled={submitting} />
+          </>}
+          {sessionPlayers.length === 1 && !group?.claimed && !allLocalDone && currentSp && (
             <View style={s.playerSection}>
               <View style={s.playerSectionHeader}>
                 <Avatar uri={currentSp.avatar_url} name={currentSp.username} size={32} radius={10} />
@@ -1037,7 +1178,7 @@ export default function SkeeballTrackerScreen({
           )}
 
           {/* ── Other players — done or up next ──────────────── */}
-          {sessionPlayers.map((sp, playerIdx) => {
+          {!group?.claimed && sessionPlayers.length === 1 && sessionPlayers.map((sp, playerIdx) => {
             const isActive = playerIdx === activePlayerIdx && !allLocalDone;
             if (isActive) return null;
             const spBalls = playerBalls[sp.player_user_id] ?? [];
@@ -1071,7 +1212,7 @@ export default function SkeeballTrackerScreen({
           })}
 
           {/* ── Team total + submit ───────────────────────────── */}
-          {sessionPlayers.length > 1 && (
+          {!group?.claimed && sessionPlayers.length > 1 && totalEntered > 0 && (
             <View style={s.totalRow}>
               <Text style={s.totalLabel}>Team total</Text>
               <ScoreText value={grandTotal} animate suffix=" pts" style={s.totalValue} />
@@ -1085,8 +1226,9 @@ export default function SkeeballTrackerScreen({
             </View>
           )}
 
-          {allLocalDone && (
+          {allLocalDone && (group?.can_score || sessionPlayers.length === 1) && (
             <Pressable
+              accessibilityRole="button"
               style={[s.submitBtn, submitting && s.btnOff]}
               onPress={submitBalls}
               disabled={submitting}
@@ -1094,7 +1236,7 @@ export default function SkeeballTrackerScreen({
               {submitting
                 ? <ActivityIndicator size="small" color="#000" />
                 : <Ionicons name="checkmark-circle-outline" size={20} color="#000" />}
-              <Text style={s.submitBtnText}>Submit All Scores</Text>
+              <Text style={s.submitBtnText}>{group?.claimed ? "Save group game" : "Submit All Scores"}</Text>
             </Pressable>
           )}
         </ScrollView>
@@ -1218,6 +1360,11 @@ function ProgressRow({ pp, isMe, card }: { pp: { player_user_id: string; usernam
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const s = StyleSheet.create({
+  groupStart: { padding: 22, borderRadius: 22, backgroundColor: "#102128", borderWidth: 1, borderColor: "#245363", gap: 14 },
+  groupTitle: { color: "#fff", fontSize: 23, fontWeight: "800" },
+  groupDescription: { color: "#b9c7d0", fontSize: 14, lineHeight: 22 },
+  groupStatus: { color: "#aebfc7", fontSize: 12, marginBottom: 14 },
+  groupTotal: { color: "#67e8f9", fontSize: 24, fontWeight: "800", textAlign: "center", marginBottom: 24 },
   safe: { flex: 1, backgroundColor: "#000" },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
   scroll: { padding: 20, paddingBottom: 48 },

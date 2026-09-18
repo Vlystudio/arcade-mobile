@@ -45,6 +45,15 @@ test('replayed submissions use the atomic completion RPC and only explicit succe
  await q.queueSubmit('a',{session_id:'s',balls:[]});assert.equal(await q.flushQueue('a'),1);
  assert.equal(rpc,'rpc_skeeball_submit_and_complete');assert.equal(await q.pendingCount('a'),0);
 });
+test('offline group submissions retain the scoring phone and use atomic group completion',async()=>{
+ let call;const q=offline(async(name,args)=>{call={name,args};return {data:{ok:true}}});
+ await q.queueSubmit('a',{session_id:'group',balls:[],group_device_key:'local-device-key'});
+ assert.equal(await q.flushQueue('a'),1);
+ assert.equal(call.name,'rpc_skeeball_group_control');
+ assert.equal(call.args.p_device_key,'local-device-key');
+ assert.equal(call.args.p_action,'submit');
+ assert.equal(await q.pendingCount('a'),0);
+});
 test('transient auth failures do not invalidate sessions',()=>{
  const {isInvalidSession}=load('lib/auth-errors.ts');
  assert.equal(isInvalidSession({status:503}),false);assert.equal(isInvalidSession({status:0}),false);
