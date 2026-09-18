@@ -1,5 +1,5 @@
 import { FlashList } from "@shopify/flash-list";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import Animated, {
@@ -142,44 +142,8 @@ export default function LeaderboardScreen() {
 
   async function loadTeamScores() {
     setTeamScoresLoading(true);
-    const { data: sessions } = await supabase
-      .from("skeeball_sessions")
-      .select("id, team_id, week_of, completed_at, teams(name)")
-      .eq("status", "completed")
-      .order("completed_at", { ascending: false })
-      .limit(100);
-
-    const sessionIds = (sessions ?? []).map((s: any) => s.id);
-    let scoreSums: Record<string, number> = {};
-    if (sessionIds.length > 0) {
-      const { data: balls } = await supabase
-        .from("skeeball_ball_scores")
-        .select("session_id, score")
-        .in("session_id", sessionIds);
-      for (const b of balls ?? []) {
-        scoreSums[b.session_id] = (scoreSums[b.session_id] ?? 0) + b.score;
-      }
-    }
-
-    const raw: Omit<TeamScore, "rank">[] = (sessions ?? []).map((s: any) => ({
-      team_id: s.team_id,
-      team_name: Array.isArray(s.teams) ? (s.teams[0]?.name ?? "Unknown Team") : (s.teams?.name ?? "Unknown Team"),
-      total_score: scoreSums[s.id] ?? 0,
-      week_of: s.week_of ?? (s.completed_at ? s.completed_at.split("T")[0] : ""),
-    }));
-
-    // Aggregate by team — keep their highest session score
-    const byTeam: Record<string, Omit<TeamScore, "rank">> = {};
-    for (const t of raw) {
-      if (!byTeam[t.team_id] || t.total_score > byTeam[t.team_id].total_score) {
-        byTeam[t.team_id] = t;
-      }
-    }
-    const ranked: TeamScore[] = Object.values(byTeam)
-      .sort((a, b) => b.total_score - a.total_score)
-      .map((t, i) => ({ ...t, rank: i + 1 }));
-
-    setTeamScores(ranked);
+    const { data, error } = await supabase.rpc("rpc_skeeball_team_high_scores", { p_limit: 100, p_offset: 0 });
+    if (!error) setTeamScores((data ?? []) as TeamScore[]);
     setTeamScoresLoading(false);
   }
 

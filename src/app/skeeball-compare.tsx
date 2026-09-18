@@ -1,4 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
+import { publicProfilesById } from "../../lib/public-profiles";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -68,11 +69,12 @@ export default function SkeeballCompareScreen() {
     if (teamId) {
       supabase
         .from("team_members")
-        .select("user_id, profiles(username, avatar_url)")
+        .select("user_id")
         .eq("team_id", teamId)
-        .then(({ data }) => {
+        .then(async ({ data }) => {
+          const identities = await publicProfilesById((data ?? []).map((m) => m.user_id));
           setTeamMembers((data ?? []).map((m: any) => {
-            const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+            const p = identities.get(m.user_id);
             return { id: m.user_id, username: p?.username ?? "Unknown", avatar_url: p?.avatar_url ?? null };
           }));
         });

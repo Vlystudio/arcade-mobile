@@ -2,7 +2,7 @@
  * Full app demo — all tabs, entirely mock data, no auth required.
  * Visit /demo in the browser to preview.
  */
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {

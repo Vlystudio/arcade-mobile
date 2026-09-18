@@ -1,6 +1,7 @@
-import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import { useEffect, useState } from "react";
+import { useAuth } from "../context/auth-context";
+import Ionicons from "@expo/vector-icons/Ionicons";
+import { router, useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -17,11 +18,14 @@ import { supabase } from "../../lib/supabase";
 type VerifiedFactor = { id: string; type: "totp" | "phone"; phone?: string };
 
 export default function MfaVerifyScreen() {
+  const { signOut } = useAuth();
+  const { returnTo } = useLocalSearchParams<{ returnTo?: string }>();
   const [factors, setFactors]       = useState<VerifiedFactor[]>([]);
   const [active, setActive]         = useState<VerifiedFactor | null>(null);
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [code, setCode]             = useState("");
   const [loading, setLoading]       = useState(true);
+  const verificationInFlight = useRef(false);
   const [verifying, setVerifying]   = useState(false);
   const [sendingSms, setSendingSms] = useState(false);
   const [error, setError]           = useState<string | null>(null);
@@ -39,7 +43,7 @@ export default function MfaVerifyScreen() {
         .map((f) => ({ id: f.id, type: "phone" as const, phone: f.phone })),
     ];
     if (verified.length === 0) {
-      router.replace("/");
+      router.replace(returnTo === "/delete-account" ? "/delete-account" : returnTo === "/karaoke-display" ? "/karaoke-display" : "/");
       return;
     }
     setFactors(verified);
@@ -72,17 +76,18 @@ export default function MfaVerifyScreen() {
     setSendingSms(false);
   }
 
-  async function handleVerify() {
-    if (!active || !challengeId || code.length !== 6) return;
+  async function handleVerify(submittedCode = code) {
+    if (!active || !challengeId || submittedCode.length !== 6 || verificationInFlight.current) return;
+    verificationInFlight.current = true;
     setVerifying(true);
     setError(null);
 
+    try {
     const { error: vErr } = await supabase.auth.mfa.verify({
       factorId: active.id,
       challengeId,
-      code,
+      code: submittedCode,
     });
-    setVerifying(false);
 
     if (vErr) {
       setError("Incorrect code — try again.");
@@ -94,8 +99,10 @@ export default function MfaVerifyScreen() {
         if (newChallenge) setChallengeId(newChallenge.id);
       }
     } else {
-      router.replace("/");
+      router.replace(returnTo === "/delete-account" ? "/delete-account" : returnTo === "/karaoke-display" ? "/karaoke-display" : "/");
     }
+    } catch { setError("Verification failed. Check your connection and try again."); }
+    finally { verificationInFlight.current = false; setVerifying(false); }
   }
 
   if (loading) {
@@ -133,7 +140,7 @@ export default function MfaVerifyScreen() {
           onChangeText={(t) => {
             const d = t.replace(/\D/g, "").slice(0, 6);
             setCode(d);
-            if (d.length === 6) setTimeout(() => handleVerify(), 0);
+            if (d.length === 6) void handleVerify(d);
           }}
           keyboardType="number-pad"
           maxLength={6}
@@ -160,7 +167,7 @@ export default function MfaVerifyScreen() {
 
         <Pressable
           style={[styles.verifyBtn, (verifying || code.length !== 6) && styles.verifyBtnDisabled]}
-          onPress={handleVerify}
+          onPress={() => { void handleVerify(); }}
           disabled={verifying || code.length !== 6}
         >
           {verifying
@@ -184,7 +191,7 @@ export default function MfaVerifyScreen() {
 
         <Pressable
           style={styles.signOutLink}
-          onPress={() => { supabase.auth.signOut().catch(() => {}); router.replace("/login"); }}
+          onPress={async () => { await signOut(); router.replace("/login"); }}
         >
           <Text style={styles.signOutText}>Sign out and use a different account</Text>
         </Pressable>

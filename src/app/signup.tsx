@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -82,14 +82,6 @@ export default function SignupScreen() {
     if (usernameAvailable === false) {
       setSuggestions(generateSuggestions(uname));
       setShowSuggestions(true);
-      setLoading(false);
-      return;
-    }
-
-    // Check email availability
-    const { data: emailAvailable } = await supabase.rpc("check_email_available", { p_email: email.trim() });
-    if (emailAvailable === false) {
-      setError("An account with this email already exists. Try signing in instead.");
       setLoading(false);
       return;
     }

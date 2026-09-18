@@ -1,8 +1,11 @@
-import { Ionicons } from "@expo/vector-icons";
+import { checkoutFingerprint, readCheckout, saveCheckout, removeCheckout } from "../../lib/checkout-state";
+import { useAuth } from "../context/auth-context";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Linking,
   Platform,
   Pressable,
@@ -15,21 +18,40 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useCart } from "../context/cart-context";
 import { useLocation } from "../context/location-context";
 import { reportError } from "../lib/report-error";
-import { createSquareCheckoutLink } from "../../lib/square-food";
+import { createSquareCheckoutLink, squareCheckoutStatus } from "../../lib/square-food";
 
 export default function FoodCartScreen() {
-  const { items, updateQuantity, clearCart, total, itemCount } = useCart();
+  const { items, updateQuantity, clearCart, ready, persistCart, total, itemCount } = useCart();
+  const { user } = useAuth();
   const { location } = useLocation();
 
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const hasNonSquareItems = items.some((item) => !item.squareVariationId);
-  const checkoutBlocked = items.length === 0 || hasNonSquareItems;
+  const checkoutBlocked = !ready || items.length === 0 || hasNonSquareItems;
   const checkoutDisabled = placing || checkoutBlocked;
 
+  const checkoutScope = `${user?.id ?? "guest"}:${location?.slug ?? ""}`;
+  const fingerprint = checkoutFingerprint(location?.slug ?? "", items);
+  useEffect(() => {
+    let active = true;
+    const reconcile = async () => {
+      if (!ready || !location) return;
+      try {
+        const pending = await readCheckout(checkoutScope);
+        if (!pending?.squareOrderId || pending.fingerprint !== fingerprint) return;
+        const status = await squareCheckoutStatus({ locationSlug: location.slug, localOrderId: pending.localOrderId, squareOrderId: pending.squareOrderId });
+        if (active && status.paid) { clearCart(); await removeCheckout(checkoutScope); }
+      } catch { /* Keep the cart and retry on the next foreground transition. */ }
+    };
+    void reconcile();
+    const subscription = AppState.addEventListener("change", (state) => { if (state === "active") void reconcile(); });
+    return () => { active = false; subscription.remove(); };
+  }, [checkoutScope, fingerprint, ready, clearCart, location]);
+
   async function handlePlaceOrder() {
-    if (items.length === 0) return;
+    if (checkoutDisabled) return;
     setError(null);
     setPlacing(true);
 
@@ -45,9 +67,12 @@ export default function FoodCartScreen() {
       return;
     }
 
-    const localOrderId = createUuid();
-
     try {
+      await persistCart();
+      const previous = await readCheckout(checkoutScope);
+      const pending = previous?.fingerprint === fingerprint ? previous : { fingerprint, localOrderId: createUuid() };
+      const localOrderId = pending.localOrderId;
+      await saveCheckout(checkoutScope, pending);
       const checkout = await createSquareCheckoutLink({
         locationSlug: location.slug,
         localOrderId,
@@ -61,7 +86,7 @@ export default function FoodCartScreen() {
         throw new Error("Square did not return a checkout URL.");
       }
 
-      clearCart();
+      await saveCheckout(checkoutScope, { ...pending, checkoutUrl: checkout.checkoutUrl, squareOrderId: checkout.squareOrderId ?? undefined });
       if (Platform.OS === "web" && typeof window !== "undefined") {
         window.location.assign(checkout.checkoutUrl);
       } else {
@@ -73,7 +98,7 @@ export default function FoodCartScreen() {
       setError(msg);
       setPlacing(false);
       return;
-    }
+    } finally { setPlacing(false); }
   }
 
   return (

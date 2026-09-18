@@ -1,3 +1,5 @@
+import { isTeamMember } from "../_auth";
+import { checkServiceQuota } from "../_service-work";
 import { createClient } from "@supabase/supabase-js";
 import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "../_cors";
 import { checkRateLimit } from "../_ratelimit";
@@ -104,6 +106,10 @@ export default async function handler(req: any, res: any) {
   if (action === "sub_request") {
     const teamId = String(body?.teamId ?? "");
     if (!UUID_RE.test(teamId)) return sendJson(res, 400, { error: "invalid_team" });
+    if (!(await isTeamMember(supabase, caller.id, teamId, true))) return sendJson(res, 403, { error: "Captain access required." });
+    const { data: request } = await supabase.from("sub_requests").select("id").eq("team_id", teamId).eq("status", "open").order("week_of", { ascending: false }).limit(1).maybeSingle();
+    if (!request) return sendJson(res, 400, { error: "No open sub request." });
+    if (!(await checkServiceQuota(supabase, res, `push-sub:${request.id}`, 1, 3600))) return;
     const { data: team } = await supabase.from("teams").select("name").eq("id", teamId).maybeSingle();
     // Notify everyone who opted in as an available sub (excluding that team)
     const { data: subs } = await supabase.from("profiles").select("id").eq("sub_available", true);
@@ -133,6 +139,10 @@ export default async function handler(req: any, res: any) {
       .eq("id", requestId)
       .maybeSingle();
     if (!reqRow || reqRow.status !== "filled") return sendJson(res, 200, { ok: true, skipped: true });
+    if (reqRow.filled_by !== caller.id && !(await isTeamMember(supabase, caller.id, reqRow.team_id, true))) {
+      return sendJson(res, 403, { error: "forbidden" });
+    }
+    if (!(await checkServiceQuota(supabase, res, `push-filled:${requestId}`, 1, 86400))) return;
     const { data: volunteer } = await supabase.from("profiles").select("username").eq("id", reqRow.filled_by).maybeSingle();
     const sent = await sendToTeams(
       [reqRow.team_id],

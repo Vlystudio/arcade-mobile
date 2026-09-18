@@ -14,8 +14,8 @@ const existingBlockList = config.resolver.blockList
 config.resolver.blockList = [...existingBlockList, /[/\\]\.claude[/\\].*/];
 
 // On web, @sentry/react-native imports native-only modules that don't exist.
-// Redirect to a no-op stub so the web bundle compiles cleanly.
-const sentryStub = path.resolve(__dirname, "src/lib/sentry-stub.ts");
+// Use the browser SDK so web errors are reported too.
+const sentryStub = path.resolve(__dirname, "src/lib/sentry.web.ts");
 const upstream = config.resolver.resolveRequest;
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (platform === "web" && moduleName === "@sentry/react-native") {

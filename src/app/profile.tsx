@@ -1,7 +1,8 @@
+import { useAuth } from "../context/auth-context";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Image } from "expo-image";
 import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import Head from "expo-router/head";
 import { useEffect, useRef, useState } from "react";
@@ -44,6 +45,7 @@ const PLACE_MEDALS = ["🥇", "🥈", "🥉"];
 const BIO_LIMIT = 160;
 
 export default function ProfileScreen() {
+  const { signOut } = useAuth();
   const { user, loading: authLoading } = useRequireAuth();
 
   const [username, setUsername] = useState<string | null>(null);
@@ -290,7 +292,7 @@ export default function ProfileScreen() {
     setUploadingAvatar(true);
     try {
       const response = await fetch(asset.uri);
-      const blob = await response.blob();
+      const blob = await response.arrayBuffer();
       const path = `${user.id}/avatar.jpg`;
       const { publicUrl } = await uploadModeratedPublicImage({
         ownerId: user.id,
@@ -552,9 +554,9 @@ export default function ProfileScreen() {
     setForumResults([]);
   }
 
-  function handleLogout() {
+  async function handleLogout() {
     setSettingsVisible(false);
-    supabase.auth.signOut().catch(() => {});
+    await signOut();
     router.replace("/login");
   }
 

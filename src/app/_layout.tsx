@@ -2,17 +2,11 @@ import * as Sentry from "@sentry/react-native";
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack, usePathname } from "expo-router";
 import React from "react";
-import { Platform, View } from "react-native";
+import { AppState, Platform, View } from "react-native";
+import * as Network from "expo-network";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
-Sentry.init({
-  dsn: "https://483f3f6bbb4581e28ed5ddaf6a17c07e@o4511509249785856.ingest.us.sentry.io/4511509250768896",
-  sendDefaultPii: true,
-  enableLogs: true,
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1,
-  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
-});
+
 import { AdminProvider } from "../context/admin-context";
 import { AuthProvider, useAuth } from "../context/auth-context";
 import { CartProvider } from "../context/cart-context";
@@ -25,6 +19,16 @@ import { GuidedTourHost } from "../components/guided-tour";
 import { PullToRefresh } from "../components/pull-to-refresh";
 import { UpdateBanner } from "../components/update-banner";
 import { initOfflineFlush } from "../../lib/offline-queue";
+import { PendingScores } from "../components/pending-scores";
+
+Sentry.init({
+  dsn: "https://483f3f6bbb4581e28ed5ddaf6a17c07e@o4511509249785856.ingest.us.sentry.io/4511509250768896",
+  sendDefaultPii: true,
+  enableLogs: true,
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1,
+  integrations: [Sentry.mobileReplayIntegration(), Sentry.feedbackIntegration()],
+});
 
 configureNotificationHandler();
 
@@ -60,11 +64,19 @@ function AppColumn({ children }: { children: React.ReactNode }) {
 /** Registers the device for push once a user is signed in. Renders nothing. */
 function PushRegistrar() {
   const { user } = useAuth();
+  const userId = user?.id;
   React.useEffect(() => {
-    if (user) registerForPush(user.id);
-  }, [user?.id]);
+    if (!userId) return;
+    const retry = () => { void registerForPush(userId); };
+    retry();
+    const app = AppState.addEventListener("change", state => { if (state === "active") retry(); });
+    const network = Network.addNetworkStateListener(state => { if (state.isConnected) retry(); });
+    return () => { app.remove(); network.remove(); };
+  }, [userId]);
   // Flush any skee-ball scores queued while offline, on launch + when back online.
-  React.useEffect(() => { initOfflineFlush(); }, []);
+  React.useEffect(() => {
+    if (userId) return initOfflineFlush(userId);
+  }, [userId]);
   return null;
 }
 
@@ -80,6 +92,7 @@ export default function RootLayout() {
         <EnvBanner />
         <UpdateBanner />
         <PushRegistrar />
+        <PendingScores />
         <ScreenshotButton />
         <Stack
           screenOptions={{

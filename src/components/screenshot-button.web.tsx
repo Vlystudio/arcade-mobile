@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import html2canvas from "html2canvas";
 import { useEffect, useRef, useState } from "react";
 import {

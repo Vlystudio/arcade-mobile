@@ -1,5 +1,6 @@
+import { publicProfilesById } from "../../lib/public-profiles";
 import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect } from "expo-router";
 import Head from "expo-router/head";
 import { useCallback, useEffect, useState } from "react";
@@ -309,15 +310,17 @@ export default function TeamsScreen() {
     }
     // Captain leaving — check if there are other members
     setTransferLoading(true);
-    const { data } = await supabase
+    try {
+    const { data, error } = await supabase
       .from("team_members")
-      .select("user_id, profiles(username)")
+      .select("user_id")
       .eq("team_id", team.id)
       .neq("user_id", user!.id);
-    setTransferLoading(false);
+    if (error) throw error;
+    const identities = await publicProfilesById((data ?? []).map(m => m.user_id));
     const members = (data ?? []).map((m: any) => ({
       user_id: m.user_id,
-      username: Array.isArray(m.profiles) ? m.profiles[0]?.username : m.profiles?.username ?? "Unknown",
+      username: identities.get(m.user_id)?.username ?? "Unknown",
     }));
     if (members.length === 0) {
       setDisbandTarget(team);
@@ -326,6 +329,10 @@ export default function TeamsScreen() {
       setSelectedNewCaptain(null);
       setTransferTarget(team);
     }
+    } catch (error) {
+      reportError("Teams.loadTransferMembers", error instanceof Error ? error.message : "Could not load team members");
+      Alert.alert("Members unavailable", "Please try again before transferring or leaving this team.");
+    } finally { setTransferLoading(false); }
   }
 
   async function handleTransferAndLeave() {

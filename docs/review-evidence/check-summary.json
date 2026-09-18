@@ -1,0 +1,41 @@
+{
+  "commit": "35fc973",
+  "reviewDate": "2026-09-18",
+  "scope": {
+    "sourceFiles": 250,
+    "sourceLines": 67093,
+    "sqlFiles": 77,
+    "tsxFiles": 110
+  },
+  "typescript": "passed",
+  "lint": {
+    "errors": 0,
+    "warnings": 120
+  },
+  "webExport": "passed (placeholder environment)",
+  "androidExport": "passed (JavaScript/Hermes only, placeholder environment)",
+  "expoCompatibilityMismatches": 20,
+  "productionDependencyAudit": {
+    "info": 0,
+    "low": 1,
+    "moderate": 17,
+    "high": 12,
+    "critical": 0,
+    "total": 30
+  },
+  "highSeverityDependencyPackages": [
+    "@expo/metro",
+    "@xmldom/xmldom",
+    "brace-expansion",
+    "browserslist",
+    "image-size",
+    "js-yaml",
+    "metro",
+    "metro-config",
+    "metro-transform-worker",
+    "nanoid",
+    "postcss",
+    "shell-quote"
+  ],
+  "liveDatabaseVerified": false
+}

@@ -8,7 +8,11 @@ module.exports = defineConfig([
     // Build output, Expo-generated types, and the Deno edge functions
     // (which import from https://esm.sh/* URLs the Node resolver can't see)
     // are not part of the Expo app's lint surface.
-    ignores: ["dist/*", ".expo/*", "supabase/functions/**"],
+    ignores: ["dist/**", ".review-build/**", ".expo/**", "supabase/functions/**"],
+  },
+  {
+    files: ["tests/**/*.cjs", "docs/review-evidence/*.cjs"],
+    languageOptions: { globals: { Buffer: "readonly", __dirname: "readonly" } },
   },
   {
     rules: {

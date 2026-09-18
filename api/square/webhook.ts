@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 import { applyCors, handleCorsPreflight } from "../_cors";
+import { assertSquareConfigured, squareRequest, getSquareLocationId } from "./_shared";
 
 const supabase = createClient(
   (process.env.SUPABASE_URL ?? process.env.EXPO_PUBLIC_SUPABASE_URL)!,
@@ -65,82 +66,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(202).json({ ok: true, ignored: true });
   }
 
-  const { error: eventError } = await supabase.from("square_webhook_events").insert({
-    event_id: eventId,
-    event_type: eventType,
-    merchant_id: event?.merchant_id ?? null,
-    payload: event,
-  });
-
-  if (eventError) {
-    if (eventError.code === "23505") {
-      // Duplicate event_id — log as replay attempt (fire-and-forget)
-      logPaymentSecurityEvent("payment_webhook_replay", { event_id: eventId });
-      return res.status(200).json({ ok: true, duplicate: true });
+  const object = event?.data?.object;
+  const eventPayment = object?.payment;
+  const orderId = eventPayment?.order_id ?? object?.order_updated?.order_id ?? object?.order_created?.order_id ?? object?.order?.id;
+  if (typeof orderId !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(orderId)) {
+    return res.status(202).json({ ok: true, ignored: true });
+  }
+  const square = assertSquareConfigured("arcade_bar");
+  if (!square.configured) return res.status(503).json({ error: "webhook_unavailable" });
+  try {
+    // Reconcile against the current provider state; event delivery can be out of order.
+    const { order } = await squareRequest(`/v2/orders/${encodeURIComponent(orderId)}`, square);
+    if (!order || order.id !== orderId) throw new Error("order_not_found");
+    const locations = [getSquareLocationId("arcade_bar"), getSquareLocationId("vinyl_hall")].filter(Boolean);
+    if (!locations.includes(order.location_id)) return res.status(202).json({ ok: true, ignored: true });
+    const { location } = await squareRequest(`/v2/locations/${encodeURIComponent(order.location_id)}`, square);
+    if (!location?.merchant_id || event.merchant_id !== location.merchant_id) {
+      return res.status(403).json({ error: "merchant_mismatch" });
     }
-    console.error("[square-webhook] event insert failed", eventError.message);
+    const paymentIds = [...new Set<string>([
+      ...(eventPayment?.id ? [eventPayment.id] : []),
+      ...(order.tenders ?? []).map((t: any) => t.payment_id).filter(Boolean),
+    ])];
+    const payments = await Promise.all(paymentIds.map(async (id) => {
+      const { payment } = await squareRequest(`/v2/payments/${encodeURIComponent(id)}`, square);
+      if (!payment || payment.order_id !== orderId || payment.location_id !== order.location_id) throw new Error("payment_mismatch");
+      return payment;
+    }));
+    const currency = order.total_money?.currency;
+    const amount = order.total_money?.amount;
+    const paid = payments.filter((p) => p.status === "COMPLETED" && p.amount_money?.currency === currency)
+      .reduce((sum, p) => sum + (p.amount_money?.amount ?? 0) - (p.refunded_money?.amount ?? 0), 0);
+    const verifiedPaid = Number.isSafeInteger(amount) && amount > 0 && paid >= amount;
+    const { data, error } = await supabase.rpc("process_square_webhook", {
+      p_event: event, p_order: order,
+      p_payment: payments.find((p) => p.status === "COMPLETED") ?? payments[0] ?? null,
+      p_verified_paid: verifiedPaid,
+    });
+    if (error || data?.error) throw new Error(error?.message ?? data.error);
+    return res.status(200).json(data ?? { ok: true });
+  } catch (error) {
+    console.error("[square-webhook] reconciliation failed", error instanceof Error ? error.message : "unknown");
+    // No event is marked processed until the database transaction commits all effects.
     return res.status(500).json({ error: "webhook_failed" });
   }
-
-  const payment = event?.data?.object?.payment;
-  const order = event?.data?.object?.order;
-  const paymentId = payment?.id ?? null;
-  const orderId = payment?.order_id ?? order?.id ?? null;
-  const status = payment?.status ?? order?.state ?? null;
-
-  if (paymentId || orderId) {
-    const matchColumn = paymentId ? "square_payment_id" : "square_order_id";
-    const matchValue = paymentId ?? orderId;
-    const statusPayload = {
-      square_payment_id: paymentId,
-      square_order_id: orderId,
-      status,
-      event_type: eventType,
-      last_event_id: eventId,
-      updated_at: new Date().toISOString(),
-      raw_event: event,
-    };
-
-    const { data: existing, error: lookupError } = await supabase
-      .from("square_payment_statuses")
-      .select("id")
-      .eq(matchColumn, matchValue)
-      .maybeSingle();
-    if (lookupError) {
-      console.error("[square-webhook] status lookup failed", lookupError.message);
-      return res.status(500).json({ error: "webhook_failed" });
-    }
-
-    const { error: statusError } = existing?.id
-      ? await supabase.from("square_payment_statuses").update(statusPayload).eq("id", existing.id)
-      : await supabase.from("square_payment_statuses").insert(statusPayload);
-
-    if (statusError) {
-      console.error("[square-webhook] status upsert failed", statusError.message);
-      return res.status(500).json({ error: "webhook_failed" });
-    }
-  }
-
-  // Auto-confirm team registration payments when the order completes
-  const orderReferenceId: string | null = order?.reference_id ?? null;
-  const isOrderComplete = order?.state === "COMPLETED" || payment?.status === "COMPLETED";
-  if (orderReferenceId?.startsWith("reg:") && isOrderComplete) {
-    const registrationId = orderReferenceId.slice(4);
-    const { error: regError } = await supabase
-      .from("team_registrations")
-      .update({
-        status: "paid",
-        paid_at: new Date().toISOString(),
-        ...(orderId ? { square_order_id: orderId } : {}),
-      })
-      .eq("id", registrationId)
-      .eq("status", "pending_payment");
-    if (regError) {
-      console.error("[square-webhook] registration confirm failed", regError.message);
-    }
-  }
-
-  return res.status(200).json({ ok: true });
 }
 
 function logPaymentSecurityEvent(eventType: string, details: Record<string, unknown>) {

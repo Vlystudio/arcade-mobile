@@ -1,4 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
+import { escapeHtml, csvCell } from "../../lib/export-text";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import Head from "expo-router/head";
 import { useEffect, useState } from "react";
@@ -222,7 +223,7 @@ export default function LeaguesScreen() {
     const seasonName = skeeSeasons.find((sn) => sn.id === skeeSeasonId)?.name ?? "all-time";
     const header = "Rank,Team,Games,Avg,Gold,Silver,Bronze,Points";
     const rows = skeeStandings.map((st, i) =>
-      [i + 1, `"${st.team_name.replace(/"/g, '""')}"`, st.matches_played, st.avg_score ?? "", st.gold, st.silver, st.bronze, st.total_points].join(",")
+      [i + 1, csvCell(st.team_name), st.matches_played, st.avg_score ?? "", st.gold, st.silver, st.bronze, st.total_points].join(",")
     );
     const csv = [header, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -250,15 +251,16 @@ export default function LeaguesScreen() {
     const seasonName = skeeSeasons.find((sn) => sn.id === skeeSeasonId)?.name ?? "Skee-Ball League";
     const slotRows = (slots ?? []).map((r: any) => {
       const name = (Array.isArray(r.teams) ? r.teams[0]?.name : r.teams?.name) ?? "Unknown";
-      return `<tr><td>${r.slot_time}</td><td>${name}</td></tr>`;
+      return `<tr><td>${escapeHtml(r.slot_time)}</td><td>${escapeHtml(name)}</td></tr>`;
     }).join("");
     const standingRows = skeeStandings.map((t, i) =>
-      `<tr><td>${i + 1}</td><td>${t.team_name}</td><td>${t.matches_played}</td><td>${t.avg_score ?? "—"}</td><td><b>${t.total_points}</b></td></tr>`
+      `<tr><td>${i + 1}</td><td>${escapeHtml(t.team_name)}</td><td>${escapeHtml(t.matches_played)}</td><td>${escapeHtml(t.avg_score ?? "—")}</td><td><b>${escapeHtml(t.total_points)}</b></td></tr>`
     ).join("");
 
     const win = window.open("", "_blank");
     if (!win) return;
-    win.document.write(`<!doctype html><html><head><title>${seasonName} — Schedule & Standings</title>
+    win.opener = null;
+    win.document.write(`<!doctype html><html><head><title>${escapeHtml(seasonName)} — Schedule & Standings</title>
 <style>
   body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; color: #111; margin: 32px; }
   h1 { font-size: 20px; margin: 0 0 2px; } h2 { font-size: 14px; margin: 24px 0 8px; text-transform: uppercase; letter-spacing: 1px; }
@@ -267,7 +269,7 @@ export default function LeaguesScreen() {
   th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
   th { background: #f2f2f2; }
 </style></head><body>
-<h1>${seasonName}</h1>
+<h1>${escapeHtml(seasonName)}</h1>
 <div class="sub">Week of ${new Date(weekOf).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</div>
 <h2>This Week's Schedule</h2>
 <table><tr><th>Time</th><th>Team</th></tr>${slotRows || '<tr><td colspan="2">No schedule saved yet</td></tr>'}</table>

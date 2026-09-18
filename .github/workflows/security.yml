@@ -29,6 +29,19 @@ jobs:
       - name: TypeScript type check
         run: npx tsc --noEmit
 
+      - name: Expo SDK compatibility
+        run: npm run check:expo
+
+      - name: Runtime and PostgreSQL regression tests
+        run: npm test
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Edge Function type check
+        run: deno check supabase/functions/moderate-image/index.ts supabase/functions/delete-account/index.ts supabase/functions/password-login/index.ts
+
       # Lint errors block the build; warnings are advisory. A committed
       # eslint.config.js keeps this deterministic (no auto-config in CI).
       - name: Lint

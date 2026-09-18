@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Device from "expo-device";
 import * as ImagePicker from "expo-image-picker";
 import { usePathname } from "expo-router";

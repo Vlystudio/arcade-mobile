@@ -1,5 +1,5 @@
 import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import Head from "expo-router/head";
 import { useEffect, useState } from "react";

@@ -1,4 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
+import { publicProfilesById } from "../../lib/public-profiles";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -105,16 +106,14 @@ export default function FFTournamentScreen() {
     if (completedIds.length > 0) {
       const { data: pData } = await supabase
         .from("tournament_placements")
-        .select("tournament_id, placement, user_id, username, profiles(username)")
+        .select("tournament_id, placement, user_id, username")
         .in("tournament_id", completedIds)
         .order("placement");
+      const identities = await publicProfilesById((pData ?? []).map(p => p.user_id));
 
       for (const p of pData ?? []) {
-        // Prefer username stored on the row (guests), fall back to joined profile
-        const profileName =
-          Array.isArray((p as any).profiles)
-            ? (p as any).profiles[0]?.username
-            : (p as any).profiles?.username;
+        // Guest names are stored on placements; member identities use the public view.
+        const profileName = identities.get(p.user_id)?.username;
         const name = (p as any).username ?? profileName ?? "Unknown";
         const uid = (p as any).user_id;
         const isGuest = !profileName; // no profile = guest player

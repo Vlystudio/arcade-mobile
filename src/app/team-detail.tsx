@@ -1,7 +1,8 @@
+import { publicProfilesById } from "../../lib/public-profiles";
 import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
 import { Image } from "expo-image";
 import { Avatar } from "../components/avatar";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -221,14 +222,15 @@ export default function TeamDetailScreen() {
     }
 
     const [membersRes, teamRes, profileRes, bannedRes] = await Promise.all([
-      supabase.from("team_members").select("user_id, role, profiles(username, avatar_url)").eq("team_id", teamId),
+      supabase.from("team_members").select("user_id, role").eq("team_id", teamId),
       supabase.from("teams").select("captain_user_id, photo_url, slot_pref_1, slot_pref_2").eq("id", teamId).single(),
       supabase.from("profiles").select("role").eq("id", user.id).single(),
       supabase.from("team_bans").select("user_id, created_at").eq("team_id", teamId),
     ]);
 
+    const identities = await publicProfilesById((membersRes.data ?? []).map((m) => m.user_id));
     const memberList: Member[] = (membersRes.data ?? []).map((m: any) => {
-      const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+      const p = identities.get(m.user_id);
       return { user_id: m.user_id, role: m.role, username: p?.username ?? "Unknown", avatar_url: p?.avatar_url ?? null };
     });
     setMembers(memberList);
@@ -514,9 +516,11 @@ export default function TeamDetailScreen() {
     setCoachError(null);
     setCoachResult(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sign in to continue.");
       const resp = await fetch(`${API_BASE}/api/skeeball/ai`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
         body: JSON.stringify({
           tool: "coach",
           teamId,
@@ -731,9 +735,11 @@ export default function TeamDetailScreen() {
     setRecapError(null);
     setRecapResult(null);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sign in to continue.");
       const resp = await fetch(`${API_BASE}/api/skeeball/ai`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
         body: JSON.stringify({
           tool: "recap",
           teamId,

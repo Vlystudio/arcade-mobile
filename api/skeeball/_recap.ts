@@ -1,3 +1,5 @@
+import { requireUser, isTeamMember } from "../_auth";
+import { cachedServiceWork, checkServiceQuota } from "../_service-work";
 import { createClient } from "@supabase/supabase-js";
 import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "../_cors";
 import { checkRateLimit } from "../_ratelimit";
@@ -28,6 +30,8 @@ export default async function handler(req: any, res: any) {
   if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed" });
   if (!(await checkRateLimit(req, res))) return;
 
+  const caller = await requireUser(req, res, supabase);
+  if (!caller) return;
   const body = parseBody(req.body);
   const teamId = typeof body?.teamId === "string" ? body.teamId.trim() : "";
   const mode = body?.mode === "season" ? "season" : "week";
@@ -37,54 +41,31 @@ export default async function handler(req: any, res: any) {
   if (!UUID_RE.test(teamId)) return sendJson(res, 400, { error: "Invalid team ID." });
 
   // ── Gather data with the service role ──
+  if (!(await isTeamMember(supabase, caller.id, teamId))) return sendJson(res, 403, { error: "Team membership required." });
+  if (!(await checkServiceQuota(supabase, res, `ai:${caller.id}`, 10, 3600))) return;
+  if ((seasonStart && !/^\d{4}-\d{2}-\d{2}$/.test(seasonStart)) || (seasonEnd && !/^\d{4}-\d{2}-\d{2}$/.test(seasonEnd))) {
+    return sendJson(res, 400, { error: "Invalid season dates." });
+  }
+
   const { data: team } = await supabase.from("teams").select("name").eq("id", teamId).maybeSingle();
   if (!team) return sendJson(res, 404, { error: "Team not found." });
 
-  let sessQuery = supabase
-    .from("skeeball_sessions")
-    .select("id, week_of, placement, league_points, league_points_adjustment, score_adjustment, league_match_id")
-    .eq("team_id", teamId)
-    .eq("status", "completed")
-    .not("league_match_id", "is", null)
-    .order("week_of", { ascending: true });
-  if (seasonStart) sessQuery = sessQuery.gte("week_of", seasonStart);
-  if (seasonEnd) sessQuery = sessQuery.lte("week_of", seasonEnd);
-  const { data: sessions } = await sessQuery;
-
+  const { data: stats, error: statsError } = await supabase.rpc("rpc_skeeball_recap_data", {
+    p_team_id: teamId, p_start: seasonStart, p_end: seasonEnd,
+  });
+  if (statsError || !stats) return sendJson(res, 503, { error: "League data is temporarily unavailable." });
+  const { sessions, balls, profiles, oppSessions, oppBalls } = stats as {
+    sessions: any[]; balls: any[]; profiles: any[]; oppSessions: any[]; oppBalls: any[];
+  };
   if (!sessions?.length) {
     return sendJson(res, 200, { ok: false, message: "No completed league games to recap yet." });
   }
-
   const scoped = mode === "week"
     ? sessions.filter((s: any) => s.week_of === sessions[sessions.length - 1].week_of)
     : sessions;
   const sessionIds = scoped.map((s: any) => s.id);
   const allIds = sessions.map((s: any) => s.id);
-
-  // Ball scores for player-level numbers (season context even in week mode)
-  const { data: balls } = await supabase
-    .from("skeeball_ball_scores")
-    .select("session_id, player_user_id, score")
-    .in("session_id", allIds);
-
-  const playerIds = [...new Set((balls ?? []).map((b: any) => b.player_user_id))];
-  const { data: profiles } = playerIds.length
-    ? await supabase.from("profiles").select("id, username").in("id", playerIds)
-    : { data: [] as any[] };
-  const nameOf = Object.fromEntries((profiles ?? []).map((p: any) => [p.id, p.username ?? "Unknown"]));
-
-  // Opponents in the scoped matches
-  const matchIds = [...new Set(scoped.map((s: any) => s.league_match_id))];
-  const { data: oppSessions } = await supabase
-    .from("skeeball_sessions")
-    .select("id, league_match_id, team_id, placement, score_adjustment, teams(name)")
-    .in("league_match_id", matchIds)
-    .neq("team_id", teamId)
-    .eq("status", "completed");
-  const oppIds = (oppSessions ?? []).map((s: any) => s.id);
-  const { data: oppBalls } = oppIds.length
-    ? await supabase.from("skeeball_ball_scores").select("session_id, score").in("session_id", oppIds)
-    : { data: [] as any[] };
+  const nameOf = Object.fromEntries(profiles.map((p: any) => [p.id, p.username ?? "Unknown"]));
   const oppScore = (sid: string) =>
     (oppBalls ?? []).filter((b: any) => b.session_id === sid).reduce((a: number, b: any) => a + b.score, 0);
 
@@ -149,7 +130,7 @@ Write the recap. Rules:
 Respond with ONLY valid JSON: {"recap": "...", "highlights": ["short bullet", "short bullet"]}`;
 
   try {
-    const result = await callLLM(prompt);
+    const result = await cachedServiceWork("recap", prompt, () => callLLM(prompt));
     if (!result) {
       return sendJson(res, 503, { error: "Recaps are not configured. Add ANTHROPIC_API_KEY or OPENAI_API_KEY." });
     }

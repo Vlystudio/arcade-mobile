@@ -1,4 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
+import { Alert } from "../../lib/alert";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import { createElement, useEffect, useRef, useState } from "react";
@@ -131,7 +132,8 @@ export default function KaraokeDisplayWeb() {
   // ── Queue advance ───────────────────────────────────────────
   async function advanceQueue() {
     const currentId = currentRef.current?.id ?? null;
-    const { data } = await supabase.rpc("rpc_karaoke_next", { p_current_id: currentId });
+    const { data, error } = await supabase.rpc("rpc_karaoke_next", { p_current_id: currentId });
+    if (error) { setSessionStarted(false); Alert.alert("Playback paused", "Sign in as an administrator and verify your second factor to control playback."); return; }
     const result = data as any;
 
     if (result?.empty) {
@@ -149,8 +151,14 @@ export default function KaraokeDisplayWeb() {
 
   // ── Start session (first tap unlocks autoplay) ──────────────
   async function handleStartSession() {
+    if (!isAdmin) { Alert.alert("Administrator access required", "Sign in as a venue administrator to start playback."); router.push("/login"); return; }
+    const { data: assurance } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (assurance?.currentLevel !== "aal2") {
+      if (assurance?.nextLevel !== "aal2") { router.push("/mfa-setup"); return; }
+      router.push({ pathname: "/mfa-verify", params: { returnTo: "/karaoke-display" } }); return; }
+    const { data, error } = await supabase.rpc("rpc_karaoke_next", { p_current_id: null });
+    if (error) { Alert.alert("Playback could not start", error.message); return; }
     setSessionStarted(true);
-    const { data } = await supabase.rpc("rpc_karaoke_next", { p_current_id: null });
     const result = data as any;
 
     if (result?.empty) { setQueueEmpty(true); return; }
@@ -171,7 +179,9 @@ export default function KaraokeDisplayWeb() {
       countdownTimerRef.current = null;
       setCountdown(null);
     }
-    await supabase.rpc("rpc_karaoke_skip", { p_song_id: currentRef.current.id });
+    const { error } = await supabase.rpc("rpc_karaoke_skip", { p_song_id: currentRef.current.id });
+    if (error) { setSkipping(false); Alert.alert("Could not skip", error.message); return; }
+    currentRef.current = null;
     await advanceQueue();
     setSkipping(false);
   }

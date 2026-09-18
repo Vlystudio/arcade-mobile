@@ -1,4 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
+import { publicProfilesById } from "../../lib/public-profiles";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -240,7 +241,7 @@ export default function SkeeballTrackerScreen({
     try {
       const [sessRes, memRes, profileRes] = await Promise.all([
         supabase.from("skeeball_sessions").select("id, team_id, lane_number, status, last_activity_at, league_match_id, placement, league_points, teams(name)").eq("status", "active"),
-        supabase.from("team_members").select("user_id, role, profiles(username, avatar_url)").eq("team_id", teamId),
+        supabase.from("team_members").select("user_id, role").eq("team_id", teamId),
         supabase.from("profiles").select("is_admin").eq("id", user!.id).single(),
       ]);
       setIsAdmin(profileRes.data?.is_admin === true);
@@ -253,8 +254,9 @@ export default function SkeeballTrackerScreen({
       }));
       setAllActiveSessions(sessions);
 
+    const identities = await publicProfilesById((memRes.data ?? []).map((m) => m.user_id));
       const members: Member[] = (memRes.data ?? []).map((m: any) => {
-        const p = Array.isArray(m.profiles) ? m.profiles[0] : m.profiles;
+        const p = identities.get(m.user_id);
         return { user_id: m.user_id, role: m.role, username: p?.username ?? "Unknown", avatar_url: p?.avatar_url ?? null };
       });
       setTeamMembers(members);
@@ -348,7 +350,7 @@ export default function SkeeballTrackerScreen({
         const m = mems.find((x) => x.user_id === p.player_user_id);
         return { ...p, shoot_position: p.shoot_position ?? null, username: m?.username ?? "Unknown", avatar_url: m?.avatar_url ?? null };
       })
-      .sort((a: SessionPlayer, b: SessionPlayer) => (a.shoot_position ?? 99) - (b.shoot_position ?? 99));
+      .sort((a: SessionPlayer, b: SessionPlayer) => (a.shoot_position ?? 99) - (b.shoot_position ?? 99) || a.player_user_id.localeCompare(b.player_user_id));
     setSessionPlayers(players);
     const scores: BallScore[] = scoresRes.data ?? [];
     setBallScores(scores);
@@ -383,10 +385,11 @@ export default function SkeeballTrackerScreen({
     setError(null);
     try {
       // Get or create a league match for this week's session
-      const { data: matchData } = await supabase.rpc("rpc_skeeball_get_or_create_match", {
+      const { data: matchData, error: matchError } = await supabase.rpc("rpc_skeeball_get_or_create_match", {
         p_week_of: getMondayDate(),
       });
-      const matchId: string | null = (matchData as any)?.match_id ?? null;
+      if (matchError || !matchData?.match_id) throw new Error(matchError?.message ?? matchData?.message ?? "Could not start the league match.");
+      const matchId: string = matchData.match_id;
 
       const { data: session, error: sErr } = await supabase
         .from("skeeball_sessions")
@@ -397,7 +400,7 @@ export default function SkeeballTrackerScreen({
 
       const { error: pErr } = await supabase
         .from("skeeball_session_players")
-        .insert(selectedPlayers.map((pid) => ({ session_id: session.id, player_user_id: pid })));
+        .insert(selectedPlayers.map((pid, index) => ({ session_id: session.id, player_user_id: pid, shoot_position: index + 1 })));
       if (pErr) throw pErr;
 
       const newSession: LaneSession = { id: session.id, team_id: teamId, lane_number: selectedLane, status: "active", last_activity_at: new Date().toISOString(), league_match_id: matchId };
@@ -502,7 +505,12 @@ export default function SkeeballTrackerScreen({
       // Dropped connection mid-submit: stash the game and flush automatically
       // when we're back online, instead of losing the scores.
       if (looksOffline(e)) {
-        await queueSubmit({ session_id: mySession!.id, balls });
+        try {
+          await queueSubmit(user.id, { session_id: mySession!.id, balls });
+        } catch {
+          setSubmitError("Could not save scores on this device. Keep this screen open and try again.");
+          return;
+        }
         haptic("warning");
         showToast("You're offline — scores saved, will submit automatically", "success");
         goBack();

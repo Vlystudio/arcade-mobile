@@ -33,6 +33,21 @@ export default async function handler(req: any, res: any) {
     });
   }
 
+  if (body.action === "status") {
+    if (typeof body.squareOrderId !== "string" || typeof body.localOrderId !== "string") return sendJson(res, 400, { error: "Invalid checkout." });
+    try {
+      const { order } = await squareRequest(`/v2/orders/${encodeURIComponent(body.squareOrderId)}`, config);
+      if (order?.metadata?.app_order_id !== body.localOrderId || order?.location_id !== config.locationId) return sendJson(res, 404, { error: "Checkout not found." });
+      const payments = await Promise.all((order.tenders ?? []).filter((t: any) => t.payment_id).map(async (t: any) => {
+        const { payment } = await squareRequest(`/v2/payments/${encodeURIComponent(t.payment_id)}`, config);
+        return payment;
+      }));
+      const paidAmount = payments.filter((p: any) => p?.order_id === order.id && p.status === "COMPLETED" && p.amount_money?.currency === order.total_money?.currency)
+        .reduce((sum: number, p: any) => sum + p.amount_money.amount - (p.refunded_money?.amount ?? 0), 0);
+      return sendJson(res, 200, { paid: order.total_money?.amount > 0 && paidAmount >= order.total_money.amount });
+    } catch { return sendJson(res, 502, { error: "Unable to check payment status." }); }
+  }
+
   const items = Array.isArray(body?.items) ? body.items as SquareOrderItem[] : [];
   if (!items.length) {
     return sendJson(res, 400, { error: "Order must include at least one item." });

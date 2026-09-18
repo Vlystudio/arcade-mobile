@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import { supabase } from "../../lib/supabase";
@@ -15,7 +15,7 @@ type Data = {
   counts?: { in: number; out: number; maybe: number; total: number };
 };
 
-const OPTIONS: { key: "in" | "maybe" | "out"; label: string; icon: keyof typeof import("@expo/vector-icons").Ionicons.glyphMap; color: string }[] = [
+const OPTIONS: { key: "in" | "maybe" | "out"; label: string; icon: keyof typeof import("@expo/vector-icons/Ionicons").default.glyphMap; color: string }[] = [
   { key: "in", label: "I'm in", icon: "checkmark-circle", color: "#22c55e" },
   { key: "maybe", label: "Maybe", icon: "help-circle", color: "#f59e0b" },
   { key: "out", label: "Can't", icon: "close-circle", color: "#ef4444" },

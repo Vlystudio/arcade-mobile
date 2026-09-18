@@ -82,3 +82,11 @@ export async function createSquareCheckoutLink(input: {
     paymentLink: unknown;
   };
 }
+
+export async function squareCheckoutStatus(input: { locationSlug: string; localOrderId: string; squareOrderId: string }) {
+  const response = await fetch(getApiUrl("/api/square/orders"), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...input, action: "status" }),
+  });
+  if (!response.ok) throw new Error("Unable to check payment status.");
+  return await response.json() as { paid: boolean };
+}

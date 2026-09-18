@@ -1,0 +1,49 @@
+{
+  "date": "2026-09-18",
+  "base_commit": "35fc973",
+  "node": "22.23.2",
+  "tests": {
+    "pass": 43,
+    "fail": 0,
+    "postgres": "PGlite integration fixture, not production baseline"
+  },
+  "typescript": "pass",
+  "deno_changed_functions": "pass",
+  "expo_sdk_compatibility": "pass",
+  "eslint": {
+    "errors": 0,
+    "warnings": 107
+  },
+  "production_audit": {
+    "high": 0,
+    "critical": 0,
+    "moderate": 14
+  },
+  "exports": {
+    "web": "pass",
+    "android_hermes": "pass",
+    "ios_hermes": "pass"
+  },
+  "bundles_bytes": {
+    "_expo\\static\\js\\android\\entry-cbe897e39b4109040bf1f88f5195083d.hbc": 9012478,
+    "_expo\\static\\js\\ios\\entry-a3971d1fd55b7afbff25b58381f0737a.hbc": 8920578
+  },
+  "web_common_bytes": [
+    1675043
+  ],
+  "android_assets_bytes": {
+    "before": 10962023,
+    "after": 7346399
+  },
+  "browser_smoke": [
+    "login desktop/mobile renders",
+    "forgot-username email continuation",
+    "no browser runtime errors observed"
+  ],
+  "not_verified": [
+    "live database schema and RLS",
+    "physical devices / native compilation",
+    "real provider transactions and delivery"
+  ],
+  "deployment_performed": false
+}

@@ -20,6 +20,15 @@ async function kv() {
 
 export type KeyPair = { publicKey: Uint8Array; secretKey: Uint8Array };
 
+export async function getStoredKeypair(userId: string): Promise<KeyPair | null> {
+  const raw = await (await kv()).get(PREFIX + userId);
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw);
+    return { publicKey: decodeBase64(value.pk), secretKey: decodeBase64(value.sk) };
+  } catch { return null; }
+}
+
 export async function getOrCreateKeypair(userId: string): Promise<KeyPair> {
   const store = await kv();
   const raw = await store.get(PREFIX + userId);

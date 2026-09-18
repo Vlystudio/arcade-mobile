@@ -1,4 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
+import { publicProfilesById } from "../../lib/public-profiles";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -148,10 +149,11 @@ export default function TournamentsScreen() {
     if (completedIds.length > 0) {
       const { data: pData } = await supabase
         .from("tournament_placements")
-        .select("tournament_id, placement, user_id, profiles(username)")
+        .select("tournament_id, placement, user_id")
         .in("tournament_id", completedIds).order("placement");
+      const identities = await publicProfilesById((pData ?? []).map(p => p.user_id));
       for (const p of pData ?? []) {
-        const username = Array.isArray((p as any).profiles) ? (p as any).profiles[0]?.username : (p as any).profiles?.username;
+        const username = identities.get(p.user_id)?.username;
         if (!placementsMap[(p as any).tournament_id]) placementsMap[(p as any).tournament_id] = [];
         placementsMap[(p as any).tournament_id].push({ placement: (p as any).placement, username: username ?? "Unknown", user_id: (p as any).user_id });
       }

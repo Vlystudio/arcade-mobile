@@ -1,4 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
+import { publicProfilesById } from "../../lib/public-profiles";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -73,37 +74,35 @@ export default function PoolScreen() {
   async function loadData() {
     if (!user) return;
 
-    const [tablesRes, gamesRes, statsRes] = await Promise.all([
+    const [tablesRes, gamesRes] = await Promise.all([
       supabase.from("pool_tables").select("id, table_number, name, status, current_game_id").order("table_number"),
       supabase
         .from("pool_games")
-        .select("id, table_id, game_type, created_at, winner_id, pool_tables(table_number), pool_game_players(user_id, profiles(username))")
+        .select("id, table_id, game_type, created_at, winner_id, pool_tables(table_number), pool_game_players(user_id)")
         .eq("status", "completed")
         .order("created_at", { ascending: false })
         .limit(10),
-      supabase.from("pool_games").select("winner_id, id").in("status", ["completed"]).or(`pool_game_players.user_id.eq.${user.id}`),
     ]);
 
-    // Enrich tables with players
-    const tableList: PoolTable[] = [];
-    for (const t of tablesRes.data ?? []) {
-      let players: string[] = [];
-      if (t.current_game_id) {
-        const { data: pgp } = await supabase
-          .from("pool_game_players")
-          .select("profiles(username)")
-          .eq("game_id", t.current_game_id);
-        players = (pgp ?? []).map((p: any) => (Array.isArray(p.profiles) ? p.profiles[0]?.username : p.profiles?.username) ?? "?");
-      }
-      tableList.push({ ...t, players });
-    }
+    const currentGameIds = (tablesRes.data ?? []).map(t => t.current_game_id).filter(Boolean);
+    const { data: activePlayers } = currentGameIds.length
+      ? await supabase.from("pool_game_players").select("game_id, user_id").in("game_id", currentGameIds)
+      : { data: [] };
+    const identities = await publicProfilesById([
+      ...(activePlayers ?? []).map(p => p.user_id),
+      ...(gamesRes.data ?? []).flatMap((g: any) => (g.pool_game_players ?? []).map((p: any) => p.user_id)),
+    ]);
+    const tableList: PoolTable[] = (tablesRes.data ?? []).map(t => ({
+      ...t, players: (activePlayers ?? []).filter(p => p.game_id === t.current_game_id)
+        .map(p => identities.get(p.user_id)?.username ?? "?"),
+    }));
     setTables(tableList);
 
     // Recent games
     const recent: RecentGame[] = (gamesRes.data ?? []).map((g: any) => {
       const tbl = Array.isArray(g.pool_tables) ? g.pool_tables[0] : g.pool_tables;
       const playerNames = (g.pool_game_players ?? []).map((p: any) =>
-        Array.isArray(p.profiles) ? p.profiles[0]?.username : p.profiles?.username ?? "?"
+        identities.get(p.user_id)?.username ?? "?"
       );
       return {
         id: g.id,

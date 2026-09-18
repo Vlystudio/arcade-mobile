@@ -1,12 +1,13 @@
 import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
 import { compressImage, MAX_UPLOAD_BYTES } from "../../lib/compress-image";
 import { Image } from "expo-image";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { useAdmin } from "../context/admin-context";
 import {
   ActivityIndicator,
+  FlatList,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -119,7 +120,7 @@ export default function FeedScreen() {
   // Announcement banner + new-posts pill
   const [announcement, setAnnouncement] = useState<{ id: string; title: string; body: string } | null>(null);
   const [newPostCount, setNewPostCount] = useState(0);
-  const feedScrollRef = useRef<ScrollView>(null);
+  const feedScrollRef = useRef<FlatList<Post>>(null);
   const [inboxUnseen, setInboxUnseen] = useState(0);
 
   // Interactions viewer (post owner taps likes/reaction counts)
@@ -133,113 +134,30 @@ export default function FeedScreen() {
 
   const [userRole, setUserRole] = useState<AppRole>("user");
 
-  async function loadFeed(feedTab: FeedTab) {
-    if (!user) return;
-
-    // Step 1: get posts (no embedded joins — avoids FK relationship errors)
-    let baseQuery = supabase
-      .from("posts")
-      .select("id, user_id, content, post_type, created_at, score_id, photo_url")
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (feedTab === "arcade") {
-      baseQuery = baseQuery.eq("post_type", "announcement");
-    } else {
-      const [followingRes, followersRes, friendsRes] = await Promise.all([
-        supabase.from("follows").select("following_id").eq("follower_id", user.id),
-        supabase.from("follows").select("follower_id").eq("following_id", user.id),
-        supabase
-          .from("friendships")
-          .select("requester_id, addressee_id")
-          .or(`requester_id.eq.${user.id},addressee_id.eq.${user.id}`)
-          .eq("status", "accepted"),
-      ]);
-      const friendIds = (friendsRes.data ?? []).map((f: any) =>
-        f.requester_id === user.id ? f.addressee_id : f.requester_id
-      );
-      const ids = [
-        ...new Set([
-          user.id,
-          ...(followingRes.data?.map((f) => f.following_id) ?? []),
-          ...(followersRes.data?.map((f) => f.follower_id) ?? []),
-          ...friendIds,
-        ]),
-      ];
-      baseQuery = baseQuery.in("user_id", ids);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const feedRequest = useRef(0);
+  const moreRequest = useRef(false);
+  async function loadFeed(feedTab: FeedTab, append = false) {
+    if (!user || (append && (moreRequest.current || !hasMore || loading || refreshing))) return;
+    const request = ++feedRequest.current;
+    if (append) { moreRequest.current = true; setLoadingMore(true); }
+    const cursor = append ? posts[posts.length - 1] : null;
+    try {
+      const { data, error } = await supabase.rpc("rpc_feed_page", {
+        p_tab: feedTab, p_before: cursor?.created_at ?? null, p_before_id: cursor?.id ?? null, p_limit: 25,
+      });
+      if (error) throw error;
+      if (request !== feedRequest.current) return;
+      const page = (data ?? []) as Post[];
+      setPosts((previous) => append ? [...previous, ...page.filter((post) => !previous.some((old) => old.id === post.id))] : page);
+      setHasMore(page.length === 25);
+    } catch (error) {
+      if (request === feedRequest.current) { reportError("Feed.loadFeed", error instanceof Error ? error.message : String(error)); showToast("Could not load posts. Pull to retry.", "error"); }
+    } finally {
+      if (request === feedRequest.current) { setLoading(false); setRefreshing(false); setLoadingMore(false); }
+      moreRequest.current = false;
     }
-
-    const { data: postsData, error: postsError } = await baseQuery;
-    if (postsError) { console.error("[loadFeed] posts:", postsError.message); setLoading(false); setRefreshing(false); return; }
-    if (!postsData?.length) { setPosts([]); setLoading(false); setRefreshing(false); return; }
-
-    const postIds = postsData.map((p: any) => p.id);
-    const userIds = [...new Set(postsData.map((p: any) => p.user_id as string))];
-    const scoreIds = postsData.map((p: any) => p.score_id).filter(Boolean);
-
-    // Step 2: parallel fetch of profiles, likes, scores, comment counts,
-    // reactions, saves, and the caller's block list
-    const [profilesRes, likesRes, scoresRes, commentsRes, reactionsRes, savedRes, blocksRes] = await Promise.all([
-      supabase.from("public_profiles").select("id, username, avatar_url").in("id", userIds),
-      supabase.from("post_likes").select("post_id, user_id").in("post_id", postIds),
-      scoreIds.length
-        ? supabase.from("scores").select("id, score, game_id, games(name)").in("id", scoreIds)
-        : Promise.resolve({ data: [] }),
-      supabase.from("post_comments").select("post_id").in("post_id", postIds),
-      supabase.from("post_reactions").select("post_id, user_id, emoji").in("post_id", postIds),
-      supabase.from("saved_posts").select("post_id").eq("user_id", user.id),
-      supabase.from("user_blocks").select("blocked_id").eq("blocker_id", user.id),
-    ]);
-
-    const blockedIds = new Set((blocksRes.data ?? []).map((b: any) => b.blocked_id));
-    const savedIds = new Set((savedRes.data ?? []).map((r: any) => r.post_id));
-    const reactionMap: Record<string, { counts: Record<string, number>; mine: string | null }> = {};
-    for (const r of reactionsRes.data ?? []) {
-      const entry = (reactionMap[(r as any).post_id] ??= { counts: {}, mine: null });
-      entry.counts[(r as any).emoji] = (entry.counts[(r as any).emoji] ?? 0) + 1;
-      if ((r as any).user_id === user.id) entry.mine = (r as any).emoji;
-    }
-
-    const profileMap = Object.fromEntries((profilesRes.data ?? []).map((p: any) => [p.id, p]));
-    const likesMap: Record<string, string[]> = {};
-    for (const l of likesRes.data ?? []) {
-      if (!likesMap[l.post_id]) likesMap[l.post_id] = [];
-      likesMap[l.post_id].push(l.user_id);
-    }
-    const scoreMap = Object.fromEntries((scoresRes.data ?? []).map((s: any) => [s.id, s]));
-    const commentCountMap: Record<string, number> = {};
-    for (const c of commentsRes.data ?? []) {
-      commentCountMap[(c as any).post_id] = (commentCountMap[(c as any).post_id] ?? 0) + 1;
-    }
-
-    const mapped: Post[] = postsData.filter((p: any) => !blockedIds.has(p.user_id)).map((p: any) => {
-      const profile = profileMap[p.user_id];
-      const score = p.score_id ? scoreMap[p.score_id] : null;
-      const game = score ? (Array.isArray(score.games) ? score.games[0] : score.games) : null;
-      const postLikes = likesMap[p.id] ?? [];
-      return {
-        id: p.id,
-        user_id: p.user_id,
-        username: profile?.username ?? "Unknown",
-        avatar_url: profile?.avatar_url ?? null,
-        content: p.content,
-        photo_url: p.photo_url ?? null,
-        score_value: score?.score ?? null,
-        game_name: game?.name ?? null,
-        post_type: p.post_type,
-        like_count: postLikes.length,
-        liked_by_me: postLikes.includes(user.id),
-        comment_count: commentCountMap[p.id] ?? 0,
-        my_reaction: reactionMap[p.id]?.mine ?? null,
-        reactions: reactionMap[p.id]?.counts ?? {},
-        saved: savedIds.has(p.id),
-        created_at: p.created_at,
-      };
-    });
-
-    setPosts(mapped);
-    setLoading(false);
-    setRefreshing(false);
   }
 
   async function loadProfile() {
@@ -793,7 +711,7 @@ export default function FeedScreen() {
             style={styles.newPostsPill}
             onPress={() => {
               setNewPostCount(0);
-              feedScrollRef.current?.scrollTo({ y: 0, animated: true });
+              feedScrollRef.current?.scrollToOffset({ offset: 0, animated: true });
               loadFeed(tab);
             }}
           >
@@ -803,15 +721,19 @@ export default function FeedScreen() {
             </Text>
           </Pressable>
         )}
-        <ScrollView
+        <FlatList
           ref={feedScrollRef}
+          data={posts}
+          keyExtractor={(post) => post.id}
+          initialNumToRender={6}
+          windowSize={7}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={posts.length === 0 ? styles.emptyContainer : undefined}
-          refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setNewPostCount(0); loadFeed(tab); }} tintColor="#06b6d4" />
-          }
-        >
-          {posts.length === 0 ? (
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); setNewPostCount(0); void loadFeed(tab); }} tintColor="#06b6d4" />}
+          onEndReached={() => { void loadFeed(tab, true); }}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loadingMore ? <ActivityIndicator color="#06b6d4" /> : null}
+          ListEmptyComponent={
             <View style={styles.empty}>
               <View style={styles.emptyIconWrap}>
                 <Ionicons name={tab === "following" ? "people-outline" : "megaphone-outline"} size={34} color="#333" />
@@ -831,8 +753,8 @@ export default function FeedScreen() {
                 </Pressable>
               )}
             </View>
-          ) : (
-            posts.map((post) => (
+          }
+          renderItem={({ item: post }) => (
               <PostCard
                 key={post.id}
                 post={post}
@@ -850,10 +772,8 @@ export default function FeedScreen() {
                 onToggleSave={() => toggleSave(post)}
                 onReact={(emoji) => handleReact(post, emoji)}
                 onShowInteractions={() => openInteractions(post)}
-              />
-            ))
-          )}
-        </ScrollView>
+              />          )}
+        />
       </SafeAreaView>
 
       <BottomTabBar />

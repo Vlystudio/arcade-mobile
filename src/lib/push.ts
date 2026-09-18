@@ -1,8 +1,30 @@
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { supabase } from "../../lib/supabase";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as Crypto from "expo-crypto";
 
 let registeredFor: string | null = null;
+const TOKEN_KEY = "@arcade:pushToken";
+const DEVICE_SECRET_KEY = "@arcade:pushDeviceSecret";
+
+/** Remove the token while the departing user's credentials still authorize it. */
+let deviceWork: Promise<unknown> = Promise.resolve();
+function serialDeviceWork(work: () => Promise<void>) {
+  const next = deviceWork.then(work, work);
+  deviceWork = next.catch(() => {});
+  return next;
+}
+export function unregisterForPush() { return serialDeviceWork(unregisterDevice); }
+export function registerForPush(userId: string) { return serialDeviceWork(() => registerDevice(userId)); }
+async function unregisterDevice() {
+  registeredFor = null;
+  const token = await AsyncStorage.getItem(TOKEN_KEY);
+  if (!token) return;
+  const { error } = await supabase.from("push_tokens").delete().eq("token", token);
+  if (error) throw error;
+  await AsyncStorage.removeItem(TOKEN_KEY);
+}
 
 /**
  * Register this device for push notifications and store the Expo token.
@@ -12,7 +34,7 @@ let registeredFor: string | null = null;
  * - binaries built before expo-notifications was added (OTA updates reach
  *   them, but the native module is missing — calls would throw)
  */
-export async function registerForPush(userId: string) {
+async function registerDevice(userId: string) {
   if (Platform.OS === "web" || registeredFor === userId) return;
 
   let Notifications: any;
@@ -52,16 +74,20 @@ export async function registerForPush(userId: string) {
     const token: string | undefined = tokenResult?.data;
     if (!token) return;
 
-    await supabase.from("push_tokens").upsert(
-      {
-        token,
-        user_id: userId,
-        platform: Platform.OS,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "token" },
-    );
-    registeredFor = userId;
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user.id !== userId) return;
+    let secret = await AsyncStorage.getItem(DEVICE_SECRET_KEY);
+    if (!secret) {
+      secret = Crypto.randomUUID() + Crypto.randomUUID();
+      await AsyncStorage.setItem(DEVICE_SECRET_KEY, secret);
+    }
+    const { error } = await supabase.rpc("register_device_push_token", {
+      p_token: token, p_secret: secret, p_platform: Platform.OS,
+    });
+    if (error) throw error;
+    await AsyncStorage.setItem(TOKEN_KEY, token);
+    const { data: { session: current } } = await supabase.auth.getSession();
+    if (current?.user.id === userId) registeredFor = userId;
   } catch {
     // Push is best-effort; never let registration break the app
   }

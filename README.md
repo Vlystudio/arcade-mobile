@@ -2,6 +2,8 @@
 
 React Native (Expo SDK 55) arcade venue companion app backed by Supabase (PostgreSQL + Auth + Storage + RLS).
 
+September 2026 fixes, verification results, migration requirements and native release steps are in [review-fixes-2026-09-18.md](docs/review-fixes-2026-09-18.md). Follow the coordinated rollout before publishing this client.
+
 ## Features
 
 ### Social & Community
@@ -60,8 +62,8 @@ React Native (Expo SDK 55) arcade venue companion app backed by Supabase (Postgr
 
 ## Prerequisites
 
-- **Node.js** 18+
-- **Expo CLI** — `npm install -g expo-cli`
+- **Node.js** 22 LTS, at least 22.13 (see `.nvmrc`)
+- **Expo CLI** — use the project-local CLI with `npx expo`
 - **EAS CLI** (production builds) — `npm install -g eas-cli`
 - A **[Supabase](https://supabase.com)** project (free tier is fine for dev)
 
@@ -113,7 +115,9 @@ APP_ALLOWED_ORIGINS=https://your-live-site.example.com,https://your-vercel-domai
 > requests with no `Origin` header (native mobile) are unaffected.
 
 ### 3. Database setup
-Run these SQL scripts **in order** in the Supabase SQL Editor:
+Establish the reviewed schema baseline and follow the [migration guidance](supabase/README.md). The older manual script inventory is retained below for reference:
+
+**Historical script inventory:** use the [versioned migration guidance](supabase/README.md) for new changes. This list is not a complete production baseline. Do not replay older function definitions over the review security migration.
 
 | Order | File | Purpose |
 |-------|------|---------|

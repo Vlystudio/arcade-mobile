@@ -1,4 +1,5 @@
-import { Ionicons } from "@expo/vector-icons";
+import { API_BASE } from "../../lib/api-base";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import * as Linking from "expo-linking";
 import { router, useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
@@ -119,28 +120,17 @@ export default function TeamRegistrationScreen() {
           }
           regId = existing.id;
           setExistingReg(existing as ExistingReg);
-          if (existing.checkout_url) {
-            setCheckoutUrl(existing.checkout_url);
-            await Linking.openURL(existing.checkout_url);
-            return;
-          }
         } else {
           regId = inserted.id;
         }
       }
 
-      // If we already have a checkout URL (idempotent re-open)
-      if (existingReg?.checkout_url && existingReg.id === regId) {
-        setCheckoutUrl(existingReg.checkout_url);
-        await Linking.openURL(existingReg.checkout_url);
-        return;
-      }
-
       // Create payment link via server
-      const apiBase = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
-      const resp = await fetch(`${apiBase}/api/square/registration`, {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sign in to register.");
+      const resp = await fetch(`${API_BASE}/api/square/registration`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ registrationId: regId }),
       });
       const json = await resp.json();

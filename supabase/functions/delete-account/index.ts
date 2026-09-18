@@ -1,120 +1,69 @@
-// Supabase Edge Function — delete-account
-// Called from src/app/delete-account.tsx after the user re-authenticates
-// with their password. The JWT is fresh (< 10 minutes old) because the
-// client just signed in to confirm identity.
-//
-// Steps:
-//   1. Verify caller is authenticated via JWT
-//   2. Reject if JWT is older than 10 minutes (stale session guard)
-//   3. Delete storage files in all user-owned folders
-//   4. Soft-anonymize the profile (keep the row for historical scores)
-//   5. Hard-delete posts, follows, comments
-//   6. Write to admin_audit_log before removing the auth user
-//   7. Call auth.admin.deleteUser — invalidates all sessions
-
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.106.0";
 import { corsHeaders, handleCors, rejectDisallowedOrigin } from "../_shared/cors.ts";
-
-const SUPA_URL  = Deno.env.get("SUPABASE_URL")!;
-const SUPA_ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
-const SUPA_SVC  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-const MAX_SESSION_AGE_SECONDS = 600; // 10 minutes
+const url = Deno.env.get("SUPABASE_URL")!;
+const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
+const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 Deno.serve(async (req: Request) => {
-  const preflight = handleCors(req);
-  if (preflight) return preflight;
-  const rejectedOrigin = rejectDisallowedOrigin(req);
-  if (rejectedOrigin) return rejectedOrigin;
-  const CORS = corsHeaders(req);
-
-  if (req.method !== "POST")
-    return Response.json({ error: "method_not_allowed" }, { status: 405, headers: CORS });
-
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer "))
-    return Response.json({ error: "unauthorized" }, { status: 401, headers: CORS });
-
-  // Verify the JWT and get the caller's user object
-  const userClient = createClient(SUPA_URL, SUPA_ANON, {
-    global:  { headers: { Authorization: authHeader } },
-    auth:    { persistSession: false },
-  });
-  const { data: { user }, error: userError } = await userClient.auth.getUser();
-  if (userError || !user) {
-    return Response.json({ error: "unauthorized" }, { status: 401, headers: CORS });
+  const preflight = handleCors(req); if (preflight) return preflight;
+  const rejected = rejectDisallowedOrigin(req); if (rejected) return rejected;
+  const headers = corsHeaders(req);
+  const reply = (status: number, body: unknown) => Response.json(body, { status, headers });
+  if (req.method !== "POST") return reply(405, { error: "method_not_allowed" });
+  const token = req.headers.get("Authorization")?.match(/^Bearer (.+)$/)?.[1];
+  if (!token) return reply(401, { error: "unauthorized" });
+  const admin = createClient(url, service, { auth: { persistSession: false } });
+  const { data: { user }, error } = await admin.auth.getUser(token);
+  if (error || !user?.email) return reply(401, { error: "unauthorized" });
+  let body;
+  try { body = await req.json(); } catch { return reply(400, { error: "invalid_json" }); }
+  if (typeof body?.password !== "string" || body.password.length > 1024) return reply(400, { error: "password_required" });
+  // Require the existing session's second factor when the account has MFA enrolled.
+  // The JWT was verified by getUser above; decode only to inspect its assurance level.
+  let claims;
+  try { claims = JSON.parse(atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))); }
+  catch { return reply(401, { error: "invalid_token" }); }
+  if (user.factors?.some((factor) => factor.status === "verified") && claims.aal !== "aal2") {
+    return reply(403, { error: "mfa_required", message: "Verify your second factor before deleting your account." });
   }
-
-  // Reject stale sessions — the client must have just re-authenticated
+  // Verify the actual password on the server. A recently refreshed JWT is not proof of reauthentication.
+  const proof = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } });
+  const verified = await proof.auth.signInWithPassword({ email: user.email, password: body.password });
+  if (verified.error || verified.data.user?.id !== user.id) return reply(401, { error: "reauthentication_failed", message: "Incorrect password." });
+  await proof.auth.signOut({ scope: "local" });
+  const uid = user.id;
   try {
-    const token   = authHeader.slice(7); // strip "Bearer "
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    const ageSec  = Math.floor(Date.now() / 1000) - (payload.iat as number ?? 0);
-    if (ageSec > MAX_SESSION_AGE_SECONDS) {
-      return Response.json({
-        error:   "session_too_old",
-        message: "Please sign in again to confirm account deletion.",
-      }, { status: 401, headers: CORS });
+    const { error: jobError } = await admin.from("account_deletion_jobs").upsert({ user_id: uid, stage: "storage", updated_at: new Date().toISOString() });
+    if (jobError) throw jobError;
+    // Query objects by ownership, including nested folders and conversation-scoped paths.
+    // Always consume page zero because successfully removed objects disappear from the inventory.
+    for (let batch = 0; batch < 100; batch++) {
+      const { data: objects, error: inventoryError } = await admin.rpc("account_storage_inventory", { p_user_id: uid, p_limit: 100 });
+      if (inventoryError) throw inventoryError;
+      if (!objects?.length) break;
+      const grouped = new Map<string, string[]>();
+      for (const object of objects) {
+        grouped.set(object.bucket_id, [...(grouped.get(object.bucket_id) ?? []), object.name]);
+      }
+      for (const [bucket, paths] of grouped) {
+        const { error: removeError } = await admin.storage.from(bucket).remove(paths);
+        if (removeError) throw removeError;
+      }
+      if (batch === 99) throw new Error("More files remain; retry to continue cleanup.");
     }
-  } catch {
-    return Response.json({ error: "invalid_token" }, { status: 401, headers: CORS });
-  }
-
-  const uid   = user.id;
-  const admin = createClient(SUPA_URL, SUPA_SVC, { auth: { persistSession: false } });
-
-  try {
-    // ── 1. Delete all storage files for this user ─────────────────────────────
-    const BUCKETS = ["avatars", "post-photos", "message-media", "score-proofs", "media-quarantine"];
-    await Promise.all(BUCKETS.map(async (bucket) => {
-      const { data: files, error: listErr } = await admin.storage.from(bucket).list(uid);
-      if (listErr || !files?.length) return;
-      const paths = files.map((f) => `${uid}/${f.name}`);
-      const { error: delErr } = await admin.storage.from(bucket).remove(paths);
-      if (delErr) console.warn(`[delete-account] storage.remove(${bucket}) error:`, delErr.message);
-    }));
-
-    // ── 2. Anonymize the profile (keep row — scores reference it) ─────────────
-    const deletedUsername = `deleted_${Date.now()}`;
-    await admin.from("profiles").update({
-      username:   deletedUsername,
-      avatar_url: null,
-      bio:        null,
-      is_private: true,
-    }).eq("id", uid);
-
-    // ── 3. Hard-delete user content ───────────────────────────────────────────
-    await Promise.all([
-      admin.from("posts").delete().eq("user_id", uid),
-      admin.from("follows").delete().or(`follower_id.eq.${uid},following_id.eq.${uid}`),
-      admin.from("post_comments").delete().eq("user_id", uid),
-    ]);
-
-    // ── 4. Audit log before deleting the auth user ────────────────────────────
-    await admin.from("admin_audit_log").insert({
-      admin_id:    null,
-      action:      "account_deleted",
-      target_type: "user",
-      target_id:   uid,
-      details:     { self_requested: true, deleted_at: new Date().toISOString() },
-    });
-
-    // ── 5. Delete the auth user (invalidates all sessions) ───────────────────
+    const { error: cleanupError } = await admin.rpc("delete_account_data", { p_user_id: uid });
+    if (cleanupError) throw cleanupError;
+    // Revoke refresh sessions before removing Auth. Access JWTs can remain valid until expiry;
+    // sensitive handlers always verify a live user, and row policies must retain ownership checks.
+    const { error: revokeError } = await admin.auth.admin.signOut(token, "global");
+    if (revokeError) throw revokeError;
     const { error: deleteError } = await admin.auth.admin.deleteUser(uid);
-    if (deleteError) {
-      console.error("[delete-account] auth.admin.deleteUser error:", deleteError.message);
-      return Response.json(
-        { error: "delete_failed", message: "Account deletion failed. Please try again." },
-        { status: 500, headers: CORS },
-      );
-    }
-
-    return Response.json({ ok: true }, { headers: CORS });
-  } catch (err: any) {
-    console.error("[delete-account] unexpected error:", err?.message ?? err);
-    return Response.json(
-      { error: "internal_error", message: "Account deletion failed. Please try again." },
-      { status: 500, headers: CORS },
-    );
+    if (deleteError) throw deleteError;
+    const { error: completeError } = await admin.from("account_deletion_jobs").update({ stage: "complete", updated_at: new Date().toISOString() }).eq("user_id", uid);
+    if (completeError) console.error("Deletion audit completion failed", completeError.message);
+    return reply(200, { ok: true });
+  } catch (failure) {
+    console.error("Account deletion incomplete", failure instanceof Error ? failure.message : "database_or_storage_failure");
+    return reply(500, { error: "delete_incomplete", message: "Deletion is incomplete. Sign in and retry to continue cleanup." });
   }
 });

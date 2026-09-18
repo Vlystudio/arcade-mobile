@@ -1,3 +1,5 @@
+import { requireUser, isTeamMember } from "../_auth";
+import { cachedServiceWork, checkServiceQuota } from "../_service-work";
 import { createClient } from "@supabase/supabase-js";
 import { applyCors, handleCorsPreflight, rejectDisallowedOrigin } from "../_cors";
 import { checkRateLimit } from "../_ratelimit";
@@ -31,6 +33,8 @@ export default async function handler(req: any, res: any) {
   }
   if (!(await checkRateLimit(req, res))) return;
 
+  const caller = await requireUser(req, res, supabase);
+  if (!caller) return;
   const body = parseBody(req.body);
   const teamId = typeof body?.teamId === "string" ? body.teamId.trim() : "";
   const opponentTeamId = typeof body?.opponentTeamId === "string" ? body.opponentTeamId.trim() : "";
@@ -42,6 +46,12 @@ export default async function handler(req: any, res: any) {
   }
   if (opponentTeamId && !UUID_RE.test(opponentTeamId)) {
     return sendJson(res, 400, { error: "Invalid opponent team ID." });
+  }
+
+  if (!(await isTeamMember(supabase, caller.id, teamId))) return sendJson(res, 403, { error: "Team membership required." });
+  if (!(await checkServiceQuota(supabase, res, `ai:${caller.id}`, 10, 3600))) return;
+  if ((seasonStart && !/^\d{4}-\d{2}-\d{2}$/.test(seasonStart)) || (seasonEnd && !/^\d{4}-\d{2}-\d{2}$/.test(seasonEnd))) {
+    return sendJson(res, 400, { error: "Invalid season dates." });
   }
 
   // Gather aggregate stats via the position-stats RPC (service role allowed)
@@ -75,7 +85,7 @@ export default async function handler(req: any, res: any) {
   const prompt = buildPrompt(teamName, players, opponentName, opponentPlayers);
 
   try {
-    const result = await callLLM(prompt);
+    const result = await cachedServiceWork("_coach", prompt, () => callLLM(prompt));
     if (!result) {
       return sendJson(res, 503, { error: "The matchup planner is not configured. Add ANTHROPIC_API_KEY or OPENAI_API_KEY." });
     }

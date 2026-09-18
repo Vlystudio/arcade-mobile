@@ -1,5 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -42,7 +42,7 @@ const TOS_SECTIONS = [
 ];
 
 export default function LoginScreen() {
-  const { setRememberMe } = useAuth();
+  const { setRememberMe, signOut } = useAuth();
 
   const [email, setEmail]               = useState("");
   const [password, setPassword]         = useState("");
@@ -60,8 +60,6 @@ export default function LoginScreen() {
   // Forgot username sheet
   const [showForgotUsername, setShowForgotUsername]   = useState(false);
   const [forgotEmail, setForgotEmail]                 = useState("");
-  const [lookingUpUsername, setLookingUpUsername]     = useState(false);
-  const [foundUsername, setFoundUsername]             = useState<string | null>(null);
   const [forgotUsernameError, setForgotUsernameError] = useState<string | null>(null);
 
   // Forgot password sheet
@@ -109,20 +107,17 @@ export default function LoginScreen() {
     }
     setLoading(true);
 
-    let loginEmail = identifier;
-    if (!identifier.includes("@")) {
-      const { data: resolved } = await supabase.rpc("get_email_by_username", { p_username: identifier });
-      if (!resolved) {
-        setError("No account found with that username.");
-        setLoading(false);
-        return;
-      }
-      loginEmail = resolved;
-    }
-
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
-    if (authError) {
-      setError("Incorrect email, username, or password.");
+    let authData;
+    try {
+      const { data: tokens, error: loginError } = await supabase.functions.invoke("password-login", {
+        body: { identifier, password },
+      });
+      if (loginError || !tokens?.access_token || !tokens?.refresh_token) throw new Error("Incorrect email, username, or password.");
+      const result = await supabase.auth.setSession(tokens);
+      if (result.error) throw result.error;
+      authData = result.data;
+    } catch {
+      setError("Could not sign in. Check your credentials and connection, then try again.");
       setLoading(false);
       return;
     }
@@ -178,18 +173,10 @@ export default function LoginScreen() {
     }
   }
 
-  async function handleLookupUsername() {
-    setForgotUsernameError(null);
-    setFoundUsername(null);
+  function handleLookupUsername() {
     if (!forgotEmail.trim()) { setForgotUsernameError("Enter your email address."); return; }
-    setLookingUpUsername(true);
-    const { data } = await supabase.rpc("get_username_by_email", { p_email: forgotEmail.trim() });
-    setLookingUpUsername(false);
-    if (!data) {
-      setForgotUsernameError("No account found with that email address.");
-    } else {
-      setFoundUsername(data);
-    }
+    setEmail(forgotEmail.trim());
+    closeForgotUsername();
   }
 
   async function handleSendReset() {
@@ -212,7 +199,6 @@ export default function LoginScreen() {
   function closeForgotUsername() {
     setShowForgotUsername(false);
     setForgotEmail("");
-    setFoundUsername(null);
     setForgotUsernameError(null);
   }
 
@@ -401,7 +387,7 @@ export default function LoginScreen() {
               onPress={() => {
                 setShowTosModal(false);
                 setTosScrolled(false);
-                supabase.auth.signOut().catch(() => {});
+                void signOut();
               }}
             >
               <Text style={styles.tosDeclineBtnText}>Decline and Sign Out</Text>
@@ -422,10 +408,8 @@ export default function LoginScreen() {
               </View>
             </View>
             <Text style={styles.sheetTitle}>Forgot username?</Text>
-            <Text style={styles.sheetSub}>Enter the email address on your account and we'll look it up.</Text>
+            <Text style={styles.sheetSub}>You can sign in with your email address. Your username is shown on your profile after sign-in.</Text>
 
-            {!foundUsername ? (
-              <>
                 <View style={styles.inputWrap}>
                   <Ionicons name="mail-outline" size={18} color="#444" style={styles.inputIcon} />
                   <TextInput
@@ -444,29 +428,12 @@ export default function LoginScreen() {
 
                 <BugReportBanner error={forgotUsernameError} />
 
-                <Pressable
-                  style={[styles.sheetBtn, lookingUpUsername && styles.sheetBtnDisabled]}
-                  onPress={handleLookupUsername}
-                  disabled={lookingUpUsername}
-                >
-                  {lookingUpUsername
-                    ? <ActivityIndicator color="#000" size="small" />
-                    : <Text style={styles.sheetBtnText}>Look up username</Text>
-                  }
+                <Pressable style={styles.sheetBtn} onPress={handleLookupUsername}>
+                  <Text style={styles.sheetBtnText}>Continue with email</Text>
                 </Pressable>
-              </>
-            ) : (
-              <View style={styles.resultBox}>
-                <Ionicons name="checkmark-circle" size={20} color="#22c55e" />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.resultLabel}>Your username is</Text>
-                  <Text style={styles.resultValue}>@{foundUsername}</Text>
-                </View>
-              </View>
-            )}
 
             <Pressable style={styles.sheetCancel} onPress={closeForgotUsername}>
-              <Text style={styles.sheetCancelText}>{foundUsername ? "Done" : "Cancel"}</Text>
+              <Text style={styles.sheetCancelText}>Cancel</Text>
             </Pressable>
           </View>
         </View>

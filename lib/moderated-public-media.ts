@@ -23,22 +23,11 @@ export async function uploadModeratedPublicImage(params: {
     });
   if (uploadError) throw uploadError;
 
-  const { data: signed, error: signedError } = await supabase.storage
-    .from(QUARANTINE_BUCKET)
-    .createSignedUrl(quarantinePath, 60);
-  if (signedError || !signed?.signedUrl) {
-    await supabase.storage.from(QUARANTINE_BUCKET).remove([quarantinePath]);
-    throw new Error("Could not prepare image for moderation.");
-  }
-
   const moderation = await moderateImage({
-    imageUrl: signed.signedUrl,
     bucket: QUARANTINE_BUCKET,
     path: quarantinePath,
     recordType: params.recordType,
     recordId: params.recordId,
-    publishToBucket: params.publicBucket,
-    publishToPath: params.publicPath,
     contentType: params.contentType,
   });
 
@@ -47,12 +36,12 @@ export async function uploadModeratedPublicImage(params: {
     throw new Error(moderation.message);
   }
 
-  const publicUrl = moderation.publishedUrl ??
-    supabase.storage.from(params.publicBucket).getPublicUrl(params.publicPath).data.publicUrl;
+  const publicUrl = moderation.publishedUrl;
+  if (!publicUrl) throw new Error("The image was not published. Please retry.");
 
   return {
     publicUrl: addCacheBuster(publicUrl),
-    publicPath: params.publicPath,
+    publicPath: moderation.publishedPath,
   };
 }
 

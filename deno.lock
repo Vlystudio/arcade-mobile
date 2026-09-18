@@ -1,0 +1,77 @@
+{
+  "version": "5",
+  "redirects": {
+    "https://esm.sh/@aws-sdk/client-rekognition@3": "https://esm.sh/@aws-sdk/client-rekognition@3.1135.0"
+  },
+  "remote": {
+    "https://esm.sh/@aws-sdk/client-rekognition@3.1135.0": "0a7eff3bc6845e781548a81e72fed7bf913ab1ea5e41a6bbe893cc6a110dea6b",
+    "https://esm.sh/@supabase/supabase-js@2.106.0": "a897c060b1e4db8c6a1d713e2c00a7281b11dfdddcc43f0510433851315c36a7"
+  },
+  "workspace": {
+    "packageJson": {
+      "dependencies": [
+        "npm:@electric-sql/pglite@~0.5.8",
+        "npm:@expo/ngrok@^4.1.3",
+        "npm:@expo/vector-icons@^15.0.2",
+        "npm:@react-native-async-storage/async-storage@2.2.0",
+        "npm:@react-navigation/bottom-tabs@^7.15.5",
+        "npm:@react-navigation/elements@^2.9.10",
+        "npm:@react-navigation/native@^7.1.33",
+        "npm:@sentry/browser@10.75.0",
+        "npm:@sentry/react-native@7.11",
+        "npm:@shopify/flash-list@2.0.2",
+        "npm:@supabase/supabase-js@2.106.0",
+        "npm:@types/node@^22.20.3",
+        "npm:@types/react@~19.2.2",
+        "npm:@upstash/ratelimit@^2.0.8",
+        "npm:@upstash/redis@^1.38.0",
+        "npm:@vercel/node@^5.8.12",
+        "npm:eslint-config-expo@~55.0.1",
+        "npm:eslint@9",
+        "npm:expo-camera@~55.0.23",
+        "npm:expo-constants@~55.0.17",
+        "npm:expo-crypto@~55.0.19",
+        "npm:expo-device@~55.0.21",
+        "npm:expo-font@~55.0.8",
+        "npm:expo-glass-effect@~55.0.11",
+        "npm:expo-image-manipulator@~55.0.21",
+        "npm:expo-image-picker@~55.0.24",
+        "npm:expo-image@~55.0.11",
+        "npm:expo-linking@~55.0.17",
+        "npm:expo-media-library@~55.0.21",
+        "npm:expo-network@~55.0.18",
+        "npm:expo-notifications@~55.0.27",
+        "npm:expo-router@~55.0.18",
+        "npm:expo-splash-screen@~55.0.25",
+        "npm:expo-status-bar@~55.0.6",
+        "npm:expo-symbols@~55.0.9",
+        "npm:expo-system-ui@~55.0.22",
+        "npm:expo-updates@~55.0.31",
+        "npm:expo-web-browser@~55.0.20",
+        "npm:expo@~55.0.31",
+        "npm:html2canvas@^1.4.1",
+        "npm:patch-package@^8.0.1",
+        "npm:react-dom@19.2.0",
+        "npm:react-native-gesture-handler@2.30",
+        "npm:react-native-reanimated@4.2.1",
+        "npm:react-native-safe-area-context@~5.6.2",
+        "npm:react-native-screens@4.23",
+        "npm:react-native-view-shot@4.0.3",
+        "npm:react-native-web@0.21",
+        "npm:react-native-worklets@0.7.4",
+        "npm:react-native@0.83.10",
+        "npm:react@19.2.0",
+        "npm:tweetnacl-util@~0.15.1",
+        "npm:tweetnacl@^1.0.3",
+        "npm:typescript@~5.9.2"
+      ],
+      "overrides": {
+        "ws": "^8.21.0",
+        "shell-quote": "^1.8.4",
+        "@sentry/cli": {
+          "undici": "^6.27.0"
+        }
+      }
+    }
+  }
+}

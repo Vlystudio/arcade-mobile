@@ -1,0 +1,88 @@
+[
+  {
+    "name": "offline rejection is counted as success and removed",
+    "reproduced": true,
+    "detail": {
+      "done": 1,
+      "remaining": 0
+    }
+  },
+  {
+    "name": "enqueue during an in-flight flush loses the new submission",
+    "reproduced": true,
+    "detail": "session-b was never submitted and no longer exists in the queue"
+  },
+  {
+    "name": "Square completed payment does not confirm registration",
+    "reproduced": true,
+    "detail": {
+      "status": 200,
+      "touchedTables": [
+        "square_webhook_events",
+        "square_payment_statuses",
+        "square_payment_statuses"
+      ]
+    }
+  },
+  {
+    "name": "Square documented order.updated payload is ignored",
+    "reproduced": true,
+    "detail": {
+      "status": 200,
+      "touchedTables": [
+        "square_webhook_events"
+      ]
+    }
+  },
+  {
+    "name": "Square retry is discarded after processing fails",
+    "reproduced": true,
+    "detail": {
+      "firstStatus": 500,
+      "retryStatus": 200,
+      "retryBody": {
+        "ok": true,
+        "duplicate": true
+      },
+      "processingAttempts": 1
+    }
+  },
+  {
+    "name": "moderate-image performs caller-chosen service-role writes without authentication",
+    "reproduced": true,
+    "detail": {
+      "status": 200,
+      "writes": [
+        {
+          "operation": "upload",
+          "bucket": "avatars",
+          "path": "other-user/replacement.jpg",
+          "upsert": true
+        },
+        {
+          "operation": "remove",
+          "bucket": "avatars",
+          "paths": [
+            "other-user/existing.jpg"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "Vercel image moderation generates an invalid AWS date then allows failed moderation",
+    "reproduced": true,
+    "detail": {
+      "amzDate": "20260918T134349Z00Z",
+      "response": {
+        "flagged": false,
+        "reason": "moderation_error"
+      }
+    }
+  },
+  {
+    "name": "unescaped user-controlled markup reaches printable HTML",
+    "reproduced": true,
+    "detail": "Team-name validation accepts HTML, and the actual print function writes it unescaped; no browser script was executed."
+  }
+]

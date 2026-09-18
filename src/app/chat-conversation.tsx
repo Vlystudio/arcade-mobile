@@ -1,7 +1,8 @@
+import { messageImageReference, resolveMessageImage } from "../../lib/message-media";
 import { Image } from "expo-image";
 import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { Avatar } from "../components/avatar";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -22,8 +23,7 @@ import { supabase } from "../../lib/supabase";
 import { useRequireAuth } from "../hooks/use-require-auth";
 import { pickFromCamera, pickFromLibrary } from "../../lib/pick-image";
 import {
-  getOrCreateKeypair,
-  encryptMessage,
+  getStoredKeypair,
   decryptForRecipient,
   decryptSenderCopy,
   b64,
@@ -62,20 +62,20 @@ function decryptMsg(raw: RawMessage, kp: KeyPair, myUserId: string): string {
   }
   if (raw.sender_id === myUserId) {
     if (!raw.sender_copy || !raw.sender_nonce) return raw.content ?? "";
-    return decryptSenderCopy(raw.sender_copy, raw.sender_nonce, kp.publicKey, kp.secretKey) ?? raw.content ?? "";
+    return decryptSenderCopy(raw.sender_copy, raw.sender_nonce, kp.publicKey, kp.secretKey) ?? "This older encrypted message is unavailable on this device.";
   }
-  return decryptForRecipient(raw.encrypted_content, raw.nonce, raw.sender_public_key, kp.secretKey) ?? raw.content ?? "";
+  return decryptForRecipient(raw.encrypted_content, raw.nonce, raw.sender_public_key, kp.secretKey) ?? "This older encrypted message is unavailable on this device.";
 }
 
-async function compressImage(uri: string): Promise<{ uri: string; blob: Blob } | null> {
+async function compressImage(uri: string): Promise<{ uri: string; bytes: ArrayBuffer } | null> {
   try {
-    const r1 = await manipulateAsync(uri, [{ resize: { width: 1200 } }], { compress: 0.75, format: SaveFormat.JPEG });
-    const blob1 = await (await fetch(r1.uri)).blob();
-    if (blob1.size <= MAX_BYTES) return { uri: r1.uri, blob: blob1 };
+    const r1 = await manipulateAsync(uri, [{ resize: { width: 1200 } }], { compress: 0.75, format: SaveFormat.JPEG, base64: true });
+    const bytes1 = new Uint8Array(b64.decode(r1.base64!)).buffer;
+    if (bytes1.byteLength <= MAX_BYTES) return { uri: r1.uri, bytes: bytes1 };
 
-    const r2 = await manipulateAsync(uri, [{ resize: { width: 800 } }], { compress: 0.6, format: SaveFormat.JPEG });
-    const blob2 = await (await fetch(r2.uri)).blob();
-    if (blob2.size <= MAX_BYTES) return { uri: r2.uri, blob: blob2 };
+    const r2 = await manipulateAsync(uri, [{ resize: { width: 800 } }], { compress: 0.6, format: SaveFormat.JPEG, base64: true });
+    const bytes2 = new Uint8Array(b64.decode(r2.base64!)).buffer;
+    if (bytes2.byteLength <= MAX_BYTES) return { uri: r2.uri, bytes: bytes2 };
 
     return null;
   } catch {
@@ -91,6 +91,8 @@ export default function ChatConversationScreen() {
     otherUserId: string;
   }>();
   const { user, loading: authLoading } = useRequireAuth();
+  const userId = user?.id;
+  const initialScrollDone = useRef(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
   const [text, setText] = useState("");
@@ -99,84 +101,94 @@ export default function ChatConversationScreen() {
   const [mediaPickerVisible, setMediaPickerVisible] = useState(false);
   const [viewingImage, setViewingImage] = useState<string | null>(null);
   const listRef = useRef<FlatList>(null);
-  const myKeypair = useRef<KeyPair | null>(null);
-  const recipientPubKey = useRef<Uint8Array | null>(null);
-
-  async function initCrypto() {
-    if (!user) return;
-    const kp = await getOrCreateKeypair(user.id);
-    myKeypair.current = kp;
-    await supabase.from("user_public_keys").upsert(
-      { user_id: user.id, public_key: b64.encode(kp.publicKey), updated_at: new Date().toISOString() },
-      { onConflict: "user_id" }
-    );
-    if (otherUserId) {
-      const { data } = await supabase
-        .from("user_public_keys")
-        .select("public_key")
-        .eq("user_id", otherUserId)
-        .maybeSingle();
-      if (data?.public_key) recipientPubKey.current = b64.decode(data.public_key);
-    }
-  }
-
-  async function loadMessages() {
-    if (!conversationId) return;
-    const { data } = await supabase
-      .from("messages")
-      .select("id, sender_id, content, image_url, encrypted_content, nonce, sender_copy, sender_nonce, sender_public_key, created_at")
-      .eq("conversation_id", conversationId)
-      .order("created_at", { ascending: true });
-
-    const kp = myKeypair.current;
-    const decoded: Message[] = (data ?? []).map((raw: RawMessage) => ({
-      id: raw.id,
-      sender_id: raw.sender_id,
-      content: kp ? decryptMsg(raw, kp, user!.id) : (raw.content ?? ""),
-      image_url: raw.image_url ?? null,
-      created_at: raw.created_at,
-    }));
-    setMessages(decoded);
-    setLoading(false);
-  }
+  const loadOlder = useRef<() => Promise<void>>(async () => {});
+  const [hasOlder, setHasOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
 
   useEffect(() => {
-    if (!user || !conversationId) return;
+    if (!userId || !conversationId) return;
+    let active = true;
+    let busy = false;
+    let renderVersion = 0;
+    let keypair: KeyPair | null = null;
+    let cursor: RawMessage | undefined;
+    const rawMessages = new Map<string, RawMessage>();
+    initialScrollDone.current = false;
+    setMessages([]);
+    setLoading(true);
+    setHasOlder(false);
+    setLoadingOlder(false);
 
-    initCrypto().then(() => loadMessages());
-
-    const channel = supabase
-      .channel(`conv:${conversationId}`)
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
-        (payload) => {
-          const raw = payload.new as RawMessage;
-          const kp = myKeypair.current;
-          const msg: Message = {
-            id: raw.id,
-            sender_id: raw.sender_id,
-            content: kp ? decryptMsg(raw, kp, user!.id) : (raw.content ?? ""),
-            image_url: raw.image_url ?? null,
-            created_at: raw.created_at,
-          };
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === msg.id)) return prev;
-            return [...prev, msg];
-          });
-          setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+    const renderMessages = async () => {
+      const version = ++renderVersion;
+      const sorted = [...rawMessages.values()].sort((a, b) =>
+        a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+      const decoded = await Promise.all(sorted.map(async raw => ({
+        id: raw.id, sender_id: raw.sender_id, created_at: raw.created_at,
+        content: keypair ? decryptMsg(raw, keypair, userId)
+          : raw.encrypted_content ? "This older encrypted message is unavailable on this device." : raw.content ?? "",
+        image_url: await resolveMessageImage(raw.image_url, conversationId),
+      })));
+      if (active && version === renderVersion) setMessages(decoded);
+    };
+    const page = async (older = false) => {
+      if (busy || !active || (older && !cursor)) return;
+      busy = true;
+      if (older) setLoadingOlder(true);
+      try {
+        let query = supabase.from("messages")
+          .select("id, sender_id, content, image_url, encrypted_content, nonce, sender_copy, sender_nonce, sender_public_key, created_at")
+          .eq("conversation_id", conversationId)
+          .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(50);
+        if (older && cursor) {
+          query = query.or("created_at.lt." + cursor.created_at + ",and(created_at.eq." + cursor.created_at + ",id.lt." + cursor.id + ")");
         }
-      )
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!active) return;
+        const rows = (data ?? []) as RawMessage[];
+        rows.forEach(raw => rawMessages.set(raw.id, raw));
+        cursor = rows.at(-1);
+        setHasOlder(rows.length === 50);
+        await renderMessages();
+      } catch {
+        if (active) Alert.alert("Messages unavailable", "Please try loading this conversation again.");
+      } finally {
+        busy = false;
+        if (active) { setLoading(false); setLoadingOlder(false); }
+      }
+    };
+    loadOlder.current = () => page(true);
+    void (async () => {
+      keypair = await getStoredKeypair(userId).catch(() => null);
+      await page();
+    })();
+    const refreshImages = setInterval(() => { void renderMessages(); }, 30 * 60 * 1000);
+    const channel = supabase.channel("conv:" + conversationId)
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: "conversation_id=eq." + conversationId },
+        async payload => {
+          if (!active) return;
+          const raw = payload.new as RawMessage;
+          rawMessages.set(raw.id, raw);
+          await renderMessages();
+          if (active) setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 80);
+        })
       .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [user, conversationId]);
+    return () => {
+      active = false;
+      loadOlder.current = async () => {};
+      clearInterval(refreshImages);
+      void supabase.removeChannel(channel);
+    };
+  }, [userId, conversationId]);
 
   useEffect(() => {
-    if (messages.length > 0) {
+    if (!loading && messages.length > 0 && !initialScrollDone.current) {
+      initialScrollDone.current = true;
       setTimeout(() => listRef.current?.scrollToEnd({ animated: false }), 100);
     }
-  }, [loading]);
+  }, [loading, messages.length]);
 
   async function sendMessage() {
     const message = validateChatMessage(text);
@@ -202,32 +214,19 @@ export default function ChatConversationScreen() {
 
     setText("");
 
-    let insertData: Record<string, any> = {
-      conversation_id: conversationId,
-      sender_id: user.id,
-      content: "[encrypted]",
-    };
-
-    if (myKeypair.current && recipientPubKey.current) {
-      const payload = encryptMessage(content, recipientPubKey.current, myKeypair.current);
-      insertData = {
-        ...insertData,
-        encrypted_content: payload.encrypted,
-        nonce: payload.nonce,
-        sender_copy: payload.senderCopy,
-        sender_nonce: payload.senderNonce,
-        sender_public_key: payload.senderPublicKey,
-      };
-    } else {
-      insertData.content = content;
-    }
+    // Moderated chat is server-readable. New messages work across all signed-in devices.
+    const insertData = { conversation_id: conversationId, sender_id: user.id, content };
 
     const { error } = await supabase.from("messages").insert(insertData);
     if (!error) {
       await supabase
         .from("conversations")
-        .update({ last_message: content, last_message_at: new Date().toISOString() })
+        .update({ last_message: "New message", last_message_at: new Date().toISOString() })
         .eq("id", conversationId);
+    }
+    if (error) {
+      setText(content);
+      Alert.alert("Message not sent", "Please try again.");
     }
     setSending(false);
   }
@@ -249,57 +248,37 @@ export default function ChatConversationScreen() {
       return;
     }
 
-    const path = `${user.id}/${Date.now()}.jpg`;
-    const { error: uploadError } = await supabase.storage
-      .from("message-media")
-      .upload(path, compressed.blob, { contentType: "image/jpeg", upsert: false });
-
-    if (uploadError) {
-      Alert.alert("Upload failed", uploadError.message);
-      setUploading(false);
-      return;
-    }
-
-    const { data: urlData } = supabase.storage.from("message-media").getPublicUrl(path);
-
+    const path = `${conversationId}/${user.id}/${Date.now()}.jpg`;
     try {
-      const r = await fetch(`${MOD_BASE}/api/moderation/image`, {
+      const { error: uploadError } = await supabase.storage.from("message-media")
+        .upload(path, compressed.bytes, { contentType: "image/jpeg", upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sign in before sending a photo.");
+      const response = await fetch(`${MOD_BASE}/api/moderation/image`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageUrl: urlData.publicUrl }),
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ path }),
       });
-      if (r.ok) {
-        const mod = await r.json();
-        if (mod.flagged) {
-          await supabase.storage.from("message-media").remove([path]);
-          Alert.alert("Image blocked", "Your image was flagged for inappropriate content and was not sent.");
-          setUploading(false);
-          return;
-        }
+      const moderation = await response.json();
+      if (!response.ok || moderation.ok !== true || moderation.flagged) {
+        throw new Error(moderation.flagged ? "Please choose an appropriate image." : "Your photo could not be verified. Please try again.");
       }
-    } catch { /* allow if moderation unavailable */ }
-
-    const { error: msgError } = await supabase.from("messages").insert({
-      conversation_id: conversationId,
-      sender_id: user.id,
-      content: "",
-      image_url: urlData.publicUrl,
-    });
-
-    if (!msgError) {
-      await supabase
-        .from("conversations")
-        .update({ last_message: "📷 Photo", last_message_at: new Date().toISOString() })
-        .eq("id", conversationId);
-    }
-    setUploading(false);
+      const { error } = await supabase.from("messages").insert({
+        conversation_id: conversationId, sender_id: user.id, content: "", image_url: messageImageReference(path),
+      });
+      if (error) throw error;
+      await supabase.from("conversations").update({ last_message: "Photo", last_message_at: new Date().toISOString() }).eq("id", conversationId);
+    } catch (error) {
+      await supabase.storage.from("message-media").remove([path]);
+      Alert.alert("Photo not sent", error instanceof Error ? error.message : "Please try again.");
+    } finally { setUploading(false); }
   }
 
   if (authLoading || loading) {
     return <View style={styles.loader}><ActivityIndicator size="large" color="#06b6d4" /></View>;
   }
 
-  const isEncrypted = !!(myKeypair.current && recipientPubKey.current);
 
   return (
     <SafeAreaView style={styles.safe} edges={["bottom"]}>
@@ -316,11 +295,9 @@ export default function ChatConversationScreen() {
             <Avatar uri={otherAvatarUrl || null} name={otherUsername ?? "?"} size={36} />
             <View>
               <Text style={styles.headerName}>{otherUsername ?? "Chat"}</Text>
-              {isEncrypted && (
                 <Text style={styles.headerEncrypted}>
-                  <Ionicons name="lock-closed" size={10} color="#22c55e" /> End-to-end encrypted
+                  Messages are stored for moderation.
                 </Text>
-              )}
             </View>
           </Pressable>
         </View>
@@ -331,6 +308,12 @@ export default function ChatConversationScreen() {
           keyExtractor={(m) => m.id}
           contentContainerStyle={styles.messageList}
           showsVerticalScrollIndicator={false}
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          ListHeaderComponent={hasOlder ? (
+            <Pressable onPress={() => void loadOlder.current()} disabled={loadingOlder} accessibilityRole="button" style={{ padding: 16 }}>
+              <Text style={{ color: "#67e8f9", textAlign: "center" }}>{loadingOlder ? "Loading..." : "Load older messages"}</Text>
+            </Pressable>
+          ) : null}
           ListEmptyComponent={
             <View style={styles.emptyChat}>
               <Text style={styles.emptyChatText}>No messages yet. Say hello!</Text>

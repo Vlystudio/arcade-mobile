@@ -63,6 +63,7 @@ export function assertSquareConfigured(locationSlug: string) {
 export async function squareRequest(path: string, config: SquareConfig, init: RequestInit = {}) {
   const response = await fetch(`${config.apiBaseUrl}${path}`, {
     ...init,
+    signal: init.signal ?? AbortSignal.timeout(15000),
     headers: {
       "Content-Type": "application/json",
       "Square-Version": config.squareVersion,

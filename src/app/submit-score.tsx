@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { pickFromCamera } from "../../lib/pick-image";
 import { compressImage, MAX_UPLOAD_BYTES } from "../../lib/compress-image";
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {

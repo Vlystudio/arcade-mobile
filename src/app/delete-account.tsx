@@ -1,4 +1,4 @@
-import { Ionicons } from "@expo/vector-icons";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { router } from "expo-router";
 import { useState } from "react";
 import {
@@ -25,37 +25,25 @@ export default function DeleteAccountScreen() {
     setError(null);
     setDeleting(true);
 
-    // Re-authenticate to confirm identity — the fresh JWT is required by the Edge Function
-    const { data: sessionData } = await supabase.auth.getSession();
-    const email = sessionData.session?.user?.email;
-    if (!email) {
-      const msg = "Not signed in. Please log in and try again.";
+    // The server verifies the password against the caller's identity and preserves MFA assurance.
+    const { data, error: fnErr } = await supabase.functions.invoke("delete-account", { body: { password } });
+    if (fnErr?.context instanceof Response) {
+      const failure = await fnErr.context.json().catch(() => null);
+      if (failure?.error === "mfa_required") {
+        setDeleting(false);
+        router.push({ pathname: "/mfa-verify", params: { returnTo: "/delete-account" } });
+        return;
+      }
+    }
+    if (fnErr || data?.ok !== true) {
+      const msg = fnErr?.message ?? "Account deletion failed. Please try again.";
       reportError("DeleteAccount.handleDelete", msg);
       setError(msg);
       setDeleting(false);
       return;
     }
 
-    const { error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-    if (signInErr) {
-      setError("Incorrect password. Please try again.");
-      setDeleting(false);
-      return;
-    }
-
-    // Call the delete-account Edge Function with the fresh session JWT.
-    // The function cleans storage, anonymizes the profile, deletes posts/follows,
-    // and calls auth.admin.deleteUser to fully remove the account.
-    const { error: fnErr } = await supabase.functions.invoke("delete-account");
-    if (fnErr) {
-      const msg = fnErr.message ?? "Account deletion failed. Please try again.";
-      reportError("DeleteAccount.handleDelete", msg);
-      setError(msg);
-      setDeleting(false);
-      return;
-    }
-
-    // Session is already invalidated server-side; sign out client-side as well
+    // Clear local credentials after the server confirms completion.
     await supabase.auth.signOut();
     setDeleting(false);
     setStep("done");

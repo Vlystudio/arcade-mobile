@@ -1,0 +1,55 @@
+-- Minimal integration fixture, NOT a production baseline. Only tables exercised by review fixes.
+CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role BYPASSRLS;
+-- Production already exposes this optional argument. Replacements must retain it.
+CREATE FUNCTION public.rpc_admin_adjust_skeeball_session(p_session_id uuid,p_league_points_adjustment integer,p_score_adjustment integer,p_note text DEFAULT NULL)
+RETURNS json LANGUAGE sql AS $$ SELECT '{}'::json; $$;
+CREATE SCHEMA auth; CREATE SCHEMA storage;
+CREATE TABLE auth.users(id uuid PRIMARY KEY,email text);
+CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT COALESCE(NULLIF(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT (auth.jwt()->>'sub')::uuid $$;
+GRANT USAGE ON SCHEMA public,auth,storage TO anon,authenticated,service_role;
+CREATE TABLE profiles(id uuid PRIMARY KEY,username text,role text DEFAULT 'user',is_admin boolean DEFAULT false,is_arcade_official boolean DEFAULT false,is_beta_tester boolean DEFAULT false,avatar_url text,bio text,is_private boolean DEFAULT false);
+CREATE TABLE seasons(id uuid PRIMARY KEY,status text,registration_required boolean DEFAULT false);
+CREATE TABLE teams(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text,captain_user_id uuid);
+CREATE TABLE team_members(team_id uuid REFERENCES teams,user_id uuid REFERENCES profiles,role text);
+CREATE TABLE team_registrations(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid REFERENCES profiles,season_id uuid REFERENCES seasons,registration_type text,status text DEFAULT 'pending_payment',team_id uuid REFERENCES teams ON DELETE SET NULL,square_payment_link_id text,square_order_id text,checkout_url text,paid_at timestamptz,created_at timestamptz DEFAULT now(),UNIQUE(user_id,season_id));
+ALTER TABLE team_registrations ENABLE ROW LEVEL SECURITY;
+CREATE POLICY registration_read ON team_registrations FOR SELECT TO authenticated USING(user_id=auth.uid());
+CREATE TABLE square_webhook_events(id uuid DEFAULT gen_random_uuid(),event_id text UNIQUE NOT NULL,event_type text NOT NULL,merchant_id text,payload jsonb NOT NULL,received_at timestamptz DEFAULT now());
+CREATE TABLE square_payment_statuses(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),square_payment_id text,square_order_id text,status text,event_type text,last_event_id text,raw_event jsonb,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());
+CREATE UNIQUE INDEX idx_square_payment_status_order_id ON square_payment_statuses(square_order_id) WHERE square_order_id IS NOT NULL;
+CREATE UNIQUE INDEX idx_square_payment_status_payment_id ON square_payment_statuses(square_payment_id) WHERE square_payment_id IS NOT NULL;
+CREATE TABLE skeeball_league_matches(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),week_of date,scoring_mode text,expected_teams integer DEFAULT 4,status text DEFAULT 'active');
+CREATE TABLE skeeball_sessions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),team_id uuid REFERENCES teams,lane_number integer,status text DEFAULT 'active',league_match_id uuid REFERENCES skeeball_league_matches,week_of date,completed_at timestamptz,last_activity_at timestamptz,placement integer,league_points integer,score_adjustment integer DEFAULT 0,league_points_adjustment integer DEFAULT 0);
+CREATE TABLE skeeball_session_players(session_id uuid REFERENCES skeeball_sessions,player_user_id uuid REFERENCES profiles,shoot_position integer,PRIMARY KEY(session_id,player_user_id));
+CREATE TABLE skeeball_ball_scores(id uuid DEFAULT gen_random_uuid(),session_id uuid REFERENCES skeeball_sessions,player_user_id uuid REFERENCES profiles,ball_number integer,score integer,UNIQUE(session_id,player_user_id,ball_number));
+CREATE TABLE games(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text,type text);
+CREATE TABLE lanes(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),venue_id uuid,game_id uuid REFERENCES games,lane_number integer,status text);
+CREATE TABLE scores(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid REFERENCES profiles,game_id uuid REFERENCES games,lane_id uuid,venue_id uuid,score integer,frame_data jsonb,status text);
+CREATE TABLE admin_audit_log(admin_id uuid,action text,target_type text,target_id text,details jsonb);
+CREATE TABLE karaoke_queue(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),video_id text,title text,channel text,thumbnail_url text,requester_name text,status text DEFAULT 'queued',created_at timestamptz DEFAULT now());
+CREATE TABLE storage.buckets(id text PRIMARY KEY,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+CREATE TABLE storage.objects(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),bucket_id text,name text,owner_id text);
+CREATE TABLE posts(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),user_id uuid,content text,photo_url text,post_type text,created_at timestamptz DEFAULT now(),score_id uuid);
+CREATE TABLE post_comments(post_id uuid,user_id uuid);
+CREATE TABLE post_likes(post_id uuid,user_id uuid);
+CREATE TABLE post_reactions(post_id uuid,user_id uuid,emoji text);
+CREATE TABLE saved_posts(post_id uuid,user_id uuid);
+CREATE TABLE user_blocks(blocker_id uuid,blocked_id uuid);
+CREATE TABLE follows(follower_id uuid,following_id uuid);
+CREATE TABLE friendships(requester_id uuid,addressee_id uuid,status text);
+CREATE TABLE conversations(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),participant_1 uuid,participant_2 uuid,last_message text);
+CREATE TABLE messages(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),sender_id uuid);
+CREATE TABLE push_tokens(token text PRIMARY KEY,user_id uuid,platform text,updated_at timestamptz);
+ALTER TABLE push_tokens ENABLE ROW LEVEL SECURITY;
+CREATE VIEW public_profiles AS SELECT id,username,avatar_url FROM profiles;
+CREATE FUNCTION public.is_admin() RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public AS $$ SELECT EXISTS(SELECT 1 FROM profiles WHERE id=auth.uid() AND role IN('admin','owner','architect')) $$;
+CREATE FUNCTION public.require_mfa() RETURNS void LANGUAGE plpgsql AS $$ BEGIN IF auth.jwt()->>'aal' IS DISTINCT FROM 'aal2' THEN RAISE EXCEPTION 'MFA required'; END IF; END $$;
+CREATE FUNCTION public.skeeball_season_week_number(date) RETURNS integer LANGUAGE sql AS $$ SELECT 1 $$;
+-- Upgrade coverage: preserve the real legacy default, and remove any old overload.
+CREATE FUNCTION public.rpc_skeeball_finalize_match(p_match_id uuid,p_force boolean DEFAULT false) RETURNS json LANGUAGE sql AS $$ SELECT '{"ok":true}'::json $$;
+CREATE FUNCTION public.rpc_skeeball_finalize_match(p_match_id uuid) RETURNS json LANGUAGE sql AS $$ SELECT '{"ok":true}'::json $$;
+GRANT ALL ON ALL TABLES IN SCHEMA public,storage TO service_role;
+GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+CREATE FUNCTION enforce_team_creation_payment() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;
+CREATE TRIGGER enforce_team_creation_payment_trigger BEFORE INSERT ON teams FOR EACH ROW EXECUTE FUNCTION enforce_team_creation_payment();

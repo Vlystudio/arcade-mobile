@@ -1,6 +1,6 @@
 const IS_PROD = Deno.env.get("IS_PRODUCTION") === "true";
 
-function splitOrigins(value: string | null) {
+function splitOrigins(value: string | null | undefined) {
   return (value ?? "")
     .split(/[,\s]+/)
     .map((origin) => origin.trim())
